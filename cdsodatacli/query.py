@@ -9,11 +9,20 @@ from shapely.geometry import LineString, Point, Polygon
 
 def fetch_data(geometry=None, product=None, name=None, start_datetime=None, end_datetime=None, publication_start=None,
                publication_end=None):
-    print(geometry)
+    """
+    Fetches data based on provided parameters.
 
+    :param geometry: List of tuples representing the geometry.
+    :param product: String representing the product information for filtering the data.D
+    :param name: String representing the name information for filtering the data.
+    :param start_datetime: String representing the starting date for the query.
+    :param end_datetime: String representing the ending date for the query.
+    :param publication_start: String representing the starting publication date for the query.
+    :param publication_end: String representing the ending publication date for the query.
+    :return: JSON data containing the fetched results.
+    """
     urlapi = 'https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter='
     geo = determine_geometry_type(geometry)
-    print(geo)
 
     # Shapely form
     if geo == "Unknown":
@@ -33,14 +42,12 @@ def fetch_data(geometry=None, product=None, name=None, start_datetime=None, end_
         geo_type = value.split('(')[0].strip()
         coordinates_part = value[value.find("(") + 1:value.find(")")]
         if geo == "Point":
-            print(coordinates_part)
             modified_value = f"{coordinates_part}"
-            coordinates_part = modified_value.replace(" ", "%")
-            print(coordinates_part)
+            coordinates_part = modified_value.replace(" ", "%20")
         elif geo == "Polygon":
             coordinates_part = f"{coordinates_part})"
     else:
-        print("Invalid geometry type")
+        print("No geometry input or invalid geometry type")
 
     # Taking all given parameters
     params = {}
@@ -48,9 +55,9 @@ def fetch_data(geometry=None, product=None, name=None, start_datetime=None, end_
     if geometry:
         params["OData.CSC.Intersects"] = f"(area=geography'SRID=4326;{geo_type}({coordinates_part})')"
     if product:
-        params["Collection/Name eq"] = f"'{product}'"
+        params["Collection/Name eq"] = f" '{product}'"
     if name:
-        params["contains(Name,'S1A')"] = f"'(Name,'{name}')'"
+        params["contains"] = f"(Name,'{name}')"
     if start_datetime:
         params["ContentDate/Start gt"] = f" {start_datetime}"
     if end_datetime:
@@ -61,14 +68,18 @@ def fetch_data(geometry=None, product=None, name=None, start_datetime=None, end_
         params["PublicationDate lt"] = f" {publication_end}"
 
     str_query = ' and '.join([f"{key}{value}" for key, value in params.items()])
-    str = urlapi + str_query
-    print(str)
     json_data = requests.get(urlapi + str_query).json()
     # print('json\nn',json)
     return json_data
 
 
 def determine_geometry_type(array):
+    """
+    Determines the type of geometry based on the input array.
+
+    :param array: List of tuples representing the geometry.
+    :return: Type of geometry ('Unknown', 'Point', 'Line', 'Polygon').
+    """
     dimensions = len(array)
     if dimensions == 0:
         return "Unknown"
@@ -84,6 +95,12 @@ def determine_geometry_type(array):
 
 
 def process_data(json_data):
+    """
+    Processes the fetched JSON data and returns relevant information.
+
+    :param json_data: JSON data containing the fetched results.
+    :return: Processed data for visualization.
+    """
     res = None
     visu = None
     if 'value' in json_data:
