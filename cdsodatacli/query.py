@@ -110,3 +110,38 @@ def process_data(json_data):
     else:
         print("No data found.")
     return visu
+
+
+def fetch_data_by_gdf(gdf):
+    urlapi = 'https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter='
+    collected_data = pd.DataFrame()
+    for line in range(len(gdf)):
+        gdf_line = gdf.iloc[line]
+
+        if 'geometry' in gdf_line and gdf_line['geometry'] is not None:
+            value = str(gdf_line.geometry)
+            geo_type = gdf_line.geometry.geom_type
+            coordinates_part = value[value.find("(") + 1:value.find(")")]
+            if geo_type == "Point":
+                modified_value = f"{coordinates_part}"
+                coordinates_part = modified_value.replace(" ", "%20")
+                coordinates_part = f"POINT({coordinates_part})"
+            elif geo_type == "Polygon":
+                coordinates_part = f"POLYGON({coordinates_part}))"
+
+            if 'start_time' in gdf_line and not pd.isna(gdf_line['start_time']):
+                print(1)
+                start_datetime = gdf_line['start_time'].strftime("%Y-%m-%dT%H:%M:%S.0Z")
+                end_datetime = gdf_line['end_time'].strftime("%Y-%m-%dT%H:%M:%S.0Z")
+                str_query = f"OData.CSC.Intersects(area=geography'SRID=4326;{coordinates_part}') and ContentDate/Start gt {start_datetime} and ContentDate/Start lt {end_datetime}"
+                json_data = requests.get(urlapi + str_query).json()
+                data = process_data(json_data)
+                collected_data = pd.concat([collected_data, data], ignore_index=True)
+            else:
+                print(2)
+                str_query = f"OData.CSC.Intersects(area=geography'SRID=4326;{coordinates_part}')"
+                json_data = requests.get(urlapi + str_query).json()
+                data = process_data(json_data)
+                collected_data = pd.concat([collected_data, data], ignore_index=True)
+    return collected_data
+
