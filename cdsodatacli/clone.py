@@ -48,15 +48,14 @@ except:
     logger.info("html2text not found. Consider 'pip install html2text' for better error messages.")
     html2text = lambda x: x
 
-"""# default values (user may change them)
+# default values (user may change them)
 default_user = 'guest'
 default_password = 'guest'
 default_cachedir = None
 default_alt_path = None
 default_cacherefreshrecent = datetime.timedelta(days=7)
 default_timedelta_slice = datetime.timedelta(weeks=1)
-default_filename = 'S1*'"""
-
+default_filename = 'S1*'
 # all wkt objects feeded to scihub will keep rounding_precision digits (1 = 0.1 )
 # this will allow to not have too long requests
 rounding_precision = 1
@@ -76,7 +75,6 @@ dateformat = "%Y-%m-%dT%H:%M:%S.%fZ"
 dateformat_alt = "%Y-%m-%dT%H:%M:%S"
 
 urlapi = 'https://apihub.copernicus.eu/apihub/search'
-# urlapi = 'https://scihub.copernicus.eu/dhus/search'
 
 # earth as multi poly
 earth = GeometryCollection(list(gpd.read_file(gpd.datasets.get_path('naturalearth_lowres')).geometry)).buffer(0)
@@ -171,42 +169,7 @@ def nice_string(obj):
 
     return string
 
-
-"""def wget(url, outfile, progress=True, user=None, password=None, desc=''):
-    # get default keywords values
-    if user is None:
-        user = default_user
-    if password is None:
-        password = default_password
-
-    if os.path.exists(outfile):
-        return 303, outfile
-
-    response = requests.get(url, stream=True, auth=(user, password))
-    if response.status_code == 202:
-        # not online
-        return response.status_code, None
-    elif response.status_code != 200:
-        logger.debug('strange status %d for %s' % (response.status_code, outfile))
-
-    length = int(response.headers.get('content-length', 0))
-
-    # make a tempfile
-    basename = os.path.basename(outfile)
-    dirname = os.path.dirname(outfile)
-    prefix, suffix = os.path.splitext(basename)
-    progress_bar = tqdm(total=length, unit='iB', unit_scale=True, desc=desc, leave=False, disable=not progress)
-    with tempfile.NamedTemporaryFile(suffix='.tmp', prefix=prefix, dir=dirname, delete=False) as handle:
-        chunk_size = 10 * 1024 ** 2
-        for data in response.iter_content(chunk_size=chunk_size):
-            progress_bar.update(len(data))
-            handle.write(data)
-        os.rename(handle.name, outfile)
-    progress_bar.close()
-    return response.status_code, outfile
-"""
-
-d"""ef safe_dir(filename, path='.', only_exists=False):
+def safe_dir(filename, path='.', only_exists=False):
     """
     get dir path from safe filename.
 
@@ -287,120 +250,10 @@ d"""ef safe_dir(filename, path='.', only_exists=False):
             else:
                 # a path was found. Stop iterating over path list
                 break
-    return filepath"""
+    return filepath
 
 
-"""def get_scihub_odata(odata_url):
-    """
-    get odata attribute from odata url.
-    odata result are not cached, because they are volatiles (ie online status)
-    """
-    odata = {}
-    xmlout = requests.get(odata_url, auth=(default_user, default_password))
-    root = objectify.fromstring(xmlout.content)
-    odata['Online'] = root.find('*/d:Online', namespaces=root.nsmap).pyval
-    odata['OnDemand'] = root.find('*/d:OnDemand', namespaces=root.nsmap).pyval
-    return pd.Series(odata)"""
-
-
-"""def scihub_download(safe, destination='.', desc='', progress=True):
-    if safe['path'] is not None and os.path.exists(os.path.join(safe['path'], 'manifest.safe')):
-        # do not download existing safe
-        logger.debug('no need to download %s' % safe['path'])
-        safe['odata_Online'] = True
-        return safe
-    else:
-        safe['path'] = None
-
-    safe['odata_Online'], safe['odata_OnDemand'], safe['badzip'] = None, None, True
-
-    parent_dir = safe_dir(safe['filename'], path=destination)
-    path = os.path.join(parent_dir, safe['filename'])
-
-    zip_dir = os.path.join(destination, 'zip')
-    try:
-        os.makedirs(zip_dir, exist_ok=True)
-    except IOError as e:
-        raise IOError("Unable to create %s : %s", (str(zip_dir), str(e)))
-
-    status, filezip = wget(safe['url'], os.path.join(zip_dir, "%s.zip" % safe['filename']), desc=desc)
-    if status == 202:
-        logger.info('%s not yet online' % safe['filename'])
-
-    if status != 200 and status != 303:
-        odata = get_scihub_odata(safe['url_alternative'])
-        safe['odata_Online'], safe['odata_OnDemand'] = odata['Online'], odata['OnDemand']
-    safe['zipfilepath'] = filezip
-    if safe['zipfilepath'] is not None:
-        os.makedirs(parent_dir, exist_ok=True)
-        partial_unzip = os.path.join(zip_dir, 'partial')
-        os.makedirs(partial_unzip, exist_ok=True)
-        try:
-            with zipfile.ZipFile(safe['zipfilepath'], 'r') as zip_ref:
-                for file in tqdm(iterable=zip_ref.namelist(), total=len(zip_ref.namelist()), desc='unzip',
-                                 disable=not progress, leave=False):
-                    zip_ref.extract(member=file, path=partial_unzip)
-            safe['badzip'] = False
-        except zipfile.BadZipFile:
-            logger.info('remove bad zip  %s' % safe['zipfilepath'])
-            os.unlink(safe['zipfilepath'])
-            safe['path'] = None
-        else:
-            os.rename(os.path.join(partial_unzip, safe['filename']), path)
-            safe['path'] = path
-    else:
-        logger.error('Unable to download zipfile for %s' % safe['filename'])
-        safe['path'] = None
-    return safe
-"""
-
-"""def download_from_df(safes, destination='.', progress=True):
-    missings = safes[safes['path'].isnull()]
-    logger.debug('missings:%s' % str(missings['path']))
-    global_count = len(missings)
-    logger.info("need to download %d/%d safes" % (global_count, len(safes)))
-    download_list = []
-
-    current = 1
-    error_count = {}
-    while len(missings) != 0:
-        new_missings = missings
-        start_len = len(download_list)
-        for idx, missing in missings.iterrows():
-            downloaded = scihub_download(
-                missing, destination=destination,
-                desc='%d/%d ' % (current, global_count), progress=progress)
-            if downloaded['path']:
-                current = current + 1
-                download_list.append(downloaded)
-                new_missings = new_missings[new_missings['filename'] != downloaded['filename']]
-            else:
-                if downloaded['filename'] not in error_count:
-                    error_count[downloaded['filename']] = 0
-                error_count[downloaded['filename']] = error_count[downloaded['filename']] + 1
-                logger.warning(
-                    'download failed (#%d)for %s' % (error_count[downloaded['filename']], downloaded['filename']))
-                if error_count[downloaded['filename']] > 2:
-                    logger.warning('to many errors on %s. Skipping' % downloaded['filename'])
-                    new_missings = new_missings[new_missings['filename'] != downloaded['filename']]
-
-        missings = new_missings
-        stop_len = len(download_list)
-        count = stop_len - start_len
-        if count == 0 and len(missings) - len(error_count.keys()) > 0:
-            logger.warning("waiting for one of %s safes to be online" %
-                           len(missings))
-            time.sleep(30)
-
-    logger.info('%d safes downloaded, %d errors' % (len(download_list), len(error_count.keys())))
-    safes.drop(['odata_Online', 'odata_OnDemand', 'badzip'],
-               errors='ignore', inplace=True)
-
-    return safes"""
-
-
-def scihubQuery_raw(str_query, user=None, password=None, cachedir=None, cacherefreshrecent=None,
-                    return_cache_status=False):
+def scihubQuery_raw(str_query, cachedir=None, cacherefreshrecent=None, return_cache_status=False):
     """
     real scihub query, as done on https://scihub.copernicus.eu/dhus/#/home
     but with cache handling
@@ -409,10 +262,6 @@ def scihubQuery_raw(str_query, user=None, password=None, cachedir=None, cacheref
     """
 
     # get default keywords values
-    if user is None:
-        user = default_user
-    if password is None:
-        password = default_password
     if cachedir is None:
         cachedir = default_cachedir
     if cacherefreshrecent is None:
@@ -441,38 +290,38 @@ def scihubQuery_raw(str_query, user=None, password=None, cachedir=None, cacheref
     cache_status = False
 
     if cachedir:
-        os.makedirs(os.path.join(cachedir, 'xml'), exist_ok=True)
+        os.makedirs(os.path.join(cachedir, 'json'), exist_ok=True)
 
     while start < count:
         params = OrderedDict([("start", start), ("rows", 100), ("q", str_query)])
         root = None
-        xml_cachefile = None
+        json_cachefile = None
         if cachedir is not None:
             md5request = hashlib.md5(("%s" % params).encode('utf-8')).hexdigest()
-            xml_cachedir = os.path.join(cachedir, 'xml', md5request[:2])
-            os.makedirs(xml_cachedir, exist_ok=True)
-            xml_cachefile = os.path.join(xml_cachedir, '%s.xml' % md5request[2:])
+            json_cachedir = os.path.join(cachedir, 'json', md5request[:2])
+            os.makedirs(json_cachedir, exist_ok=True)
+            json_cachefile = os.path.join(json_cachedir, '%s.json' % md5request[2:])
 
             # legacy stuff that might be removed in few months (now 202012)
-            xml_cachefile_legacy = os.path.join(cachedir, "%s.xml" % md5request)
-            if os.path.exists(xml_cachefile_legacy):
+            json_cachefile_legacy = os.path.join(cachedir, "%s.json" % md5request)
+            if os.path.exists(json_cachefile_legacy):
                 logger.debug('migrating old legacy cache file')
-                os.rename(xml_cachefile_legacy, xml_cachefile)
+                os.rename(json_cachefile_legacy, json_cachefile)
 
-            if os.path.exists(xml_cachefile):
-                logger.debug("reading from xml cachefile %s" % xml_cachefile)
+            if os.path.exists(json_cachefile):
+                logger.debug("reading from json cachefile %s" % json_cachefile)
                 try:
-                    with open(xml_cachefile, 'a'):
-                        os.utime(xml_cachefile, None)
+                    with open(json_cachefile, 'a'):
+                        os.utime(json_cachefile, None)
                 except Exception as e:
-                    logger.warning('unable to touch %s : %s' % (xml_cachefile, str(e)))
+                    logger.warning('unable to touch %s : %s' % (json_cachefile, str(e)))
 
                 try:
-                    root = remove_dom(etree.parse(xml_cachefile))
+                    root = remove_dom(etree.parse(json_cachefile))
                     int(root.find(".//totalResults").text)  # this should enought to test the xml is ok
                 except Exception as e:
-                    logger.warning('removing invalid xml_cachefile %s : %s' % (xml_cachefile, str(e)))
-                    os.unlink(xml_cachefile)
+                    logger.warning('removing invalid json_cachefile %s : %s' % (json_cachefile, str(e)))
+                    os.unlink(json_cachefile)
                     root = None
 
         if root is not None:
@@ -480,13 +329,13 @@ def scihubQuery_raw(str_query, user=None, password=None, cachedir=None, cacheref
         else:
             # request not cached
             try:
-                xmlout = requests.get(urlapi, auth=(user, password), params=params)
+                jsonout = requests.get(urlapi, params=params)
             except:
                 raise_from(ConnectionError("Unable to connect to %s" % urlapi), None)
             try:
-                root = remove_dom(etree.fromstring(xmlout.content))
+                root = remove_dom(etree.fromstring(jsonout.content))
             except Exception as e:
-                content = nice_string(xmlout.content)
+                content = nice_string(jsonout.content)
 
                 if 'Timeout occured while waiting response from server' in content:
                     retry -= 1
@@ -497,19 +346,19 @@ def scihubQuery_raw(str_query, user=None, password=None, cachedir=None, cacheref
                         break
                     continue
 
-                logger.critical("Error while parsing xml answer")
+                logger.critical("Error while parsing json answer")
                 logger.critical("query was: %s" % str_query)
                 logger.critical("answer is: \n {}".format(content))
                 warnings.warn('Schihub query error %s ' % urlapi, ScihubError)
 
-            if xml_cachefile is not None:
+            if json_cachefile is not None:
                 try:
                     int(root.find(".//totalResults").text)  # this should enought to test the xml is ok
                     try:
-                        with open(xml_cachefile, 'w') as f:
+                        with open(json_cachefile, 'w') as f:
                             f.write(nice_string(root))
                     except Exception as e:
-                        logger.warning('unable to write xml_cachefile %s : %s' % (xml_cachefile, str(e)))
+                        logger.warning('unable to write json_cachefile %s : %s' % (json_cachefile, str(e)))
                 except:
                     logger.warning('not writing corrupted xml cachefile')
 
@@ -519,8 +368,8 @@ def scihubQuery_raw(str_query, user=None, password=None, cachedir=None, cacheref
         except:
             # there was an error in request
             logger.error('response was:\n {}'.format(nice_string(root)))
-            if xml_cachefile is not None and os.path.exists(xml_cachefile):
-                os.unlink(xml_cachefile)
+            if json_cachefile is not None and os.path.exists(json_cachefile):
+                os.unlink(json_cachefile)
             warnings.warn('invalid request %s ' % str_query, ScihubError)
             break
 
@@ -564,15 +413,15 @@ def scihubQuery_raw(str_query, user=None, password=None, cachedir=None, cacheref
             chunk_safes = gpd.GeoDataFrame(chunk_safes_df, geometry='footprint', crs=scihub_crs)
             chunk_safes['footprint'] = chunk_safes.buffer(0)
             start += len(chunk_safes)
-            logger.debug("xml parsed in %.2f secs" % (time.time() - t))
+            logger.debug("json parsed in %.2f secs" % (time.time() - t))
 
             # remove cachefile if some safes are recents
-            if xml_cachefile is not None and os.path.exists(xml_cachefile):
+            if json_cachefile is not None and os.path.exists(json_cachefile):
                 dateage = (datetime.datetime.utcnow().replace(tzinfo=pytz.UTC) - chunk_safes[
                     'beginposition'].max())  # used for cache age
                 if dateage < cacherefreshrecent:
-                    logger.debug("To recent answer. Removing cachefile %s" % xml_cachefile)
-                    os.unlink(xml_cachefile)
+                    logger.debug("To recent answer. Removing cachefile %s" % json_cachefile)
+                    os.unlink(json_cachefile)
             # sort by sensing date
             safes = pd.concat([safes, chunk_safes], ignore_index=True, sort=False)
             safes = safes.sort_values('beginposition')
@@ -707,8 +556,7 @@ def get_datatakes(safes, datatake=0, user=None, password=None, cachedir=None, ca
         safe_index = safes[safes['filename'] == safe].index[0]
         takeid = safe.split('_')[-2]
         safe_rad = "_".join(safe.split('_')[0:4])
-        safes_datatake = scihubQuery_raw('filename:%s_*_*_*_%s_*' % (safe_rad, takeid), user=user, password=password,
-                                         cachedir=cachedir, cacherefreshrecent=cacherefreshrecent)
+        safes_datatake = scihubQuery_raw('filename:%s_*_*_*_%s_*' % (safe_rad, takeid), cachedir=cachedir, cacherefreshrecent=cacherefreshrecent)
         # FIXME duplicate are removed, even if duplicate=True
         safes_datatake = remove_duplicates(safes_datatake, keep_list=[safe])
 
@@ -752,6 +600,8 @@ def normalize_gdf(gdf, startdate=None, stopdate=None, date=None, dtime=None, tim
             return []
         norm_gdf = gdf.copy()
     else:
+
+        # create normalise gdf
         norm_gdf = gpd.GeoDataFrame({
             'beginposition': startdate,
             'endposition': stopdate,
@@ -904,8 +754,7 @@ def normalize_gdf(gdf, startdate=None, stopdate=None, date=None, dtime=None, tim
 
 def scihubQuery(gdf=None, startdate=None, stopdate=None, date=None, dtime=None, timedelta_slice=None, filename=None,
                 datatake=0, duplicate=False, query=None, user=None, password=None, min_sea_percent=None, fig=None,
-                cachedir=None, cacherefreshrecent=None, progress=True, verbose=False, full_fig=False, alt_path=None,
-                download=False):
+                cachedir=None, cacherefreshrecent=None, progress=True, verbose=False, alt_path=None):
     """
 
     input:
@@ -956,8 +805,6 @@ def scihubQuery(gdf=None, startdate=None, stopdate=None, date=None, dtime=None, 
     return :
         a geodataframe with safes from scihub, colocated with input gdf (ie same index)
     """
-    global default_user
-    global default_password
 
     if sys.gettrace():
         logger.setLevel(logging.DEBUG)
@@ -969,14 +816,6 @@ def scihubQuery(gdf=None, startdate=None, stopdate=None, date=None, dtime=None, 
     if not sys.stderr.isatty() and "tqdm.std" in str(tqdm):
         progress = False
 
-    # get default keywords values
-    if user is None:
-        user = default_user
-    if password is None:
-        password = default_password
-    # set default user/password
-    default_user = user
-    default_password = password
 
     if cachedir is None:
         cachedir = default_cachedir
@@ -996,7 +835,6 @@ def scihubQuery(gdf=None, startdate=None, stopdate=None, date=None, dtime=None, 
     safes_sea_ok_list = []
     safes_sea_nok_list = []
     scihub_shapes_chunk = []
-    user_shapes = []
 
     # user crs will be used for coloc
     if gdf is None or gdf.crs is None:
@@ -1082,8 +920,7 @@ def scihubQuery(gdf=None, startdate=None, stopdate=None, date=None, dtime=None, 
             continue
 
         t = time.time()
-        safes_unfiltered, cache_status = scihubQuery_raw(str_query, user=user, password=password, cachedir=cachedir,
-                                                         cacherefreshrecent=cacherefreshrecent,
+        safes_unfiltered, cache_status = scihubQuery_raw(str_query, cachedir=cachedir, cacherefreshrecent=cacherefreshrecent,
                                                          return_cache_status=True)
         elapsed_request = time.time() - t
         safes_unfiltered_count = len(safes_unfiltered)
@@ -1115,8 +952,7 @@ def scihubQuery(gdf=None, startdate=None, stopdate=None, date=None, dtime=None, 
         if datatake != 0:
             logger.debug("Asking for same datatakes")
             nsafes = len(safes)
-            safes = get_datatakes(safes, datatake=datatake, user=user, password=password, cachedir=cachedir,
-                                  cacherefreshrecent=cacherefreshrecent)
+            safes = get_datatakes(safes, datatake=datatake, cachedir=cachedir, cacherefreshrecent=cacherefreshrecent)
             logger.debug("added %s datatakes" % (len(safes) - nsafes))
 
             if not duplicate:
@@ -1180,95 +1016,6 @@ def scihubQuery(gdf=None, startdate=None, stopdate=None, date=None, dtime=None, 
         srs = crs['init']  # should be deprecated
     logger.info("Total : %s SAFES colocated with %s (%s uniques)." % (len(safes), srs, len(safes['filename'].unique())))
 
-    if fig is not None:
-        uniques_safes = safes.drop_duplicates('filename')
-        import matplotlib.pyplot as plt
-        import matplotlib as mpl
-        ax = fig.add_subplot(111)
-        handles = []
-        if gdf is not None:
-            # gdf_sel=gpd.GeoDataFrame({'geometry':user_shapes},crs=scihub_crs)
-            # gdf_sel.to_crs(crs=crs,inplace=True)
-            # gdf_sel.geometry.plot(ax=ax, color='none' , edgecolor='green',zorder=3)
-            # original user request # TODO other color for invalid ones ?
-            # decide if loop is over dataframe or over rows
-            if isinstance(gdflist, list):
-                all_user_geom = pd.concat(gdflist)
-            else:
-                all_user_geom = gdflist
-            all_user_geom_shp = all_user_geom.geometry
-            if not all(all_user_geom_shp.is_empty):
-                all_user_geom_shp.reset_index(drop=True).explode().plot(ax=ax, color='none', edgecolor='green',
-                                                                        zorder=3)
-                handles.append(mpl.lines.Line2D([], [], color='green', label='user request'))
-
-        if full_fig:
-            if scihub_shapes_chunk:
-                # logger.info("scihub_shapes_chunk : %s" % str(scihub_shapes_chunk))
-                gdf_sel = gpd.GeoDataFrame({'geometry': scihub_shapes_chunk}, crs=scihub_crs)
-                gdf_sel.to_crs(crs=crs, inplace=True)  # todo : check valid
-                gdf_sel.geometry.buffer(0).plot(ax=ax, color='none', edgecolor='red', zorder=4)
-                handles.append(mpl.lines.Line2D([], [], color='red', label='scihub request'))
-
-            if len(safes_not_colocalized) > 0:
-                safes_not_colocalized.geometry.apply(geoshp.smallest_dlon).to_crs(crs=crs).buffer(0).plot(ax=ax,
-                                                                                                          color='none',
-                                                                                                          edgecolor='orange',
-                                                                                                          zorder=1,
-                                                                                                          alpha=0.2)
-                handles.append(mpl.lines.Line2D([], [], color='orange', label='not colocated'))
-            if min_sea_percent is not None and len(safes_sea_nok) > 0:
-                safes_sea_nok.geometry.apply(geoshp.smallest_dlon).to_crs(crs=crs).buffer(0).plot(ax=ax, color='none',
-                                                                                                  edgecolor='olive',
-                                                                                                  zorder=1, alpha=0.2)
-                handles.append(mpl.lines.Line2D([], [], color='olive', label='sea area > %s %%' % min_sea_percent))
-
-        if len(uniques_safes) > 0:
-            if 'datatake_index' in uniques_safes:
-                uniques_safes[uniques_safes['datatake_index'] == 0].geometry.apply(geoshp.smallest_dlon).to_crs(
-                    crs=crs).buffer(0).plot(ax=ax, color='none', edgecolor='blue', zorder=2, alpha=0.7)
-                uniques_safes[uniques_safes['datatake_index'] != 0].geometry.apply(geoshp.smallest_dlon).to_crs(
-                    crs=crs).buffer(0).plot(ax=ax, color='none', edgecolor='cyan', zorder=2, alpha=0.2)
-                handles.append(mpl.lines.Line2D([], [], color='cyan', label='datatake'))
-            else:
-                uniques_safes.geometry.apply(geoshp.smallest_dlon).to_crs(crs=crs).buffer(0).plot(ax=ax, color='none',
-                                                                                                  edgecolor='blue',
-                                                                                                  zorder=2, alpha=0.7)
-
-            handles.append(mpl.lines.Line2D([], [], color='blue', label='colocated'))
-
-        continents = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
-        continents.to_crs(crs=crs).plot(ax=ax, zorder=0, color='gray', alpha=0.2)
-
-        bounds = None
-        try:
-            # disable shapely errors, they are catched
-            old_log = shapely.geos.LOG.getEffectiveLevel()
-            shapely.geos.LOG.setLevel(logging.CRITICAL)
-            bounds = gpd.GeoDataFrame({'geometry':
-                                           [box(*uniques_safes.total_bounds),
-                                            box(*safes_not_colocalized.total_bounds)] + scihub_shapes_chunk
-                                       }, crs=scihub_crs).to_crs(crs=crs).buffer(0).total_bounds
-            shapely.geos.LOG.setLevel(old_log)
-        except Exception as e:
-            logger.debug("bounds fallback : %s" % str(e))
-            try:
-                bounds = gpd.GeoDataFrame({'geometry': scihub_shapes_chunk
-                                           }, crs=scihub_crs).to_crs(crs=crs).buffer(0).total_bounds
-            except Exception as err:
-                logger.debug("bounds last fallback failed: %s" % str(e))
-                bounds = None
-
-        if bounds is not None:
-            xmin, xmax = ax.get_xlim()
-            ymin, ymax = ax.get_ylim()
-            ax.set_ylim([max(ymin, bounds[1]), min(ymax, bounds[3])])
-            ax.set_xlim([max(xmin, bounds[0]), min(xmax, bounds[2])])
-        fig.tight_layout()
-        bbox = ax.get_position()
-        ax.set_position([bbox.x0, bbox.y0, bbox.width, bbox.height * 0.8])
-
-        ax.legend(handles=handles, loc='lower center', bbox_to_anchor=(0.5, 1.05), ncol=5)
 
     if cachedir is not None:
         search_paths = [cachedir]
@@ -1277,10 +1024,6 @@ def scihubQuery(gdf=None, startdate=None, stopdate=None, date=None, dtime=None, 
         # try to find already existing path
         logger.debug('search paths: %s' % str(search_paths))
         safes['path'] = safes['filename'].apply(lambda safe: safe_dir(safe, path=search_paths, only_exists=True))
-
-    if download:
-        safes = download_from_df(safes, destination=cachedir, progress=progress)
-
     return safes
 
 
