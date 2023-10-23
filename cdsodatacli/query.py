@@ -7,11 +7,12 @@ import argparse
 from shapely.geometry import LineString, Point, Polygon
 
 
-def fetch_data(geometry=None, product=None, name=None, start_datetime=None, end_datetime=None, publication_start=None,
+def fetch_data(gdf=None, geometry=None, product=None, name=None, start_datetime=None, end_datetime=None, publication_start=None,
                publication_end=None):
     """
     Fetches data based on provided parameters.
 
+    :param gdf:
     :param geometry: List of tuples representing the geometry.
     :param product: String representing the product information for filtering the data.D
     :param name: String representing the name information for filtering the data.
@@ -22,55 +23,58 @@ def fetch_data(geometry=None, product=None, name=None, start_datetime=None, end_
     :return: JSON data containing the fetched results.
     """
     urlapi = 'https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter='
-    geo = determine_geometry_type(geometry)
-
-    # Shapely form
-    if geo == "Unknown":
-        shape = None
-    elif geo == "Polygon":
-        shape = Polygon(geometry)
-    elif geo == "Line":
-        shape = LineString(geometry)
-    elif geo == "Point":
-        shape = Point(geometry)
+    if gdf is not None:
+        collected_data = fetch_data_by_gdf(gdf)
     else:
-        shape = None
+        geo = determine_geometry_type(geometry)
 
-    # To avoid the space between type and coordinates
-    if shape:
-        value = shape.wkt
-        geo_type = value.split('(')[0].strip()
-        coordinates_part = value[value.find("(") + 1:value.find(")")]
-        if geo == "Point":
-            modified_value = f"{coordinates_part}"
-            coordinates_part = modified_value.replace(" ", "%20")
+        # Shapely form
+        if geo == "Unknown":
+            shape = None
         elif geo == "Polygon":
-            coordinates_part = f"{coordinates_part})"
-    else:
-        print("No geometry input or invalid geometry type")
+            shape = Polygon(geometry)
+        elif geo == "Line":
+            shape = LineString(geometry)
+        elif geo == "Point":
+            shape = Point(geometry)
+        else:
+            shape = None
 
-    # Taking all given parameters
-    params = {}
+        # To avoid the space between type and coordinates
+        if shape:
+            value = shape.wkt
+            geo_type = value.split('(')[0].strip()
+            coordinates_part = value[value.find("(") + 1:value.find(")")]
+            if geo == "Point":
+                modified_value = f"{coordinates_part}"
+                coordinates_part = modified_value.replace(" ", "%20")
+            elif geo == "Polygon":
+                coordinates_part = f"{coordinates_part})"
+        else:
+            print("No geometry input or invalid geometry type")
 
-    if geometry:
-        params["OData.CSC.Intersects"] = f"(area=geography'SRID=4326;{geo_type}({coordinates_part})')"
-    if product:
-        params["Collection/Name eq"] = f" '{product}'"
-    if name:
-        params["contains"] = f"(Name,'{name}')"
-    if start_datetime:
-        params["ContentDate/Start gt"] = f" {start_datetime}"
-    if end_datetime:
-        params["ContentDate/Start lt"] = f" {end_datetime}"
-    if publication_start:
-        params["PublicationDate gt"] = f" {publication_start}"
-    if publication_end:
-        params["PublicationDate lt"] = f" {publication_end}"
+        # Taking all given parameters
+        params = {}
 
-    str_query = ' and '.join([f"{key}{value}" for key, value in params.items()])
-    json_data = requests.get(urlapi + str_query).json()
-    # print('json\nn',json)
-    return json_data
+        if geometry:
+            params["OData.CSC.Intersects"] = f"(area=geography'SRID=4326;{geo_type}({coordinates_part})')"
+        if product:
+            params["Collection/Name eq"] = f" '{product}'"
+        if name:
+            params["contains"] = f"(Name,'{name}')"
+        if start_datetime:
+            params["ContentDate/Start gt"] = f" {start_datetime}"
+        if end_datetime:
+            params["ContentDate/Start lt"] = f" {end_datetime}"
+        if publication_start:
+            params["PublicationDate gt"] = f" {publication_start}"
+        if publication_end:
+            params["PublicationDate lt"] = f" {publication_end}"
+
+        str_query = ' and '.join([f"{key}{value}" for key, value in params.items()])
+        json_data = requests.get(urlapi + str_query).json()
+        collected_data = process_data(json_data)
+    return collected_data
 
 
 def determine_geometry_type(array):
@@ -115,33 +119,42 @@ def process_data(json_data):
 def fetch_data_by_gdf(gdf):
     urlapi = 'https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter='
     collected_data = pd.DataFrame()
-    for line in range(len(gdf)):
-        gdf_line = gdf.iloc[line]
-
-        if 'geometry' in gdf_line and gdf_line['geometry'] is not None:
-            value = str(gdf_line.geometry)
-            geo_type = gdf_line.geometry.geom_type
+    for row in range(len(gdf)):
+        gdf_row = gdf.iloc[row]
+        enter_index = gdf.index[row]
+        print(enter_index)
+        # Taking all given parameters
+        params = {}
+        if 'geometry' in gdf_row and not pd.isna(gdf_row['geometry']):
+            value = str(gdf_row.geometry)
+            geo_type = gdf_row.geometry.geom_type
             coordinates_part = value[value.find("(") + 1:value.find(")")]
             if geo_type == "Point":
                 modified_value = f"{coordinates_part}"
                 coordinates_part = modified_value.replace(" ", "%20")
-                coordinates_part = f"POINT({coordinates_part})"
+                params["OData.CSC.Intersects"] = f"(area=geography'SRID=4326;POINT({coordinates_part})')"
             elif geo_type == "Polygon":
-                coordinates_part = f"POLYGON({coordinates_part}))"
+                params["OData.CSC.Intersects"] = f"(area=geography'SRID=4326;POLYGON({coordinates_part}))')"
 
-            if 'start_time' in gdf_line and not pd.isna(gdf_line['start_time']):
-                print(1)
-                start_datetime = gdf_line['start_time'].strftime("%Y-%m-%dT%H:%M:%S.0Z")
-                end_datetime = gdf_line['end_time'].strftime("%Y-%m-%dT%H:%M:%S.0Z")
-                str_query = f"OData.CSC.Intersects(area=geography'SRID=4326;{coordinates_part}') and ContentDate/Start gt {start_datetime} and ContentDate/Start lt {end_datetime}"
-                json_data = requests.get(urlapi + str_query).json()
-                data = process_data(json_data)
-                collected_data = pd.concat([collected_data, data], ignore_index=True)
-            else:
-                print(2)
-                str_query = f"OData.CSC.Intersects(area=geography'SRID=4326;{coordinates_part}')"
-                json_data = requests.get(urlapi + str_query).json()
-                data = process_data(json_data)
-                collected_data = pd.concat([collected_data, data], ignore_index=True)
+        if 'start_time' in gdf_row and not pd.isna(gdf_row['start_time']):
+            start_datetime = gdf_row['start_time'].strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            params["ContentDate/Start gt"] = f" {start_datetime}"
+
+        if 'end_time' in gdf_row and not pd.isna(gdf_row['end_time']):
+            end_datetime = gdf_row['end_time'].strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            params["ContentDate/Start lt"] = f" {end_datetime}"
+        if 'Attributes' in gdf_row and not pd.isna(gdf_row['Attributes']):
+            Attributes = str(gdf['Attributes']).replace(" ", "")
+            Attributes_name = Attributes[1:Attributes.find(",")]
+            Attributes_value = Attributes[Attributes.find(",") + 1:Attributes.find("N") - 1]
+            params[
+                "Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq"] = f" '{Attributes_name}' and att/OData.CSC.DoubleAttribute/Value le {Attributes_value})"
+
+        str_query = ' and '.join([f"{key}{value}" for key, value in params.items()])
+        json_data = requests.get(urlapi + str_query).json()
+        data = process_data(json_data)
+        data['Enter_index'] = enter_index
+        collected_data = pd.concat([collected_data, data], ignore_index=True)
     return collected_data
+
 
