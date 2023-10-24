@@ -7,14 +7,14 @@ import argparse
 from shapely.geometry import LineString, Point, Polygon
 
 
-def fetch_data(gdf=None, geometry=None, product=None, name=None, start_datetime=None, end_datetime=None, publication_start=None,
+def fetch_data(gdf=None, geometry=None, collection=None, name=None, start_datetime=None, end_datetime=None, publication_start=None,
                publication_end=None):
     """
     Fetches data based on provided parameters.
 
     :param gdf:
     :param geometry: List of tuples representing the geometry.
-    :param product: String representing the product information for filtering the data.D
+    :param collection: String representing the collection information for filtering the data.
     :param name: String representing the name information for filtering the data.
     :param start_datetime: String representing the starting date for the query.
     :param end_datetime: String representing the ending date for the query.
@@ -58,8 +58,8 @@ def fetch_data(gdf=None, geometry=None, product=None, name=None, start_datetime=
 
         if geometry:
             params["OData.CSC.Intersects"] = f"(area=geography'SRID=4326;{geo_type}({coordinates_part})')"
-        if product:
-            params["Collection/Name eq"] = f" '{product}'"
+        if collection:
+            params["Collection/Name eq"] = f" '{collection}'"
         if name:
             params["contains"] = f"(Name,'{name}')"
         if start_datetime:
@@ -122,7 +122,6 @@ def fetch_data_by_gdf(gdf):
     for row in range(len(gdf)):
         gdf_row = gdf.iloc[row]
         enter_index = gdf.index[row]
-        print(enter_index)
         # Taking all given parameters
         params = {}
         if 'geometry' in gdf_row and not pd.isna(gdf_row['geometry']):
@@ -136,6 +135,22 @@ def fetch_data_by_gdf(gdf):
             elif geo_type == "Polygon":
                 params["OData.CSC.Intersects"] = f"(area=geography'SRID=4326;POLYGON({coordinates_part}))')"
 
+        if 'collection' in gdf_row and not pd.isna(gdf_row['collection']):
+            collection = gdf_row['collection']
+            params["Collection/Name eq"] = f" '{collection}'"
+
+        if 'name' in gdf_row and not pd.isna(gdf_row['name']):
+            name = gdf_row['name']
+            params["contains"] = f"(Name,'{name}')"
+
+        if 'sensormode' in gdf_row and not pd.isna(gdf_row['sensormode']):
+            sensormode = gdf_row['sensormode']
+            params["contains"] = f"(Name,'{sensormode}')"
+
+        if 'producttype' in gdf_row and not pd.isna(gdf_row['producttype']):
+            producttype = gdf_row['producttype']
+            params["contains"] = f"(Name,'{producttype}')"
+
         if 'start_time' in gdf_row and not pd.isna(gdf_row['start_time']):
             start_datetime = gdf_row['start_time'].strftime("%Y-%m-%dT%H:%M:%S.000Z")
             params["ContentDate/Start gt"] = f" {start_datetime}"
@@ -143,15 +158,21 @@ def fetch_data_by_gdf(gdf):
         if 'end_time' in gdf_row and not pd.isna(gdf_row['end_time']):
             end_datetime = gdf_row['end_time'].strftime("%Y-%m-%dT%H:%M:%S.000Z")
             params["ContentDate/Start lt"] = f" {end_datetime}"
+
         if 'Attributes' in gdf_row and not pd.isna(gdf_row['Attributes']):
-            Attributes = str(gdf['Attributes']).replace(" ", "")
-            Attributes_name = Attributes[1:Attributes.find(",")]
-            Attributes_value = Attributes[Attributes.find(",") + 1:Attributes.find("N") - 1]
+            Attributes = str(gdf_row['Attributes']).replace(" ", "")
+            Attributes_name = Attributes[0:Attributes.find(",")]
+            Attributes_value = Attributes[Attributes.find(",") + 1:]
             params[
                 "Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq"] = f" '{Attributes_name}' and att/OData.CSC.DoubleAttribute/Value le {Attributes_value})"
 
         str_query = ' and '.join([f"{key}{value}" for key, value in params.items()])
+        top_value = {}
+        if 'top' in gdf_row and not pd.isna(gdf_row['top']):
+            top = str(gdf_row['top'])
+            str_query = (str_query + '&$top=' + top)
         json_data = requests.get(urlapi + str_query).json()
+        # print(json_data)
         data = process_data(json_data)
         data['Enter_index'] = enter_index
         collected_data = pd.concat([collected_data, data], ignore_index=True)
