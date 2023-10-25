@@ -1,79 +1,99 @@
-import pdb
-import requests
 import datetime
-from collections import OrderedDict
+import requests
 import pandas as pd
 import argparse
-from shapely.geometry import LineString, Point, Polygon
+import shapely
+from shapely.ops import unary_union
+from shapely.geometry import GeometryCollection, LineString, Point, Polygon, MultiPolygon
+import geopandas as gpd
 
 
-def fetch_data(gdf=None, geometry=None, collection=None, name=None, start_datetime=None, end_datetime=None, publication_start=None,
-               publication_end=None):
+def fetch_data(gdf=None, geometry=None, collection=None, name=None, sensormode=None, producttype=None,
+               start_datetime=None, end_datetime=None, publication_start=None,
+               publication_end=None, top=None):
     """
     Fetches data based on provided parameters.
-
-    :param gdf:
+    :param gdf: GeoDataFrame containing the geospatial data for the query.
     :param geometry: List of tuples representing the geometry.
     :param collection: String representing the collection information for filtering the data.
     :param name: String representing the name information for filtering the data.
+    :param sensormode: String representing the type of product for filtering the data.
+    :param producttype: String representing the mode of the sensor for filtering the data.
     :param start_datetime: String representing the starting date for the query.
     :param end_datetime: String representing the ending date for the query.
     :param publication_start: String representing the starting publication date for the query.
     :param publication_end: String representing the ending publication date for the query.
-    :return: JSON data containing the fetched results.
+    :param top: String representing the ending publication date for the query.
+    :return: pdDataFame data containing the fetched results.
     """
     urlapi = 'https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter='
-    if gdf is not None:
+    if gdf is not None and isinstance(gdf, gpd.GeoDataFrame):
         collected_data = fetch_data_by_gdf(gdf)
     else:
-        geo = determine_geometry_type(geometry)
-
-        # Shapely form
-        if geo == "Unknown":
-            shape = None
-        elif geo == "Polygon":
-            shape = Polygon(geometry)
-        elif geo == "Line":
-            shape = LineString(geometry)
-        elif geo == "Point":
-            shape = Point(geometry)
-        else:
-            shape = None
-
-        # To avoid the space between type and coordinates
-        if shape:
-            value = shape.wkt
-            geo_type = value.split('(')[0].strip()
-            coordinates_part = value[value.find("(") + 1:value.find(")")]
-            if geo == "Point":
-                modified_value = f"{coordinates_part}"
-                coordinates_part = modified_value.replace(" ", "%20")
-            elif geo == "Polygon":
-                coordinates_part = f"{coordinates_part})"
-        else:
-            print("No geometry input or invalid geometry type")
 
         # Taking all given parameters
         params = {}
 
-        if geometry:
+        if geometry is not None:
+            geo = determine_geometry_type(geometry)
+            # Shapely form
+            if geo == "Unknown":
+                shape = None
+            elif geo == "Polygon":
+                shape = Polygon(geometry)
+            elif geo == "Line":
+                shape = LineString(geometry)
+            elif geo == "Point":
+                shape = Point(geometry)
+            else:
+                shape = None
+
+            # To avoid the space between type and coordinates
+            if shape:
+                value = shape.wkt
+                geo_type = value.split('(')[0].strip()
+                coordinates_part = value[value.find("(") + 1:value.find(")")]
+                if geo == "Point":
+                    modified_value = f"{coordinates_part}"
+                    coordinates_part = modified_value.replace(" ", "%20")
+                elif geo == "Polygon":
+                    coordinates_part = f"{coordinates_part})"
+            else:
+                print("No geometry input or invalid geometry type")
             params["OData.CSC.Intersects"] = f"(area=geography'SRID=4326;{geo_type}({coordinates_part})')"
-        if collection:
+
+        if collection is not None:
             params["Collection/Name eq"] = f" '{collection}'"
-        if name:
+
+        if name is not None:
             params["contains"] = f"(Name,'{name}')"
-        if start_datetime:
+
+        if sensormode is not None:
+            params["contains"] = f"(Name,'{sensormode}')"
+
+        if producttype is not None:
+            params["contains"] = f"(Name,'{producttype}')"
+
+        if start_datetime is not None:
             params["ContentDate/Start gt"] = f" {start_datetime}"
-        if end_datetime:
+
+        if end_datetime is not None:
             params["ContentDate/Start lt"] = f" {end_datetime}"
-        if publication_start:
+
+        if publication_start is not None:
             params["PublicationDate gt"] = f" {publication_start}"
-        if publication_end:
+
+        if publication_end is not None:
             params["PublicationDate lt"] = f" {publication_end}"
 
         str_query = ' and '.join([f"{key}{value}" for key, value in params.items()])
+        if top is not None:
+            top = str(top)
+            str_query = (str_query + '&$top=' + top)
+        # print(str_query)
         json_data = requests.get(urlapi + str_query).json()
         collected_data = process_data(json_data)
+    # print('json\nn',json)
     return collected_data
 
 
@@ -106,19 +126,17 @@ def process_data(json_data):
     :return: Processed data for visualization.
     """
     res = None
-    visu = None
     if 'value' in json_data:
         res = pd.DataFrame.from_dict(json_data['value'])
-        columns_to_print = ['Id', 'Name', 'S3Path', 'GeoFootprint']
-        visu = res[columns_to_print].head(3)
     else:
         print("No data found.")
-    return visu
+    return res
 
 
 def fetch_data_by_gdf(gdf):
     urlapi = 'https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter='
     collected_data = pd.DataFrame()
+    collected_data_sea_ok = pd.DataFrame()
     for row in range(len(gdf)):
         gdf_row = gdf.iloc[row]
         enter_index = gdf.index[row]
@@ -171,11 +189,48 @@ def fetch_data_by_gdf(gdf):
         if 'top' in gdf_row and not pd.isna(gdf_row['top']):
             top = str(gdf_row['top'])
             str_query = (str_query + '&$top=' + top)
-        json_data = requests.get(urlapi + str_query).json()
-        # print(json_data)
+        json_data = requests.get(urlapi + str_query + '&$expand=Attributes').json()
         data = process_data(json_data)
         data['Enter_index'] = enter_index
         collected_data = pd.concat([collected_data, data], ignore_index=True)
+
+        if 'min_sea_percent' in gdf_row and not pd.isna(gdf_row['min_sea_percent']):
+            min_sea_percent = float(gdf_row['min_sea_percent'])
+            earth = GeometryCollection(
+                list(gpd.read_file(gpd.datasets.get_path('naturalearth_lowres')).geometry)).buffer(0)
+            for i in range(len(collected_data)):
+                if collected_data.iloc[i].GeoFootprint["type"] == "MultiPolygon":
+                    geo_type = collected_data.iloc[i].GeoFootprint["type"]
+                    geo_coord = collected_data.iloc[i].GeoFootprint["coordinates"]
+                    geofootprint = MultiPolygon(geo_coord)
+                    shp_geo = unary_union(geofootprint)
+                else:
+                    footprint = collected_data.iloc[i].Footprint
+                    geo = footprint[footprint.find(";") + 1:footprint.find(")") + 2]
+                    shp_geo = shapely.wkt.loads(geo)
+                sea_percent = (shp_geo.area - shp_geo.intersection(earth).area) / shp_geo.area * 100
+                # print(sea_percent)
+                if sea_percent >= min_sea_percent:
+                    data_sea_ok = collected_data.iloc[i:i + 1]
+                    collected_data_sea_ok = pd.concat([collected_data_sea_ok, data_sea_ok], ignore_index=True)
+            collected_data = collected_data_sea_ok
     return collected_data
 
+
+# Test
+gdf = gpd.GeoDataFrame({
+    "start_time": [datetime.datetime(2021, 7, 4, 0)],
+    "end_time": [datetime.datetime(2021, 7, 5, 23, 59, 59)],
+    "collection": ["SENTINEL-1"],
+    "name": [None],
+    "sensormode": [None],
+    "producttype": [None],
+    "Attributes": [None],
+    "geometry": [None],
+    "top": [100],
+    "min_sea_percent": [90]
+})
+
+collected_data = fetch_data(gdf)
+print(collected_data)
 
