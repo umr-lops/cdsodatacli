@@ -19,20 +19,24 @@ def fetch_data(gdf=None, date=None, dtime=None, timedelta_slice=None, start_date
                collection=None, sensormode=None, producttype=None, geometry=None, publication_start=None,
                publication_end=None, min_sea_percent=None, fig=None, top=None):
     """
-        Fetches data based on provided parameters.
-        :param gdf: GeoDataFrame containing the geospatial data for the query.
-        :param geometry: List of tuples representing the geometry.
-        :param collection: String representing the collection information for filtering the data.
-        :param name: String representing the name information for filtering the data.
-        :param sensormode: String representing the mode of the sensor for filtering the data.
-        :param producttype: String representing the type of product for filtering the data.
-        :param start_datetime: String representing the starting date for the query.
-        :param end_datetime: String representing the ending date for the query.
-        :param publication_start: String representing the starting publication date for the query.
-        :param publication_end: String representing the ending publication date for the query.
-        :param top: String representing the ending publication date for the query.
-        :return: pdDataFame data containing the fetched results.
+    Fetches data based on provided parameters.
+
+    Args:
+       gdf (GeoDataFrame): containing the geospatial data for the query.
+       geometry (list of tuples): representing the geometry.
+       collection (String): representing the collection information for filtering the data.
+       name (String): representing the name information for filtering the data.
+       sensormode (String): representing the mode of the sensor for filtering the data.
+       producttype (String): representing the type of product for filtering the data.
+       start_datetime (String): representing the starting date for the query.
+       end_datetime (String): representing the ending date for the query.
+       publication_start (String): representing the starting publication date for the query.
+       publication_end (String): representing the ending publication date for the query.
+       top (String): representing the ending publication date for the query.
+    Return:
+        (pd.DataFame): data containing the fetched results.
     """
+
     if gdf is not None and isinstance(gdf, gpd.GeoDataFrame):
         gdf_norm = normalize_gdf(gdf=gdf, start_datetime=start_datetime, end_datetime=end_datetime, date=date,
                                  dtime=dtime,
@@ -41,13 +45,17 @@ def fetch_data(gdf=None, date=None, dtime=None, timedelta_slice=None, start_date
         print(gdf_norm)
         print(f"Length of input:{len(gdf_norm)}")
         urls = urls_creat(gdf=gdf_norm, top=top)
+
     collected_data = fetch_data_from_urls(urls=urls)
     # Remove duplicates
     data_dedup = remove_duplicates(safes_ori=collected_data)
+
     # Convert all Multipolygon to Polygon and add geometry as new column
     full_data = multy_to_poly(collected_data=data_dedup)
+
     if min_sea_percent is not None:
         full_data = sea_percent(collected_data=full_data, min_sea_percent=min_sea_percent)
+
     if fig is not None:
         fig(collected_data=full_data)
 
@@ -55,6 +63,7 @@ def fetch_data(gdf=None, date=None, dtime=None, timedelta_slice=None, start_date
         gdf = gdf_creat(geometry=geometry, collection=collection, name=name, sensormode=sensormode,
                         producttype=producttype, start_datetime=start_datetime, end_datetime=end_datetime,
                         publication_start=publication_start, publication_end=publication_end)
+
         gdf_norm = normalize_gdf(gdf=gdf, start_datetime=start_datetime, end_datetime=end_datetime, date=date,
                                  dtime=dtime, timedelta_slice=timedelta_slice)
         print(gdf_norm)
@@ -62,12 +71,16 @@ def fetch_data(gdf=None, date=None, dtime=None, timedelta_slice=None, start_date
         collected_data = fetch_data_from_urls(urls=urls)
         # Remove duplicates
         data_dedup = remove_duplicates(safes_ori=collected_data)
+
         # Convert all Multipolygon to Polygon and add geometry as new column
         full_data = multy_to_poly(collected_data=data_dedup)
+
         if min_sea_percent is not None:
             full_data = sea_percent(collected_data=full_data, min_sea_percent=min_sea_percent)
+
         if fig is not None:
             fig(collected_data=full_data)
+
     return full_data
 
 
@@ -78,7 +91,9 @@ def gdf_creat(start_datetime=None, end_datetime=None, name=None, collection=None
         "start_datetime": [None], "end_datetime": [None], "name": [None], "collection": [None], "sensormode": [None],
         "producttype": [None], "geometry": [None], "publication_start": [None], "publication_end": [None]
     }
+
     gdf = gpd.GeoDataFrame(data_in)
+
     if geometry is not None:
         gdf["geometry"] = shapely.wkt.loads(geometry)
     if collection is not None:
@@ -113,6 +128,7 @@ def normalize_gdf(gdf, start_datetime=None, end_datetime=None, date=None, dtime=
         gdf.rename(columns={'stopdate': 'end_datetime'}, inplace=True)
     if 'geofeature' in gdf:
         gdf.rename(columns={'geofeature': 'geometry'}, inplace=True)
+
     if timedelta_slice is None:
         timedelta_slice = default_timedelta_slice
     if gdf is not None:
@@ -131,6 +147,7 @@ def normalize_gdf(gdf, start_datetime=None, end_datetime=None, date=None, dtime=
         }, geometry='geometry', index=[0], crs="EPSG:4326")
         # no slicing
         timedelta_slice = None
+
     # convert naives dates to utc
     for date_col in norm_gdf.select_dtypes(include=['datetime64']).columns:
         try:
@@ -139,19 +156,24 @@ def normalize_gdf(gdf, start_datetime=None, end_datetime=None, date=None, dtime=
         except TypeError:
             # already localized
             pass
+
     # check valid input geometry
     if not all(norm_gdf.is_valid):
         raise ValueError("Invalid geometries found. Check them with gdf.is_valid")
+
     if date in norm_gdf:
         if (start_datetime not in norm_gdf) and (end_datetime not in norm_gdf):
             norm_gdf['start_datetime'] = norm_gdf[date] - dtime
             norm_gdf['end_datetime'] = norm_gdf[date] + dtime
         else:
             raise ValueError('date keyword conflict with startdate/stopdate')
+
     if (start_datetime in norm_gdf) and (start_datetime != 'start_datetime'):
         norm_gdf['start_datetime'] = norm_gdf[start_datetime]
+
     if (end_datetime in norm_gdf) and (end_datetime != 'end_datetime'):
         norm_gdf['end_datetime'] = norm_gdf[end_datetime]
+
     gdf_slices = norm_gdf
     # slice
     if timedelta_slice is not None:
@@ -162,6 +184,7 @@ def normalize_gdf(gdf, start_datetime=None, end_datetime=None, date=None, dtime=
         # TO make sure that date does not contain future date
         if maxdate > datetime.datetime.utcnow().replace(tzinfo=pytz.UTC):
             maxdate = datetime.datetime.utcnow().replace(tzinfo=pytz.UTC) + datetime.timedelta(days=1)
+
         if (mindate == mindate) and (maxdate == maxdate):  # non nan
             gdf_slices = []
             slice_begin = mindate
@@ -205,6 +228,7 @@ def urls_creat(gdf, top=None):
     for row in range(len(gdf)):
         gdf_row = gdf.iloc[row]
         enter_index = gdf.index[row]
+
         # Taking all given parameters
         params = {}
         if 'geometry' in gdf_row and not pd.isna(gdf_row['geometry']):
@@ -217,33 +241,42 @@ def urls_creat(gdf, top=None):
                 params["OData.CSC.Intersects"] = f"(area=geography'SRID=4326;POINT({coordinates_part})')"
             elif geo_type == "Polygon":
                 params["OData.CSC.Intersects"] = f"(area=geography'SRID=4326;POLYGON({coordinates_part}))')"
+
         if 'collection' in gdf_row and not pd.isna(gdf_row['collection']):
             collection = gdf_row['collection']
             params["Collection/Name eq"] = f" '{collection}'"
+
         if 'name' in gdf_row and not pd.isna(gdf_row['name']):
             name = gdf_row['name']
             params["contains"] = f"(Name,'{name}')"
+
         if 'sensormode' in gdf_row and not pd.isna(gdf_row['sensormode']):
             sensormode = gdf_row['sensormode']
             params[
                 "Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'operationalMode' and att/OData.CSC.StringAttribute/Value eq"] = f" '{sensormode}')"
+
         if 'producttype' in gdf_row and not pd.isna(gdf_row['producttype']):
             producttype = gdf_row['producttype']
             params[
                 "Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq"] = f" '{producttype}')"
+
         if 'start_datetime' in gdf_row and not pd.isna(gdf_row['start_datetime']):
             start_datetime = gdf_row['start_datetime'].strftime("%Y-%m-%dT%H:%M:%S.000Z")
             params["ContentDate/Start gt"] = f" {start_datetime}"
+
         if 'end_datetime' in gdf_row and not pd.isna(gdf_row['end_datetime']):
             end_datetime = gdf_row['end_datetime'].strftime("%Y-%m-%dT%H:%M:%S.000Z")
             params["ContentDate/Start lt"] = f" {end_datetime}"
+
         if 'Attributes' in gdf_row and not pd.isna(gdf_row['Attributes']):
             Attributes = str(gdf_row['Attributes']).replace(" ", "")
             Attributes_name = Attributes[0:Attributes.find(",")]
             Attributes_value = Attributes[Attributes.find(",") + 1:]
             params[
                 "Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq"] = f" '{Attributes_name}' and att/OData.CSC.DoubleAttribute/Value le {Attributes_value})"
+
         str_query = ' and '.join([f"{key}{value}" for key, value in params.items()])
+
         str_query = (str_query + '&$top=' + str(top))
         url = (urlapi + str_query + '&$expand=Attributes')
         urls.append((enter_index, url))
@@ -269,6 +302,12 @@ def urls_creat(gdf, top=None):
 #     print(f"fetch_data_from_urls time:{processing_time}s")
 #     return collected_data
 
+    with tqdm(total=len(urls)) as pbar:
+        for url in urls:
+            json_data = requests.get(url).json()
+            if 'value' in json_data:
+                collected_data = pd.DataFrame.from_dict(json_data['value'])
+                pbar.update(1)
 
 # def fetch_url(url):
 #     data = requests.get(url).json()
@@ -289,6 +328,9 @@ def fetch_data_from_url(url, index):
         return df
     return pd.DataFrame()
 
+#def fetch_url(url):
+#    data = requests.get(url).json()
+#    return process_data(data)
 
 def fetch_data_from_urls(urls, max_workers=10):
     start_time = time.time()
@@ -310,6 +352,7 @@ def fetch_data_from_urls(urls, max_workers=10):
 def process_data(json_data):
     """
     Processes the fetched JSON data and returns relevant information.
+
     :param json_data: JSON data containing the fetched results.
     :return: Processed data for visualization.
     """
@@ -326,7 +369,6 @@ def remove_duplicates(safes_ori):
     """
     Remove duplicate safe (ie same footprint with same date, but different prodid)
     """
-    print("hello")
     start_time = time.time()
     safes = safes_ori.copy()
     if not safes.empty:
@@ -338,6 +380,7 @@ def remove_duplicates(safes_ori):
             sames_safes = safes[safes['filename_radic'] == filename_radic]
             # print(len(sames_safes['Name'].unique()))
             if len(sames_safes['Name']) > 1:
+                force_keep = list(set(sames_safes['Name']).intersection(keep_list))
                 to_keep = sames_safes[
                     'ModificationDate'].max()
                 safes = safes[(safes['ModificationDate'] == to_keep) | (safes['filename_radic'] != filename_radic)]
@@ -350,12 +393,12 @@ def remove_duplicates(safes_ori):
     return safes
 
 
-def multy_to_poly(collected_data):
+def multy_to_poly(collected_data=None):
     start_time = time.time()
     collected_data['geometry'] = collected_data['Footprint'].str.split(';', expand=True)[1].str.strip().str[:-1]
     collected_data['geometry'] = gpd.GeoSeries.from_wkt(collected_data['geometry'])
     collected_data = gpd.GeoDataFrame(collected_data, geometry='geometry', crs="EPSG:4326")
-    place = 0
+    place = 0;
     for geo in collected_data['geometry']:
         single_poly = geo
         if geo.geom_type == 'MultiPolygon':
@@ -375,7 +418,7 @@ def sea_percent(collected_data, min_sea_percent=None):
     start_time = time.time()
     warnings.simplefilter(action='ignore', category=FutureWarning)
     earth = GeometryCollection(list(gpd.read_file(gpd.datasets.get_path('naturalearth_lowres')).geometry)).buffer(0)
-    collected_data.to_crs()
+    
     sea_percentage = (collected_data.geometry.area - collected_data.geometry.intersection(
         earth).area) / collected_data.geometry.area * 100
     collected_data['sea_percent'] = sea_percentage
@@ -409,3 +452,39 @@ def fig(collected_data=None):
     end_time = time.time()
     processing_time = end_time - start_time
     print(f"fig processing time:{processing_time}s")
+
+
+# Test
+gdf = gpd.GeoDataFrame({
+        "start_datetime" : [ datetime.datetime(2021,10,2,0) ,  datetime.datetime(2021,10,13,0) ],
+        "end_datetime"   : [ datetime.datetime(2022,10,2,21),  datetime.datetime(2022,10,13,18) ],
+        "geometry"   : [ shapely.wkt.loads("POINT (-7.5 53)"),  shapely.wkt.loads("POLYGON ((-12 35, -5 35, -5 45, -12 45, -12 35))")],
+        "collection"  : [ "SENTINEL-1", "SENTINEL-2"],
+        "name"        : [ None, None],
+        "sensormode"  : [ None, None],
+        "producttype" : [ None, None],
+        "Attributes"  : [ None, None],
+    })
+
+collected_data_norm = fetch_data(gdf, min_sea_percent=20, fig=fig)
+print(collected_data_norm)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
