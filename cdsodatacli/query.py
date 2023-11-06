@@ -19,19 +19,22 @@ def fetch_data(gdf=None, date=None, dtime=None, timedelta_slice=None, start_date
                collection=None, sensormode=None, producttype=None, geometry=None, publication_start=None,
                publication_end=None, min_sea_percent=None, fig=None, top=None):
     """
-        Fetches data based on provided parameters.
-        :param gdf: GeoDataFrame containing the geospatial data for the query.
-        :param geometry: List of tuples representing the geometry.
-        :param collection: String representing the collection information for filtering the data.
-        :param name: String representing the name information for filtering the data.
-        :param sensormode: String representing the mode of the sensor for filtering the data.
-        :param producttype: String representing the type of product for filtering the data.
-        :param start_datetime: String representing the starting date for the query.
-        :param end_datetime: String representing the ending date for the query.
-        :param publication_start: String representing the starting publication date for the query.
-        :param publication_end: String representing the ending publication date for the query.
-        :param top: String representing the ending publication date for the query.
-        :return: pdDataFame data containing the fetched results.
+    Fetches data based on provided parameters.
+
+    Args:
+       gdf (GeoDataFrame): containing the geospatial data for the query.
+       geometry (list of tuples): representing the geometry.
+       collection (String): representing the collection information for filtering the data.
+       name (String): representing the name information for filtering the data.
+       sensormode (String): representing the mode of the sensor for filtering the data.
+       producttype (String): representing the type of product for filtering the data.
+       start_datetime (String): representing the starting date for the query.
+       end_datetime (String): representing the ending date for the query.
+       publication_start (String): representing the starting publication date for the query.
+       publication_end (String): representing the ending publication date for the query.
+       top (String): representing the ending publication date for the query.
+    Return:
+        (pd.DataFame): data containing the fetched results.
     """
 
     if gdf is not None and isinstance(gdf, gpd.GeoDataFrame):
