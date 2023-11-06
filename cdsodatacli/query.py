@@ -436,8 +436,8 @@ gdf = gpd.GeoDataFrame({
         "Attributes"  : [ None, None],
     })
 
-collected_data_norm = fetch_data(gdf, min_sea_percent=20, fig=fig)
-print(collected_data_norm)
+# collected_data_norm = fetch_data(gdf, min_sea_percent=20, fig=fig)
+# print(collected_data_norm)
 
 
 
