@@ -2,6 +2,9 @@
 """odata client for Copernicus Data Space catalog"""
 
 import sys
+from cdsodatacli import *
+from cdsodatacli.query import fetch_data
+
 
 if sys.version_info >= (3, 8):
     from importlib import metadata as importlib_metadata
@@ -17,3 +20,4 @@ def get_version() -> str:
 
 
 version: str = get_version()
+__version__ = get_version()

@@ -9,6 +9,7 @@ from rich.console import Console
 
 from cdsodatacli import version
 from cdsodatacli.example import hello
+from cdsodatacli.query import fetch_data
 
 
 class Color(str, Enum):
