@@ -17,15 +17,12 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 import warnings
-
-# Create cache directory
-cache_dir = 'api_cache'
-os.makedirs(cache_dir, exist_ok=True)
+import xarray as xr
 
 
 def fetch_data(gdf=None, date=None, dtime=None, timedelta_slice=None, start_datetime=None, end_datetime=None, name=None,
-               collection=None, sensormode=None, producttype=None, geometry=None, publication_start=None,
-               publication_end=None, min_sea_percent=None, figure=False, top=None):
+               collection=None, sensormode=None, producttype=None, geometry=None,  max_cloud_percent=None, publication_start=None,
+               publication_end=None, min_sea_percent=None, figure=False, top=None, cache_dir=None):
     """
     Fetches data based on provided parameters.
 
@@ -45,21 +42,43 @@ def fetch_data(gdf=None, date=None, dtime=None, timedelta_slice=None, start_date
         (pd.DataFame): data containing the fetched results.
     """
 
+    # Create cache directory
+    if cache_dir is None:
+        cache_dir = 'api_cache'
+        os.makedirs(cache_dir, exist_ok=True)
+    else:
+        cache_dir = cache_dir
+        os.makedirs(cache_dir, exist_ok=True)
+
+    if type(gdf) is str:
+        file_extension = os.path.splitext(gdf)[1]
+        if file_extension == '.nc':
+            ds = xr.open_dataset(gdf)
+            df = pd.DataFrame()
+            df['LONGITUDE'] = ds['LONGITUDE']
+            df['LATITUDE'] = ds['LATITUDE']
+
+            geometry = gpd.points_from_xy(df.LONGITUDE, df.LATITUDE)
+            gdf = gpd.GeoDataFrame(df, geometry=geometry)
+
+            # Add time column
+            gdf['time'] = pd.to_datetime(ds['TIME'])
+            gdf['start_datetime'] = gdf.time - datetime.timedelta(hours=1)
+            gdf['end_datetime'] = gdf.time - datetime.timedelta(hours=1)
+
     if gdf is not None and isinstance(gdf, gpd.GeoDataFrame):
         gdf_norm = normalize_gdf(gdf=gdf, start_datetime=start_datetime, end_datetime=end_datetime, date=date,
                                  dtime=dtime,
                                  timedelta_slice=timedelta_slice)
         # geopd_norm.sort_index(ascending=False)
         logging.debug(f"Length of input:{len(gdf_norm)}")
-        urls = urls_creat(gdf=gdf_norm, top=top)
-
-        collected_data = fetch_data_from_urls(urls=urls)
+        urls = urls_creat(gdf=gdf_norm, max_cloud_percent=max_cloud_percent, top=top)
+        collected_data = fetch_data_from_urls(urls=urls, cache_dir=cache_dir)
         if collected_data.empty:
             return logging.info("No data found.")
 
         # Remove duplicates
         data_dedup = remove_duplicates(safes=collected_data)
-
         # Convert all Multipolygon to Polygon and add geometry as new column
         full_data = multi_to_poly(collected_data=data_dedup)
         if min_sea_percent is not None:
@@ -75,18 +94,22 @@ def fetch_data(gdf=None, date=None, dtime=None, timedelta_slice=None, start_date
 
         gdf_norm = normalize_gdf(gdf=gdf, start_datetime=start_datetime, end_datetime=end_datetime, date=date,
                                  dtime=dtime, timedelta_slice=timedelta_slice)
-        urls = urls_creat(gdf=gdf_norm, top=top)
-        collected_data = fetch_data_from_urls(urls=urls)
+        urls = urls_creat(gdf=gdf_norm, max_cloud_percent=max_cloud_percent, top=top)
+        collected_data = fetch_data_from_urls(urls=urls, cache_dir=cache_dir)
+        if collected_data.empty:
+            return logging.info("No data found.")
         # Remove duplicates
         data_dedup = remove_duplicates(safes=collected_data)
         # Convert all Multipolygon to Polygon and add geometry as new column
-        full_data = multi_to_poly(collected_data=data_dedup)
-
         if min_sea_percent is not None:
-            full_data = sea_percent(collected_data=full_data, min_sea_percent=min_sea_percent)
+            full_data = multi_to_poly(collected_data=data_dedup)
+            data_dedup = sea_percent(collected_data=full_data, min_sea_percent=min_sea_percent)
 
         if fig is True:
+            full_data = multi_to_poly(collected_data=data_dedup)
             fig(collected_data=full_data)
+
+    full_data = data_dedup.sort_index()
 
     return full_data
 
@@ -165,8 +188,8 @@ def normalize_gdf(gdf, start_datetime=None, end_datetime=None, date=None, dtime=
             pass
 
     # check valid input geometry
-    if not all(norm_gdf.is_valid):
-        raise ValueError("Invalid geometries found. Check them with gdf.is_valid")
+    # if not all(norm_gdf.is_valid):
+    #     raise ValueError("Invalid geometries found. Check them with gdf.is_valid")
 
     if date in norm_gdf:
         if (start_datetime not in norm_gdf) and (end_datetime not in norm_gdf):
@@ -226,7 +249,7 @@ def normalize_gdf(gdf, start_datetime=None, end_datetime=None, date=None, dtime=
     return gdf_norm
 
 
-def urls_creat(gdf, top=None):
+def urls_creat(gdf, max_cloud_percent=None,  top=None):
     start_time = time.time()
     urlapi = 'https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter='
     urls = []
@@ -268,23 +291,22 @@ def urls_creat(gdf, top=None):
                 "Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq"] = f" '{producttype}')"
 
         if 'start_datetime' in gdf_row and not pd.isna(gdf_row['start_datetime']):
-            start_datetime = gdf_row['start_datetime'] - datetime.timedelta(hours=10)
-            start_datetime = start_datetime.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            # start_datetime = gdf_row['start_datetime'] - datetime.timedelta(hours=10)
+            start_datetime = gdf_row['start_datetime'].strftime("%Y-%m-%dT%H:%M:%S.000Z")
             params["ContentDate/Start gt"] = f" {start_datetime}"
 
         if 'end_datetime' in gdf_row and not pd.isna(gdf_row['end_datetime']):
-            end_datetime = gdf_row['end_datetime'] + datetime.timedelta(hours=10)
-            end_datetime = end_datetime.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            # end_datetime = gdf_row['end_datetime'] + datetime.timedelta(hours=10)
+            end_datetime = gdf_row['end_datetime'].strftime("%Y-%m-%dT%H:%M:%S.000Z")
             params["ContentDate/Start lt"] = f" {end_datetime}"
 
-        if 'Attributes' in gdf_row and not pd.isna(gdf_row['Attributes']):
-            Attributes = str(gdf_row['Attributes']).replace(" ", "")
-            Attributes_name = Attributes[0:Attributes.find(",")]
-            Attributes_value = Attributes[Attributes.find(",") + 1:]
-            params[
-                "Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq"] = f" '{Attributes_name}' and att/OData.CSC.DoubleAttribute/Value le {Attributes_value})"
-
         str_query = ' and '.join([f"{key}{value}" for key, value in params.items()])
+
+        if max_cloud_percent is not None:
+            logging.debug("#########")
+            max_cloud_percent_str = max_cloud_percent
+            str_query = (str_query + f" and Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq 'cloudCover' and att/OData.CSC.DoubleAttribute/Value lt {max_cloud_percent_str})")
+
 
         str_query = (str_query + '&$top=' + str(top))
         url = (urlapi + str_query + '&$expand=Attributes')
@@ -295,20 +317,21 @@ def urls_creat(gdf, top=None):
     return urls
 
 
-def get_cache_filename(url):
+def get_cache_filename(url, cache_dir=None):
     url_hash = hashlib.md5(url.encode('utf-8')).hexdigest()
     return os.path.join(cache_dir, url_hash + '.json')
 
 
-def fetch_data_from_url(url, index):
-    cache_file = get_cache_filename(url)
+def fetch_data_from_url(url, index, cache_dir=None):
+    cache_file = get_cache_filename(url, cache_dir)
     if os.path.exists(cache_file):
         with open(cache_file, 'r') as f:
             data = json.load(f)
     else:
         response = requests.get(url)
         data = response.json()
-        if 'value' in data:
+        logging.debug(data)
+        if 'value' in data and len(data['value']) > 0:
             with open(cache_file, 'w') as f:
                 json.dump(data, f)
     # process data
@@ -317,11 +340,12 @@ def fetch_data_from_url(url, index):
     return df
 
 
-def fetch_data_from_urls(urls, max_workers=50):
+def fetch_data_from_urls(urls, cache_dir=None, max_workers=50):
     collected_data = pd.DataFrame()
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor, tqdm(total=len(urls)) as pbar:
-        future_to_url = {executor.submit(fetch_data_from_url, url, index): (url, index) for index, url in urls}
+        future_to_url = {executor.submit(fetch_data_from_url, url, index, cache_dir): (url, index) for index, url in
+                         urls}
         for future in as_completed(future_to_url):
             df = future.result()
             collected_data = pd.concat([collected_data, df])
