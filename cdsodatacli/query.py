@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import pytz
 import time
+import traceback
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 import warnings
@@ -288,17 +289,23 @@ def urls_creat(gdf, top=None):
 
 
 def fetch_data_from_urls(urls):
+    from collections import defaultdoct
+
     start_time = time.time()
-    collected_data = []
+    collected_data_x = []
 
     with tqdm(total=len(urls)) as pbar:
         for url in urls:
-            json_data = requests.get(url).json()
+            try:
+                json_data = requests.get(url).json()
+            except:
+                logging.error('impossible to get data from CDSfor query: %s: %s',url,traceback.format_exc())
             if 'value' in json_data:
                 collected_data = pd.DataFrame.from_dict(json_data['value'])
+                collected_data_x.append(collected_data)
                 pbar.update(1)
 
-    collected_data = pd.DataFrame(collected_data)
+    collected_data = pd.concat(collected_data_x)
     end_time = time.time()
     processing_time = end_time - start_time
     print(f"fetch_data_from_urls time:{processing_time}s")
