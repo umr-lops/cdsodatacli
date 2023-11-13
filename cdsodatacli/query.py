@@ -1,4 +1,6 @@
 import datetime
+import pdb
+
 import requests
 import pandas as pd
 import argparse
@@ -47,18 +49,23 @@ def fetch_data(gdf, date=None, dtime=None, timedelta_slice=None, start_datetime=
         urls = create_urls(gdf=gdf_norm, top=top)
 
     collected_data = fetch_data_from_urls(urls=urls)
-    # Remove duplicates
-    data_dedup = remove_duplicates(safes_ori=collected_data)
+
 
     # Convert all Multipolygon to Polygon and add geometry as new column
-    if 'Footprint' in data_dedup:
+    #if 'Footprint' in collected_data:
+    if collected_data is not None:
+        # Remove duplicates
+        data_dedup = remove_duplicates(safes_ori=collected_data)
+        logging.info('number of product after removing duplicates: %s',len(data_dedup['Name']))
         full_data = multy_to_poly(collected_data=data_dedup)
+        logging.info("number of product after removing multipolygon: %s", len(full_data["Name"]))
         if fig is not None:
             fig(collected_data=full_data)
         if min_sea_percent is not None:
             full_data = sea_percent(collected_data=full_data, min_sea_percent=min_sea_percent)
+            logging.info("number of product after adding sea percent: %s", len(full_data["Name"]))
     else:
-        full_data = data_dedup
+        full_data = collected_data
 
     return full_data
 
@@ -97,6 +104,7 @@ def gdf_create(start_datetime=None, end_datetime=None, name=None, collection=Non
 def normalize_gdf(gdf, start_datetime=None, end_datetime=None, date=None, dtime=None, timedelta_slice=None):
     """ return a normalized gdf list
     start/stop date name will be 'start_datetime' and 'end_datetime'
+    periods longer than timedelta_slice are split to guarantee we cannot miss products because of the 1000 products max limit
     """
     start_time = time.time()
     default_cacherefreshrecent = datetime.timedelta(days=7)
@@ -269,7 +277,17 @@ def create_urls(gdf, top=None):
     return urls
 
 
-def fetch_data_from_urls(urls):
+def fetch_data_from_urls(urls) -> pd.DataFrame:
+    """
+
+    Parameters
+    ----------
+    urls (list): list of url to query CDS
+
+    Returns
+    -------
+
+    """
     from collections import defaultdict
     cpt = defaultdict(int)
     start_time = time.time()
@@ -281,7 +299,10 @@ def fetch_data_from_urls(urls):
             cpt['urls_tested'] += 1
             try:
                 json_data = requests.get(url).json()
+                # pdb.set_trace()
                 cpt['urls_OK'] += 1
+            except KeyboardInterrupt:
+                raise('keyboard interrupt')
             except:
                 cpt['urls_KO'] += 1
                 logging.error('impossible to get data from CDSfor query: %s: %s',url,traceback.format_exc())
@@ -289,17 +310,31 @@ def fetch_data_from_urls(urls):
                 collected_data = process_data(json_data)
                 # collected_data = pd.DataFrame.from_dict(json_data['value'])
                 if collected_data is not None:
-                    collected_data_x.append(collected_data)
+                    if len(collected_data.index)>0:
+                        collected_data_x.append(collected_data)
+                        cpt['product_proposed_by_CDS'] += len(collected_data['Name'])
+                        if pd.isna(collected_data['Name']).any():
+                            pdb.set_trace()
+                        cpt['answer_append'] += 1
+                    else:
+                        cpt['nodata_answer'] += 1
+                else:
+                    cpt['empty_answer'] += 1
                 pbar.update(1)
 
     if len(collected_data_x)>0:
         collected_data_final = pd.concat(collected_data_x)
-    end_time = time.time()
-    processing_time = end_time - start_time
-    logging.info(f"fetch_data_from_urls time:{processing_time}s")
+
+
     logging.info('last query: %s',url)
     logging.info('counter: %s',cpt)
-    logging.info('number of lines in output dataframe: %s',len(collected_data_final.index))
+    if collected_data_final is not None:
+        logging.info('number of lines in output dataframe: %s',len(collected_data_final.index))
+    else:
+        logging.info('number of lines in output dataframe: 0')
+    end_time = time.time()
+    processing_time = end_time - start_time
+    logging.info(f"fetch_data_from_urls time: %1.2fsec",processing_time)
     return collected_data_final
 
 
@@ -327,57 +362,48 @@ def process_data(json_data):
     if 'value' in json_data:
         res = pd.DataFrame.from_dict(json_data['value'])
     else:
-        logging.info("No data found.")
+        logging.debug("No data found.")
         pass
     return res
 
 
-def remove_duplicates(safes_ori, keep_list=[]):
+def remove_duplicates(safes_ori):
     """
     Remove duplicate safe (ie same footprint with same date, but different prodid)
     """
     start_time = time.time()
-    safes = safes_ori.copy()
-    if not safes.empty:
-        # remove duplicate safes
-        # add a temporary col with filename radic
-        safes['__filename_radic'] = [f for f in safes['Name']]
-
-        uniques_radic = safes['__filename_radic'].unique()  # list all unique name
-
-        for filename_radic in uniques_radic:
-            sames_safes = safes[safes['__filename_radic'] == filename_radic]
-            if len(sames_safes['Name']) > 1:
-                force_keep = list(set(sames_safes['Name']).intersection(keep_list))
-                to_keep = sames_safes[
-                    'ModificationDate'].max()
-                if force_keep:
-                    _to_keep = sames_safes[sames_safes['Name'] == force_keep[0]]['ModificationDate'].iloc[0]
-                    if _to_keep != to_keep:
-                        to_keep = _to_keep
-                safes = safes[(safes['ModificationDate'] == to_keep) | (safes['__filename_radic'] != filename_radic)]
-        safes = safes.drop_duplicates(subset=['Name'])
-        safes.drop('__filename_radic', axis=1, inplace=True)
+    safes_sort = safes_ori.sort_values("ModificationDate", ascending=False)
+    safes_dedup = safes_sort.drop_duplicates(subset=["Name"])
     end_time = time.time()
     processing_time = end_time - start_time
     logging.info(f"remove_duplicates processing time:{processing_time}s")
-    return safes
+    return safes_dedup
 
 
-def multy_to_poly(collected_data=None):
+def multy_to_poly(collected_data):
+    """
+
+    Parameters
+    ----------
+    collected_data (pandas.DataFrame)
+
+    Returns
+    -------
+
+    """
     start_time = time.time()
     collected_data['geometry'] = collected_data['Footprint'].str.split(';', expand=True)[1].str.strip().str[:-1]
     collected_data['geometry'] = gpd.GeoSeries.from_wkt(collected_data['geometry'])
     collected_data = gpd.GeoDataFrame(collected_data, geometry='geometry', crs="EPSG:4326")
-    place = 0;
-    for geo in collected_data['geometry']:
+    # place = 0
+    for ii,geo in enumerate(collected_data['geometry']):
         single_poly = geo
         if geo.geom_type == 'MultiPolygon':
             # geo = geo.buffer(10)
             polys = geo.geoms
             single_poly = unary_union(polys)
-        collected_data.loc[place, 'geometry'] = single_poly
-        place += 1
+            collected_data['geometry'].loc[ii] = single_poly
+        # place += 1
     end_time = time.time()
     processing_time = end_time - start_time
     logging.info(f"multi_to_poly processing time:{processing_time}s")
@@ -385,11 +411,26 @@ def multy_to_poly(collected_data=None):
 
 
 def sea_percent(collected_data, min_sea_percent=None):
+    """
+
+    Parameters
+    ----------
+    collected_data pandas.DataFrame
+    min_sea_percent float [optional]
+
+    Returns
+    -------
+
+    """
     start_time = time.time()
     warnings.simplefilter(action='ignore', category=FutureWarning)
     earth = GeometryCollection(list(gpd.read_file(gpd.datasets.get_path('naturalearth_lowres')).geometry)).buffer(0)
-    sea_percent = (collected_data.geometry.area - collected_data.geometry.intersection(
-        earth).area) / collected_data.geometry.area * 100
+    collected_data["geometry2"] = collected_data['geometry']
+    # collected_data['geometry2'].set_crs("EPSG:4326", inplace=True) # does not work -> 100% sea always
+    # collected_data["geometry2"] = collected_data['geometry2'].to_crs("epsg:32633")
+    # collected_data['geometry'] = collected_data['geometry'].to_crs('EPSG:4326')
+    sea_percent = (collected_data["geometry2"].area - collected_data["geometry2"].intersection(
+        earth).area) / collected_data["geometry2"].area * 100
     collected_data['sea_percent'] = sea_percent
     collected_data = collected_data[collected_data['sea_percent'] >= min_sea_percent]
     end_time = time.time()
