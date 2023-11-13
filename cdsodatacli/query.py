@@ -14,11 +14,10 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 import warnings
+import logging
 
-
-def fetch_data(gdf=None, date=None, dtime=None, timedelta_slice=None, start_datetime=None, end_datetime=None, name=None,
-               collection=None, sensormode=None, producttype=None, geometry=None, publication_start=None,
-               publication_end=None, min_sea_percent=None, fig=None, top=None):
+def fetch_data(gdf, date=None, dtime=None, timedelta_slice=None, start_datetime=None,
+               end_datetime=None, min_sea_percent=None, fig=None, top=None):
     """
     Fetches data based on provided parameters.
 
@@ -43,49 +42,28 @@ def fetch_data(gdf=None, date=None, dtime=None, timedelta_slice=None, start_date
                                  dtime=dtime,
                                  timedelta_slice=timedelta_slice)
         # geopd_norm.sort_index(ascending=False)
-        print(gdf_norm)
-        print(f"Length of input:{len(gdf_norm)}")
-        urls = urls_creat(gdf=gdf_norm, top=top)
+        logging.debug(gdf_norm.keys())
+        logging.info(f"Length of input:{len(gdf_norm)}")
+        urls = create_urls(gdf=gdf_norm, top=top)
 
     collected_data = fetch_data_from_urls(urls=urls)
     # Remove duplicates
     data_dedup = remove_duplicates(safes_ori=collected_data)
 
     # Convert all Multipolygon to Polygon and add geometry as new column
-    full_data = multy_to_poly(collected_data=data_dedup)
-
-    if min_sea_percent is not None:
-        full_data = sea_percent(collected_data=full_data, min_sea_percent=min_sea_percent)
-
-    if fig is not None:
-        fig(collected_data=full_data)
-
-    elif gdf is None:
-        gdf = gdf_creat(geometry=geometry, collection=collection, name=name, sensormode=sensormode,
-                        producttype=producttype, start_datetime=start_datetime, end_datetime=end_datetime,
-                        publication_start=publication_start, publication_end=publication_end)
-
-        gdf_norm = normalize_gdf(gdf=gdf, start_datetime=start_datetime, end_datetime=end_datetime, date=date,
-                                 dtime=dtime, timedelta_slice=timedelta_slice)
-        print(gdf_norm)
-        urls = urls_creat(gdf=gdf_norm, top=top)
-        collected_data = fetch_data_from_urls(urls=urls)
-        # Remove duplicates
-        data_dedup = remove_duplicates(safes_ori=collected_data)
-
-        # Convert all Multipolygon to Polygon and add geometry as new column
+    if 'Footprint' in data_dedup:
         full_data = multy_to_poly(collected_data=data_dedup)
-
-        if min_sea_percent is not None:
-            full_data = sea_percent(collected_data=full_data, min_sea_percent=min_sea_percent)
-
         if fig is not None:
             fig(collected_data=full_data)
+        if min_sea_percent is not None:
+            full_data = sea_percent(collected_data=full_data, min_sea_percent=min_sea_percent)
+    else:
+        full_data = data_dedup
 
     return full_data
 
 
-def gdf_creat(start_datetime=None, end_datetime=None, name=None, collection=None, sensormode=None, producttype=None,
+def gdf_create(start_datetime=None, end_datetime=None, name=None, collection=None, sensormode=None, producttype=None,
               geometry=None,
               publication_start=None, publication_end=None):
     data_in = {
@@ -216,11 +194,11 @@ def normalize_gdf(gdf, start_datetime=None, end_datetime=None, date=None, dtime=
     gdf_norm = gpd.GeoDataFrame(pd.concat(gdf_slices, ignore_index=False), crs=gdf_slices[0].crs)
     end_time = time.time()
     processing_time = end_time - start_time
-    print(f"normalize_gdf processing time:{processing_time}s")
+    logging.info(f"normalize_gdf processing time:{processing_time}s")
     return gdf_norm
 
 
-def urls_creat(gdf, top=None):
+def create_urls(gdf, top=None):
     start_time = time.time()
     urlapi = 'https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter='
     urls = []
@@ -273,8 +251,10 @@ def urls_creat(gdf, top=None):
             Attributes = str(gdf_row['Attributes']).replace(" ", "")
             Attributes_name = Attributes[0:Attributes.find(",")]
             Attributes_value = Attributes[Attributes.find(",") + 1:]
+            # params[
+                # "Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq"] = f" '{Attributes_name}' and att/OData.CSC.DoubleAttribute/Value le {Attributes_value})"
             params[
-                "Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq"] = f" '{Attributes_name}' and att/OData.CSC.DoubleAttribute/Value le {Attributes_value})"
+                "Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq"] = f" '{Attributes_name}'"
 
         str_query = ' and '.join([f"{key}{value}" for key, value in params.items()])
 
@@ -284,32 +264,43 @@ def urls_creat(gdf, top=None):
 
     end_time = time.time()
     processing_time = end_time - start_time
-    print(f"creat_urls processing time:{processing_time}s")
+    logging.info(f"creat_urls processing time:{processing_time}s")
+    logging.info('example of URL created: %s',urls[0])
     return urls
 
 
 def fetch_data_from_urls(urls):
-    from collections import defaultdoct
-
+    from collections import defaultdict
+    cpt = defaultdict(int)
     start_time = time.time()
     collected_data_x = []
+    collected_data_final = None
 
     with tqdm(total=len(urls)) as pbar:
         for url in urls:
+            cpt['urls_tested'] += 1
             try:
                 json_data = requests.get(url).json()
+                cpt['urls_OK'] += 1
             except:
+                cpt['urls_KO'] += 1
                 logging.error('impossible to get data from CDSfor query: %s: %s',url,traceback.format_exc())
             if 'value' in json_data:
-                collected_data = pd.DataFrame.from_dict(json_data['value'])
-                collected_data_x.append(collected_data)
+                collected_data = process_data(json_data)
+                # collected_data = pd.DataFrame.from_dict(json_data['value'])
+                if collected_data is not None:
+                    collected_data_x.append(collected_data)
                 pbar.update(1)
 
-    collected_data = pd.concat(collected_data_x)
+    if len(collected_data_x)>0:
+        collected_data_final = pd.concat(collected_data_x)
     end_time = time.time()
     processing_time = end_time - start_time
-    print(f"fetch_data_from_urls time:{processing_time}s")
-    return collected_data
+    logging.info(f"fetch_data_from_urls time:{processing_time}s")
+    logging.info('last query: %s',url)
+    logging.info('counter: %s',cpt)
+    logging.info('number of lines in output dataframe: %s',len(collected_data_final.index))
+    return collected_data_final
 
 
 #def fetch_url(url):
@@ -336,7 +327,7 @@ def process_data(json_data):
     if 'value' in json_data:
         res = pd.DataFrame.from_dict(json_data['value'])
     else:
-        print("No data found.")
+        logging.info("No data found.")
         pass
     return res
 
@@ -351,13 +342,11 @@ def remove_duplicates(safes_ori, keep_list=[]):
         # remove duplicate safes
         # add a temporary col with filename radic
         safes['__filename_radic'] = [f for f in safes['Name']]
-        # print(safes['__filename_radic'])
 
         uniques_radic = safes['__filename_radic'].unique()  # list all unique name
 
         for filename_radic in uniques_radic:
             sames_safes = safes[safes['__filename_radic'] == filename_radic]
-            # print(len(sames_safes['Name'].unique()))
             if len(sames_safes['Name']) > 1:
                 force_keep = list(set(sames_safes['Name']).intersection(keep_list))
                 to_keep = sames_safes[
@@ -371,7 +360,7 @@ def remove_duplicates(safes_ori, keep_list=[]):
         safes.drop('__filename_radic', axis=1, inplace=True)
     end_time = time.time()
     processing_time = end_time - start_time
-    print(f"remove_duplicates processing time:{processing_time}s")
+    logging.info(f"remove_duplicates processing time:{processing_time}s")
     return safes
 
 
@@ -391,7 +380,7 @@ def multy_to_poly(collected_data=None):
         place += 1
     end_time = time.time()
     processing_time = end_time - start_time
-    print(f"multi_to_poly processing time:{processing_time}s")
+    logging.info(f"multi_to_poly processing time:{processing_time}s")
     return collected_data
 
 
@@ -405,7 +394,7 @@ def sea_percent(collected_data, min_sea_percent=None):
     collected_data = collected_data[collected_data['sea_percent'] >= min_sea_percent]
     end_time = time.time()
     processing_time = end_time - start_time
-    print(f"sea_percent processing time:{processing_time}s")
+    logging.info(f"sea_percent processing time:{processing_time}s")
     return collected_data
 
 
@@ -431,23 +420,9 @@ def fig(collected_data=None):
     plt.show()
     end_time = time.time()
     processing_time = end_time - start_time
-    print(f"fig processing time:{processing_time}s")
+    logging.info(f"fig processing time:{processing_time}s")
 
 
-# Test
-gdf = gpd.GeoDataFrame({
-        "start_datetime" : [ datetime.datetime(2021,10,2,0) ,  datetime.datetime(2021,10,13,0) ],
-        "end_datetime"   : [ datetime.datetime(2022,10,2,21),  datetime.datetime(2022,10,13,18) ],
-        "geometry"   : [ shapely.wkt.loads("POINT (-7.5 53)"),  shapely.wkt.loads("POLYGON ((-12 35, -5 35, -5 45, -12 45, -12 35))")],
-        "collection"  : [ "SENTINEL-1", "SENTINEL-2"],
-        "name"        : [ None, None],
-        "sensormode"  : [ None, None],
-        "producttype" : [ None, None],
-        "Attributes"  : [ None, None],
-    })
-
-# collected_data_norm = fetch_data(gdf, min_sea_percent=20, fig=fig)
-# print(collected_data_norm)
 
 
 
