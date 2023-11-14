@@ -15,6 +15,7 @@ from shapely.geometry import (
     MultiPolygon,
 )
 import geopandas as gpd
+import numpy as np
 import shapely
 from shapely.ops import unary_union
 import matplotlib.pyplot as plt
@@ -210,7 +211,8 @@ def normalize_gdf(
         )
         # no slicing
         timedelta_slice = None
-
+    worlpolygon = shapely.wkt.loads('POLYGON((-180 -90,180 -90,180 90,-180 90,-180 -90))')
+    norm_gdf['geometry'].fillna(value=worlpolygon, inplace=True) # to replace None by NaN
     # convert naives dates to utc
     for date_col in norm_gdf.select_dtypes(include=["datetime64"]).columns:
         try:
@@ -308,7 +310,7 @@ def create_urls(gdf, top=None):
 
         # Taking all given parameters
         params = {}
-        if "geometry" in gdf_row and not pd.isna(gdf_row["geometry"]):
+        if "geometry" in gdf_row and not pd.isna(gdf_row["geometry"]) and gdf_row["geometry"] is not None:
             value = str(gdf_row.geometry)
             geo_type = gdf_row.geometry.geom_type
             coordinates_part = value[value.find("(") + 1 : value.find(")")]
@@ -411,7 +413,6 @@ def fetch_one_url(url, cpt, index, cache_dir):
         cpt["urls_tested"] += 1
         try:
             json_data = requests.get(url).json()
-            # pdb.set_trace()
             cpt["urls_OK"] += 1
         except KeyboardInterrupt:
             raise ("keyboard interrupt")
