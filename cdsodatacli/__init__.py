@@ -4,7 +4,7 @@
 import sys
 from cdsodatacli import *
 from cdsodatacli.query import fetch_data
-
+# import cdsodatacli
 
 if sys.version_info >= (3, 8):
     from importlib import metadata as importlib_metadata
@@ -22,7 +22,7 @@ try:
     from importlib import metadata
 except ImportError: # for Python<3.8
     import importlib_metadata as metadata
-__version__ = metadata.version('xsarslc')
+__version__ = metadata.version('cdsodatacli')
 
 version: str = get_version()
 # __version__ = get_version()

@@ -1,20 +1,16 @@
-# Poetry pyproject.toml: https://python-poetry.org/docs/pyproject/
-[build-system]
-requires = ["poetry_core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.poetry]
+[project]
 name = "cdsodatacli"
-version = "0.1.0"
-description = "odata client for Copernicus Data Space catalog"
+description = "OData client for Copernicus Data Space catalog"
 readme = "README.md"
-authors = ["umr-lops <jrmiadan@ifremer.fr>"]
-license = "MIT"
-repository = "https://github.com/cdsodatacli/cdsodatacli"
-homepage = "https://github.com/cdsodatacli/cdsodatacli"
+authors = [
+  {name = "Antoine Grouazel"},
+  {name = "Jean-Renaud Miadana"}
+]
+license = {text = "MIT"}
+#repository = "https://github.com/umr-lops/cdsodatacli"
+#homepage = "https://github.com/umr-lops/cdsodatacli"
 
-# Keywords description https://python-poetry.org/docs/pyproject/#keywords
-keywords = []  #! Update me
+keywords = ["Odata","copernicus-data-space","api"]
 
 # Pypi classifiers: https://pypi.org/classifiers/
 classifiers = [  #! Update me
@@ -26,34 +22,51 @@ classifiers = [  #! Update me
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.9",
 ]
+dependencies = [
+    "geopandas",
+    "numpy",
+    "requests",
+    "shapely",
+    'tqdm'
+]
+dynamic = ["version"]
+[project.scripts]
+queryCDS = "cdsodatacli.__main__:app"
 
-[tool.poetry.scripts]
-# Entry points for the package https://python-poetry.org/docs/pyproject/#scripts
-"cdsodatacli" = "cdsodatacli.__main__:app"
+#[tool.poetry.dependencies]
+#python = "^3.9"
+#
+#typer = {extras = ["all"], version = ">=0.4,<0.10"}
+#rich = ">=10.14,<14.0"
 
-[tool.poetry.dependencies]
-python = "^3.9"
+#[tool.poetry.dev-dependencies]
+#bandit = "^1.7.1"
+#black = {version = "^23.10", allow-prereleases = true}
+#darglint = "^1.8.1"
+#isort = {extras = ["colors"], version = "^5.10.1"}
+#mypy = "^1.0"
+#mypy-extensions = "^1.0.0"
+#pre-commit = "^3.5.0"
+#pydocstyle = "^6.1.1"
+#pylint = "^3.0.2"
+#pytest = "^7.4.3"
+#pyupgrade = "^3.15.0"
+#safety = "^2.3.4"
+#coverage = "^7.3.2"
+#coverage-badge = "^1.1.0"
+#pytest-html = "^4.1.1"
+#pytest-cov = "^4.1.0"
 
-typer = {extras = ["all"], version = ">=0.4,<0.10"}
-rich = ">=10.14,<14.0"
 
-[tool.poetry.dev-dependencies]
-bandit = "^1.7.1"
-black = {version = "^23.10", allow-prereleases = true}
-darglint = "^1.8.1"
-isort = {extras = ["colors"], version = "^5.10.1"}
-mypy = "^1.0"
-mypy-extensions = "^1.0.0"
-pre-commit = "^3.5.0"
-pydocstyle = "^6.1.1"
-pylint = "^3.0.2"
-pytest = "^7.4.3"
-pyupgrade = "^3.15.0"
-safety = "^2.3.4"
-coverage = "^7.3.2"
-coverage-badge = "^1.1.0"
-pytest-html = "^4.1.1"
-pytest-cov = "^4.1.0"
+[build-system]
+requires = ["setuptools>=64.0", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["cdsodatacli"]
+
+[tool.setuptools_scm]
+fallback_version = "999"
 
 [tool.black]
 # https://github.com/psf/black
@@ -74,6 +87,7 @@ exclude = '''
     | dist
     | env
     | venv
+    | tests_metiers
 )/
 '''
 
