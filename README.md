@@ -10,7 +10,7 @@
 [![Security: bandit](https://img.shields.io/badge/security-bandit-green.svg)](https://github.com/PyCQA/bandit)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/umr-lops/cdsodatacli/blob/main/.pre-commit-config.yaml)
 [![Semantic Versions](https://img.shields.io/badge/%20%20%F0%9F%93%A6%F0%9F%9A%80-semantic--versions-e10079.svg)](https://github.com/umr-lops/cdsodatacli/releases)
-[![License](https://img.shields.io/github/license/cdsodatacli/cdsodatacli)](https://github.com/umr-lops/cdsodatacli/blob/main/LICENSE)
+[![License](https://img.shields.io/github/license/umr-lops/cdsodatacli)](https://github.com/umr-lops/cdsodatacli/blob/main/LICENSE)
 ![Coverage Report](assets/images/coverage.svg)
 
 odata client for Copernicus Data Space catalog
@@ -52,7 +52,7 @@ make codestyle
 git add .
 git commit -m ":tada: Initial commit"
 git branch -M main
-git remote add origin https://github.com/cdsodatacli/cdsodatacli.git
+git remote add origin https://github.com/umr-lops/cdsodatacli.git
 git push -u origin main
 ```
 
@@ -382,7 +382,7 @@ GitHub creates the `bug`, `enhancement`, and `documentation` labels for you. Dep
 
 ## 🛡 License
 
-[![License](https://img.shields.io/github/license/cdsodatacli/cdsodatacli)](https://github.com/umr-lops/cdsodatacli/blob/main/LICENSE)
+[![License](https://img.shields.io/github/license/umr-lops/cdsodatacli)](https://github.com/umr-lops/cdsodatacli/blob/main/LICENSE)
 
 This project is licensed under the terms of the `MIT` license. See [LICENSE](https://github.com/umr-lops/cdsodatacli/blob/main/LICENSE) for more details.
 
@@ -395,7 +395,7 @@ This project is licensed under the terms of the `MIT` license. See [LICENSE](htt
   year = {2023},
   publisher = {GitHub},
   journal = {GitHub repository},
-  howpublished = {\url{https://github.com/cdsodatacli/cdsodatacli}}
+  howpublished = {\url{https://github.com/umr-lops/cdsodatacli}}
 }
 ```
 
