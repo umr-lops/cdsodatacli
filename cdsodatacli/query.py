@@ -15,11 +15,8 @@ from shapely.geometry import (
     MultiPolygon,
 )
 import geopandas as gpd
-import numpy as np
 import shapely
 from shapely.ops import unary_union
-import matplotlib.pyplot as plt
-import cartopy.crs as ccrs
 import pytz
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -619,38 +616,3 @@ def sea_percent(collected_data, min_sea_percent=None):
     processing_time = end_time - start_time
     logging.info(f"sea_percent processing time:{processing_time}s")
     return collected_data
-
-
-def fig(collected_data=None):
-    start_time = time.time()
-    plt.figure(dpi=120, figsize=(10, 8))
-    ax = plt.axes(projection=ccrs.PlateCarree())
-    for ppi, pp in enumerate(collected_data["geometry"]):
-        if pp is None:
-            continue
-        elif ppi == 0:
-            plt.plot(
-                *pp.exterior.xy,
-                "r",
-                label="S1 footprint: %s" % len(collected_data["geometry"]),
-            )
-        else:
-            plt.plot(*pp.exterior.xy, "r", label=None)
-            pass
-    ax.coastlines(antialiased=True)
-    plt.legend()
-    gl = ax.gridlines(
-        crs=ccrs.PlateCarree(),
-        draw_labels=True,
-        linewidth=1,
-        color="gray",
-        alpha=0.5,
-        linestyle="--",
-    )
-    ext = ax.get_extent()
-    ax.set_extent((ext[0] - 3, ext[1] + 3, ext[2] - 0.5, ext[3] + 4))
-    plt.title("World map with footprints")
-    plt.show()
-    end_time = time.time()
-    processing_time = end_time - start_time
-    logging.info(f"fig processing time:{processing_time}s")
