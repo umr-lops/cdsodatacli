@@ -13,6 +13,9 @@ Overview
 ........
 
 Library mostly build on **geopandas** and **requests**
+API used to perform queries is : https://documentation.dataspace.copernicus.eu/APIs/OData.html
+Limits to take into account are described here https://documentation.dataspace.copernicus.eu/Quotas.html
+
 
 Usage
 .....
