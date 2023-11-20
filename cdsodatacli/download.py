@@ -6,7 +6,7 @@ from tqdm import tqdm
 import datetime
 import time
 import os
-
+import numpy as np
 import traceback
 from cdsodatacli.fetch_access_token import get_bearer_access_token
 from cdsodatacli.utils import conf, test_safe_archive, test_safe_spool
@@ -28,12 +28,12 @@ def CDS_Odata_download_one_product(session, headers, url, output_filepath):
 
     Returns
     -------
+        speed (float): download speed in Mo/second
 
     """
     t0 = time.time()
     with open(output_filepath, "wb") as f:
         logging.info("Downloading %s" % output_filepath)
-        # response = requests.get(url, stream=True)
         response = session.get(url, headers=headers, stream=True)
         total_length = int(int(response.headers.get("content-length")) / 1000 / 1000)
         logging.debug("total_length : %s Mo", total_length)
@@ -41,16 +41,11 @@ def CDS_Odata_download_one_product(session, headers, url, output_filepath):
             f.write(response.content)
         else:
             dl = 0
-            # total_length = int(total_length)
-            # pbar = tqdm(range(total_length))
-            with tqdm(total=total_length) as progress_bar:
-                for data in tqdm(response.iter_content(chunk_size=chunksize)):
+            with tqdm(total=total_length,disable=bool(os.environ.get("DISABLE_TQDM", False))) as progress_bar:
+                for data in tqdm(response.iter_content(chunk_size=chunksize),disable=bool(os.environ.get("DISABLE_TQDM", False))):
                     dl += len(data)
                     f.write(data)
                     progress_bar.update(chunksize / 1000.0 / 1000.0)  # update progress
-                # done = int(50 * dl / total_length)
-                # sys.stdout.write("\r[%s%s]" % ('=' * done, ' ' * (50-done)) )
-                # sys.stdout.flush()
     elapsed_time = time.time() - t0
     logging.info("time to download this product: %1.1f sec", elapsed_time)
     speed = total_length / elapsed_time
@@ -58,13 +53,15 @@ def CDS_Odata_download_one_product(session, headers, url, output_filepath):
     return speed
 
 
-def download_list_product(list_id, list_safename, outputdir):
+def download_list_product(list_id, list_safename, outputdir,hideProgressBar=False):
     """
 
     Parameters
     ----------
-    list_id (list) of string could be hash (eg a1e74573-aa77-55d6-a08d-7b6612761819) provided by CDS Odata or basename of SAFE product (eg. S1A_IW_GRDH_1SDV_20221013T065030_20221013T0650...SAFE)
-
+    list_id (list) of string could be hash (eg a1e74573-aa77-55d6-a08d-7b6612761819) provided by CDS Odata
+    list_safename (list) of string basename of SAFE product (eg. S1A_IW_GRDH_1SDV_20221013T065030_20221013T0650...SAFE)
+    outputdir (str) path where product will be stored
+    hideProgressBar (bool): True -> no tqdm progress bar
     Returns
     -------
 
@@ -77,7 +74,10 @@ def download_list_product(list_id, list_safename, outputdir):
     logging.debug("headers: %s", headers)
     session = requests.Session()
     session.headers.update(headers)
-    for ii in tqdm(range(len(list_id))):
+    if hideProgressBar:
+        os.environ['DISABLE_TQDM'] = 'True'
+    all_speeds = []
+    for ii in tqdm(range(len(list_id)),disable=bool(os.environ.get("DISABLE_TQDM", False))):
         safename_product = list_safename[ii]
         if test_safe_archive(safename=safename_product):
             cpt["archived_product"] += 1
@@ -100,9 +100,10 @@ def download_list_product(list_id, list_safename, outputdir):
                 logging.debug("reuse same access token, still valid.")
             output_filepath = os.path.join(outputdir, safename_product)
             try:
-                CDS_Odata_download_one_product(
+                speed = CDS_Odata_download_one_product(
                     session, headers, url=url_product, output_filepath=output_filepath
                 )
+                all_speeds.append(speed)
                 cpt["successful_download"] += 1
             except KeyboardInterrupt:
                 raise ("keyboard interrupt")
@@ -115,6 +116,7 @@ def download_list_product(list_id, list_safename, outputdir):
                 )
     logging.info("download over.")
     logging.info("counter: %s", cpt)
+    logging.info('average download speed %1.1f Mo/s (stdev: %1.1f Mo/s)',np.mean(all_speeds),np.std(all_speeds))
 
 
 def main():
@@ -128,13 +130,8 @@ def main():
 
     parser = argparse.ArgumentParser(description="download-from-CDS")
     parser.add_argument("--verbose", action="store_true", default=False)
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        default=False,
-        help="overwrite the existing outputs [default=False]",
-        required=False,
-    )
+    parser.add_argument("--hideProgressBar", action="store_true", default=False,
+                        help='hide the tqdm progress bar for each prodict download')
     parser.add_argument(
         "--listing",
         required=True,
@@ -145,6 +142,7 @@ def main():
         required=True,
         help="directory where to store fetch files",
     )
+
     args = parser.parse_args()
     fmt = "%(asctime)s %(levelname)s %(filename)s(%(lineno)d) %(message)s"
     if args.verbose:
@@ -165,5 +163,6 @@ def main():
         list_id=inputdf["id"].values,
         list_safename=inputdf["safename"].values,
         outputdir=args.outputdir,
+        hideProgressBar=args.hideProgressBar
     )
     logging.info("end of function")
