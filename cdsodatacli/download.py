@@ -5,6 +5,7 @@ from tqdm import tqdm
 import datetime
 import time
 import os
+import shutil
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
@@ -75,9 +76,10 @@ def CDS_Odata_download_one_product_v2(session, headers, url, output_filepath):
 
     """
     speed = np.nan
+    status_meaning = 'unknown_code'
     t0 = time.time()
     with open(output_filepath, "wb") as f:
-        logging.info("Downloading %s" % output_filepath)
+        logging.debug("Downloading %s" % output_filepath)
         response = session.get(url, headers=headers, stream=True)
         status = response.status_code
         status_meaning = response.reason
@@ -111,7 +113,6 @@ def CDS_Odata_download_one_product_v2(session, headers, url, output_filepath):
         #     status_meaning = 'unknown_code'
         #     logging.error('unkown API OData code status: %s',status)
         #     raise ValueError()
-        pdb.set_trace()
         if response.ok:
             total_length = int(int(response.headers.get("content-length")) / 1000 / 1000)
             logging.debug("total_length : %s Mo", total_length)
@@ -119,11 +120,15 @@ def CDS_Odata_download_one_product_v2(session, headers, url, output_filepath):
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
-
+    if not response.ok:
+        logging.debug('remove empty file %s',output_filepath)
+        os.remove(output_filepath)
     elapsed_time = time.time() - t0
-    logging.info("time to download this product: %1.1f sec", elapsed_time)
+    if status == 200: # means OK download
+        speed = total_length / elapsed_time
+    logging.debug("time to download this product: %1.1f sec", elapsed_time)
 
-    logging.info("average download speed: %1.1fMo/sec", speed)
+    logging.debug("average download speed: %1.1fMo/sec", speed)
     return speed,status_meaning
 
 
@@ -165,7 +170,7 @@ def download_list_product_multithread(
         elif test_safe_spool(safename=safename_product):
             cpt["in_spool_product"] += 1
         else:
-            cpt["product_asbent_from_local_disks"] += 1
+            cpt["product_absent_from_local_disks"] += 1
             id_product = list_id[ii]
             url_product = conf["URL_download"] % id_product
 
@@ -232,9 +237,9 @@ def download_list_product(list_id, list_safename, outputdir, hideProgressBar=Fal
     if hideProgressBar:
         os.environ["DISABLE_TQDM"] = "True"
     all_speeds = []
-    for ii in tqdm(
-        range(len(list_id)), disable=bool(os.environ.get("DISABLE_TQDM", False))
-    ):
+    pbar = tqdm(range(len(list_id)), disable=bool(os.environ.get("DISABLE_TQDM", False)))
+    for ii in pbar:
+        pbar.set_description("CDSE download %s" % cpt)
         id_product = list_id[ii]
         url_product = conf["URL_download"] % id_product
         safename_product = list_safename[ii]
@@ -243,7 +248,7 @@ def download_list_product(list_id, list_safename, outputdir, hideProgressBar=Fal
         elif test_safe_spool(safename=safename_product):
             cpt["in_spool_product"] += 1
         else:
-            cpt["product_asbent_from_local_disks"] += 1
+            cpt["product_absent_from_local_disks"] += 1
 
             logging.debug("url_product : %s", url_product)
             logging.debug(
