@@ -74,22 +74,57 @@ def CDS_Odata_download_one_product_v2(session, headers, url, output_filepath):
         speed (float): download speed in Mo/second
 
     """
+    speed = np.nan
     t0 = time.time()
     with open(output_filepath, "wb") as f:
         logging.info("Downloading %s" % output_filepath)
         response = session.get(url, headers=headers, stream=True)
-        total_length = int(int(response.headers.get("content-length")) / 1000 / 1000)
-        logging.debug("total_length : %s Mo", total_length)
+        status = response.status_code
+        status_meaning = response.reason
+        # if status==200:
+        #     status_meaning = 'OK'
+        #     speed = total_length / elapsed_time
+        # elif status==202:
+        #     status_meaning = 'Accepted'
+        #     logging.debug('202 (Accepted): Indicates that a batch request has been accepted for processing, but that the processing has not been completed.')
+        # elif status==204:
+        #     logging.debug('204 (No Content): Indicates that a request has been received and processed successfully by a data service and that the response does not include a response body.')
+        #     status_meaning = 'No Content'
+        # elif status == 400:
+        #     logging.debug('400 (Bad Request): Indicates that the payload, request headers, or request URI provided in a request are not correctly formatted according to the syntax rules defined in this document.')
+        #     # status_meaning = 'Bad Request'
+        #     status_meaning = 'Unknown query parameter(s).'
+        # elif status == 404:
+        #     # logging.debug("404 (Not Found): Indicates that a segment in the request URI's Resource Path does not map to an existing resource in the data service. A data service MAY<74> respond with a representation of an empty collection of entities if the request URI addressed a collection of entities.")
+        #     # status_meaning = 'Not Found'
+        #     status_meaning = 'Unknown collection.'
+        # elif status == 405:
+        #     logging.debug('405 (Method Not Allowed): Indicates that a request used an HTTP method not supported by the resource identified by the request URI, see Request Types (section 2.2.7).')
+        #     status_meaning = 'Method Not Allowed'
+        # elif status == 412:
+        #     logging.debug('412 (Precondition Failed): Indicates that one or more of the conditions specified in the request headers evaluated to false. This response code is used to indicate an optimistic concurrency check failure, see If-Match (section 2.2.5.5) and If-None-Match (section 2.2.5.6).')
+        #     status_meaning = 'Precondition Failed'
+        # elif status == 500:
+        #     logging.debug('500 (Internal Server Error): Indicates that a request being processed by a data service encountered an unexpected error during processing.')
+        #     status_meaning = 'Internal Server Error'
+        # else:
+        #     status_meaning = 'unknown_code'
+        #     logging.error('unkown API OData code status: %s',status)
+        #     raise ValueError()
+        pdb.set_trace()
+        if response.ok:
+            total_length = int(int(response.headers.get("content-length")) / 1000 / 1000)
+            logging.debug("total_length : %s Mo", total_length)
 
-        for chunk in response.iter_content(chunk_size=8192):
-            if chunk:
-                f.write(chunk)
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
 
     elapsed_time = time.time() - t0
     logging.info("time to download this product: %1.1f sec", elapsed_time)
-    speed = total_length / elapsed_time
+
     logging.info("average download speed: %1.1fMo/sec", speed)
-    return speed
+    return speed,status_meaning
 
 
 def download_list_product_multithread(
@@ -157,7 +192,7 @@ def download_list_product_multithread(
             for jj in range(len(all_urls_to_download))
         }
         for future in as_completed(future_to_url):
-            speed = future.result()
+            speed,status_meaning = future.result()
             all_speeds.append(speed)
             pbar.update(1)
 
@@ -200,6 +235,8 @@ def download_list_product(list_id, list_safename, outputdir, hideProgressBar=Fal
     for ii in tqdm(
         range(len(list_id)), disable=bool(os.environ.get("DISABLE_TQDM", False))
     ):
+        id_product = list_id[ii]
+        url_product = conf["URL_download"] % id_product
         safename_product = list_safename[ii]
         if test_safe_archive(safename=safename_product):
             cpt["archived_product"] += 1
@@ -207,8 +244,7 @@ def download_list_product(list_id, list_safename, outputdir, hideProgressBar=Fal
             cpt["in_spool_product"] += 1
         else:
             cpt["product_asbent_from_local_disks"] += 1
-            id_product = list_id[ii]
-            url_product = conf["URL_download"] % id_product
+
             logging.debug("url_product : %s", url_product)
             logging.debug(
                 "id_product : %s safename_product : %s", id_product, safename_product
@@ -224,12 +260,15 @@ def download_list_product(list_id, list_safename, outputdir, hideProgressBar=Fal
                 logging.debug("reuse same access token, still valid.")
             output_filepath = os.path.join(outputdir, safename_product + ".zip")
             try:
-                speed = CDS_Odata_download_one_product_v2(
+                speed,status_meaning = CDS_Odata_download_one_product_v2(
                     session, headers, url=url_product, output_filepath=output_filepath
                 )
-                all_speeds.append(speed)
-                cpt["successful_download"] += 1
+                if status_meaning=='OK':
+                    all_speeds.append(speed)
+                    cpt["successful_download"] += 1
+                cpt['status_%s'%status_meaning] += 1
             except KeyboardInterrupt:
+                cpt['interrupted'] += 1
                 raise ("keyboard interrupt")
             except:
                 cpt["download_KO"] += 1
