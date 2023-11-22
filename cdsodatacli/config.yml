@@ -1,0 +1,7 @@
+login: dummyemailadress@example.com
+password: examplepasswordtobechanged
+URL_identity: https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token
+URL_download: https://zipper.dataspace.copernicus.eu/odata/v1/Products(%s)/$value
+spool : './my_spool'
+archive: './my_archive'
+test_default_output_directory: './my_tests'

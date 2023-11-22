@@ -420,26 +420,27 @@ def fetch_one_url(url, cpt, index, cache_dir):
                 url,
                 traceback.format_exc(),
             )
-        if "value" in json_data:
+        if json_data is not None:
+            if "value" in json_data:
 
-            if cache_dir is not None:  # write a cache file
-                cache_file = get_cache_filename(url, cache_dir)
-                with open(cache_file, "w") as f:
-                    json.dump(json_data, f)
-            collected_data = process_data(json_data)
-            # collected_data = pd.DataFrame.from_dict(json_data['value'])
-            if collected_data is not None:
-                if len(collected_data.index) > 0:
-                    # collected_data_x.append(collected_data)
-                    cpt["product_proposed_by_CDS"] += len(collected_data["Name"])
-                    collected_data["id_original_query"] = index
-                    if pd.isna(collected_data["Name"]).any():
-                        raise Exception("Name field contains NaN")
-                    cpt["answer_append"] += 1
+                if cache_dir is not None:  # write a cache file
+                    cache_file = get_cache_filename(url, cache_dir)
+                    with open(cache_file, "w") as f:
+                        json.dump(json_data, f)
+                collected_data = process_data(json_data)
+                # collected_data = pd.DataFrame.from_dict(json_data['value'])
+                if collected_data is not None:
+                    if len(collected_data.index) > 0:
+                        # collected_data_x.append(collected_data)
+                        cpt["product_proposed_by_CDS"] += len(collected_data["Name"])
+                        collected_data["id_original_query"] = index
+                        if pd.isna(collected_data["Name"]).any():
+                            raise Exception("Name field contains NaN")
+                        cpt["answer_append"] += 1
+                    else:
+                        cpt["nodata_answer"] += 1
                 else:
-                    cpt["nodata_answer"] += 1
-            else:
-                cpt["empty_answer"] += 1
+                    cpt["empty_answer"] += 1
     return cpt, collected_data
 
 
