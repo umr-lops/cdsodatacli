@@ -4,7 +4,7 @@ import os
 import cdsodatacli
 from yaml import CLoader as Loader
 import datetime
-
+import pdb
 local_config_pontential_path = os.path.join(
     os.path.dirname(cdsodatacli.__file__), "localconfig.yml"
 )
