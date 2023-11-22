@@ -95,7 +95,7 @@ def test_safe_archive(safename):
     """
     present_in_archive = False
     for uu in ["", ".zip", "replaced"]:
-        arch_potential_file0 = WhichArchiveDir(safename)
+        arch_potential_file0 = os.path.join(WhichArchiveDir(safename),safename)
         if uu == "":
             arch_potential_file = arch_potential_file0
         elif uu == ".zip":
@@ -107,7 +107,7 @@ def test_safe_archive(safename):
         if os.path.exists(arch_potential_file):
             present_in_archive = True
             break
-    logging.debug("present_in_spool : %s", present_in_archive)
+    logging.debug("present_in_archive : %s", present_in_archive)
     if present_in_archive:
         logging.debug('the product is stored in : %s',arch_potential_file)
     return present_in_archive
