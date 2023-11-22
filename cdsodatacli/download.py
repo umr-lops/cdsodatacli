@@ -198,7 +198,10 @@ def download_list_product_multithread(
         }
         for future in as_completed(future_to_url):
             speed,status_meaning = future.result()
-            all_speeds.append(speed)
+            if status_meaning == 'OK':
+                all_speeds.append(speed)
+                cpt["successful_download"] += 1
+            cpt['status_%s' % status_meaning] += 1
             pbar.update(1)
 
         logging.info("download over.")
