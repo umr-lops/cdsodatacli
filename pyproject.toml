@@ -27,7 +27,8 @@ dependencies = [
     "numpy",
     "requests",
     "shapely",
-    'tqdm'
+    'tqdm',
+    'pyyaml'
 ]
 dynamic = ["version"]
 [project.scripts]
