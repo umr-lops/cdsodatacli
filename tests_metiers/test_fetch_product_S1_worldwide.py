@@ -29,6 +29,7 @@ if __name__ == '__main__':
         default='20230202',
         help="stopdate YYYYMMDD",
     )
+    parser.add_argument('--mode',choices=['IW','SM','WV','EW'],required=True,help='acquisition mode WV, IW, ...')
 
 
     args = parser.parse_args()
@@ -45,7 +46,7 @@ if __name__ == '__main__':
     gdf = gpd.GeoDataFrame({
             "start_datetime" : [ datetime.datetime.strptime(args.startdate,'%Y%m%d') ],
             "end_datetime"   : [ datetime.datetime.strptime(args.stopdate,'%Y%m%d') ],
-            "geometry"   : [ shapely.wkt.loads("POLYGON ((-40 0, -25 0, -25 20, -40 20, -40 0))")],
+            "geometry"   : [ shapely.wkt.loads("POLYGON ((-180 90, 180 90, 180 -90, -180 -90, -180 90))")],
             "collection"  : [ "SENTINEL-1"],
             "name"        : [ '2SSV'],
             "sensormode"  : [ 'WV'],
