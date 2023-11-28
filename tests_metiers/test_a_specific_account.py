@@ -13,8 +13,8 @@ if __name__ == "__main__":
     parser.add_argument("--verbose", action="store_true", default=False)
     parser.add_argument(
         "--login",
-        required=True,
-        help="login CDSE email address",
+        required=False,
+        help="login CDSE email address [default=all in conf]",
     )
     parser.add_argument(
         "--password",
@@ -31,10 +31,21 @@ if __name__ == "__main__":
         logging.basicConfig(
             level=logging.INFO, format=fmt, datefmt="%d/%m/%Y %H:%M:%S", force=True
         )
-    if args.password is None:
-        passwd = conf['logins'][args.login]
+    if args.login:
+        logins = [args.login]
     else:
-        passwd = args.password
-    cmd = "curl -s  --location --request POST https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token --header 'Content-Type: application/x-www-form-urlencoded' --data-urlencode 'grant_type=password' --data-urlencode 'username=%s' --data-urlencode 'password=%s'  --data-urlencode 'client_id=cdse-public'"%(args.login,passwd)
-    res = subprocess.check_output(cmd,shell=True)
-    print(res)
+        logins = conf['logins']
+    for logii in logins:
+        # print('test',logii)
+        if args.password is None:
+            passwd = conf['logins'][logii]
+        else:
+            passwd = args.password
+        cmd = "curl -s --location --request POST https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token --header 'Content-Type: application/x-www-form-urlencoded' --data-urlencode 'grant_type=password' --data-urlencode 'username=%s' --data-urlencode 'password=%s'  --data-urlencode 'client_id=cdse-public'"%(logii,passwd)
+        try:
+            print(cmd)
+            res = subprocess.check_output(cmd,shell=True).decode()
+            #print(res,type(res))
+            print(logii,'access_token' in res)
+        except:
+            print('error for',logii)
