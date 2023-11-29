@@ -6,6 +6,7 @@ import datetime
 import time
 import os
 import shutil
+import random
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
@@ -15,10 +16,12 @@ from cdsodatacli.fetch_access_token import (
     write_token_semphore_file,
     remove_semaphore_token_file,
     MAX_VALIDITY_ACCESS_TOKEN,
+    get_list_of_exising_token,
 )
 from cdsodatacli.session import (
     remove_semaphore_session_file,
     get_sessions_download_available,
+    MAX_SESSION_PER_ACCOUNT,
 )
 from cdsodatacli.utils import conf, test_safe_archive, test_safe_spool
 from collections import defaultdict
@@ -87,7 +90,10 @@ def CDS_Odata_download_one_product_v2(
     speed = np.nan
     status_meaning = "unknown_code"
     t0 = time.time()
-    output_filepath_tmp = output_filepath + ".tmp"
+    output_filepath_tmp = (
+        output_filepath.replace(conf["spool"], conf["pre_spool"]) + ".tmp"
+    )
+
     safename_base = os.path.basename(output_filepath).replace(".zip", "")
     with open(output_filepath_tmp, "wb") as f:
         logging.debug("Downloading %s" % output_filepath)
@@ -189,7 +195,7 @@ def filter_product_already_present(cpt, df, outputdir):
 
 
 def download_list_product_multithread_v2(
-    list_id, list_safename, outputdir, hideProgressBar=False
+    list_id, list_safename, outputdir, hideProgressBar=False, account_group="logins"
 ):
     """
     v2 is handling multi account round-robin and token semaphore files
@@ -218,37 +224,39 @@ def download_list_product_multithread_v2(
     df2, cpt = filter_product_already_present(cpt, df, outputdir)
     logging.info("%s", cpt)
     while_loop = 0
+    blacklist = []
     while (df2["status"] == 0).any():
+
         while_loop += 1
         subset_to_treat = df2[df2["status"] == 0]
-        (
-            all_sessions,
-            all_headers,
-            all_semaphores,
-            bunch_urls_to_download,
-            outputfiles_download_coming,
-            all_session_semaphores,
-        ) = get_sessions_download_available(subset_to_treat, hideProgressBar=True)
+        dfproductDownloaddable = get_sessions_download_available(
+            subset_to_treat,
+            hideProgressBar=True,
+            blacklist=blacklist,
+            logins_group=account_group,
+        )
         logging.info(
             "while_loop : %s, prod. to treat: %s, slot avail.:%s, %s",
             while_loop,
             len(subset_to_treat),
-            len(all_semaphores),cpt
+            len(dfproductDownloaddable),
+            cpt,
         )
         with ThreadPoolExecutor(
-            max_workers=len(bunch_urls_to_download)
-        ) as executor, tqdm(total=len(bunch_urls_to_download)) as pbar:
+            max_workers=len(dfproductDownloaddable)
+        ) as executor, tqdm(total=len(dfproductDownloaddable)) as pbar:
             future_to_url = {
                 executor.submit(
                     CDS_Odata_download_one_product_v2,
-                    all_sessions[jj],
-                    all_headers[jj],
-                    bunch_urls_to_download[jj],
-                    outputfiles_download_coming[jj],
-                    all_semaphores[jj],
+                    dfproductDownloaddable["session"].iloc[jj],
+                    dfproductDownloaddable["header"].iloc[jj],
+                    dfproductDownloaddable["url"].iloc[jj],
+                    dfproductDownloaddable["output_path"].iloc[jj],
+                    dfproductDownloaddable["token_semaphore"][jj],
                 ): (jj)
-                for jj in range(len(bunch_urls_to_download))
+                for jj in range(len(dfproductDownloaddable))
             }
+            errors_per_account = defaultdict(int)
             for future in as_completed(future_to_url):
                 # try:
                 (
@@ -291,10 +299,15 @@ def download_list_product_multithread_v2(
                     cpt["successful_download"] += 1
                 else:
                     df2.loc[(df2["safe"] == safename_base), "status"] = -1
+                    errors_per_account[login] += 1
                     # df2["status"][df2["safe"] == safename_base] = -1 # download in error
                 cpt["status_%s" % status_meaning] += 1
 
                 pbar.update(1)
+            for acco in errors_per_account:
+                if errors_per_account[acco] >= MAX_SESSION_PER_ACCOUNT:
+                    blacklist.append(acco)
+                    logging.info("%s black listed for next loops", acco)
     logging.info("download over.")
     logging.info("counter: %s", cpt)
     # safety remove active session, all reamining because of error
@@ -310,10 +323,145 @@ def download_list_product_multithread_v2(
             np.mean(all_speeds),
             np.std(all_speeds),
         )
+    return df2
 
 
 def download_list_product(
-    list_id, list_safename, outputdir, hideProgressBar=False, specific_account=None
+    list_id, list_safename, outputdir, specific_account, hideProgressBar=False
+):
+    """
+
+    Parameters
+    ----------
+    list_id (list) of string could be hash (eg a1e74573-aa77-55d6-a08d-7b6612761819) provided by CDS Odata
+    list_safename (list) of string basename of SAFE product (eg. S1A_IW_GRDH_1SDV_20221013T065030_20221013T0650...SAFE)
+    outputdir (str) path where product will be stored
+    hideProgressBar (bool): True -> no tqdm progress bar
+    specific_account (str):
+
+    Returns
+    -------
+
+    """
+    assert len(list_id) == len(list_safename)
+    cpt = defaultdict(int)
+    all_speeds = []
+    cpt["total_product_to_download"] = len(list_id)
+    lst_usable_tokens = get_list_of_exising_token(token_dir=conf["token_directory"])
+    if lst_usable_tokens == []:  # in case no token ready to be used -> create new one
+        (
+            access_token,
+            date_generation_access_token,
+            login,
+            path_semphore_token,
+        ) = get_bearer_access_token(
+            quiet=hideProgressBar, specific_account=specific_account
+        )
+    else:  # select randomly one token among existing
+        path_semphore_token = random.choice(lst_usable_tokens)
+        date_generation_access_token = datetime.datetime.strptime(
+            os.path.basename(path_semphore_token).split("_")[4].replace(".txt", ""),
+            "%Y%m%dt%H%M%S",
+        )
+        access_token = open(path_semphore_token).readlines()[0]
+    if access_token is not None:
+        headers = {"Authorization": "Bearer %s" % access_token}
+        logging.debug("headers: %s", headers)
+        session = requests.Session()
+        session.headers.update(headers)
+        if hideProgressBar:
+            os.environ["DISABLE_TQDM"] = "True"
+
+        pbar = tqdm(
+            range(len(list_id)), disable=bool(os.environ.get("DISABLE_TQDM", False))
+        )
+        for ii in pbar:
+            pbar.set_description("CDSE download %s" % cpt)
+            id_product = list_id[ii]
+            url_product = conf["URL_download"] % id_product
+            safename_product = list_safename[ii]
+            if test_safe_archive(safename=safename_product):
+                cpt["archived_product"] += 1
+            elif test_safe_spool(safename=safename_product):
+                cpt["in_spool_product"] += 1
+            else:
+                cpt["product_absent_from_local_disks"] += 1
+
+                logging.debug("url_product : %s", url_product)
+                logging.debug(
+                    "id_product : %s safename_product : %s",
+                    id_product,
+                    safename_product,
+                )
+                if (
+                    datetime.datetime.today() - date_generation_access_token
+                ).total_seconds() >= MAX_VALIDITY_ACCESS_TOKEN:
+                    logging.info("get a new access token")
+                    (
+                        access_token,
+                        date_generation_access_token,
+                        specific_account,
+                    ) = get_bearer_access_token(specific_account=specific_account)
+                    headers = {"Authorization": "Bearer %s" % access_token}
+                    session.headers.update(headers)
+                else:
+                    logging.debug("reuse same access token, still valid.")
+                output_filepath = os.path.join(outputdir, safename_product + ".zip")
+                path_semaphore_token = write_token_semphore_file(
+                    login=specific_account,
+                    date_generation_access_token=date_generation_access_token,
+                    token_dir=conf["token_directory"],
+                    access_token=access_token,
+                )
+                try:
+                    (
+                        speed,
+                        status_meaning,
+                        safename_base,
+                        semaphore_token_file,
+                    ) = CDS_Odata_download_one_product_v2(
+                        session,
+                        headers,
+                        url=url_product,
+                        output_filepath=output_filepath,
+                        semaphore_token_file=path_semaphore_token,
+                    )
+                    remove_semaphore_token_file(
+                        token_dir=conf["token_directory"],
+                        login=specific_account,
+                        date_generation_access_token=date_generation_access_token,
+                    )
+                    remove_semaphore_session_file(
+                        session_dir=conf["active_session_directory"],
+                        safename=safename_base,
+                        login=specific_account,
+                    )
+                    if status_meaning == "OK":
+                        all_speeds.append(speed)
+                        cpt["successful_download"] += 1
+                    cpt["status_%s" % status_meaning] += 1
+                except KeyboardInterrupt:
+                    cpt["interrupted"] += 1
+                    raise ("keyboard interrupt")
+                except:
+                    cpt["download_KO"] += 1
+                    logging.error(
+                        "impossible to fetch %s from CDS: %s",
+                        url_product,
+                        traceback.format_exc(),
+                    )
+    logging.info("download over.")
+    logging.info("counter: %s", cpt)
+    if len(all_speeds) > 0:
+        logging.info(
+            "average download speed %1.1f Mo/s (stdev: %1.1f Mo/s)",
+            np.mean(all_speeds),
+            np.std(all_speeds),
+        )
+
+
+def download_list_product_sequential(
+    list_id, list_safename, outputdir, hideProgressBar=False
 ):
     """
 
@@ -332,88 +480,109 @@ def download_list_product(
     assert len(list_id) == len(list_safename)
     cpt = defaultdict(int)
     cpt["total_product_to_download"] = len(list_id)
-    access_token, date_generation_access_token, login = get_bearer_access_token(
-        quiet=hideProgressBar, specific_account=specific_account
+    df = pd.DataFrame(
+        {"safe": list_safename, "status": np.zeros(len(list_safename)), "id": list_id}
     )
-    headers = {"Authorization": "Bearer %s" % access_token}
-    logging.debug("headers: %s", headers)
-    session = requests.Session()
-    session.headers.update(headers)
+    df2, cpt = filter_product_already_present(cpt, df, outputdir)
+
+    df_products_downloadable = get_sessions_download_available(
+        df2, hideProgressBar=hideProgressBar, blacklist=None
+    )
+    logging.info("product downloadable: %s", len(df_products_downloadable))
+    df_products_downloadable["status"] = 0
     if hideProgressBar:
         os.environ["DISABLE_TQDM"] = "True"
     all_speeds = []
     pbar = tqdm(
-        range(len(list_id)), disable=bool(os.environ.get("DISABLE_TQDM", False))
+        range(len(df_products_downloadable)),
+        disable=bool(os.environ.get("DISABLE_TQDM", False)),
     )
     for ii in pbar:
         pbar.set_description("CDSE download %s" % cpt)
-        id_product = list_id[ii]
-        url_product = conf["URL_download"] % id_product
-        safename_product = list_safename[ii]
-        if test_safe_archive(safename=safename_product):
-            cpt["archived_product"] += 1
-        elif test_safe_spool(safename=safename_product):
-            cpt["in_spool_product"] += 1
-        else:
-            cpt["product_absent_from_local_disks"] += 1
+        # id_product = df2['safe'][ii]
+        # url_product = conf["URL_download"] % id_product
+        url_product = df_products_downloadable["url"].iloc[ii]
+        session = df_products_downloadable["session"].iloc[ii]
+        login = os.path.basename(
+            df_products_downloadable["session_semaphore"].iloc[ii]
+        ).split("_")[3]
+        headers = df_products_downloadable["header"].iloc[ii]
+        path_semaphore_token = df_products_downloadable["token_semaphore"].iloc[ii]
 
-            logging.debug("url_product : %s", url_product)
-            logging.debug(
-                "id_product : %s safename_product : %s", id_product, safename_product
-            )
-            if (
-                datetime.datetime.today() - date_generation_access_token
-            ).total_seconds() >= MAX_VALIDITY_ACCESS_TOKEN:
-                logging.info("get a new access token")
-                (
-                    access_token,
-                    date_generation_access_token,
-                    login,
-                ) = get_bearer_access_token(specific_account=specific_account)
-                headers = {"Authorization": "Bearer %s" % access_token}
-                session.headers.update(headers)
-            else:
-                logging.debug("reuse same access token, still valid.")
-            output_filepath = os.path.join(outputdir, safename_product + ".zip")
-            path_semaphore_token = write_token_semphore_file(
-                login=login,
-                date_generation_access_token=date_generation_access_token,
-                token_dir=conf["token_directory"],
-                access_token=access_token,
-            )
-            try:
-                (
-                    speed,
-                    status_meaning,
-                    safename_base,
-                    semaphore_token_file,
-                ) = CDS_Odata_download_one_product_v2(
-                    session,
-                    headers,
-                    url=url_product,
-                    output_filepath=output_filepath,
-                    semaphore_token_file=path_semaphore_token,
-                )
-                remove_semaphore_token_file(
-                    token_dir=conf["token_directory"],
-                    safename=safename_base,
-                    login=login,
-                    date_generation_access_token=date_generation_access_token,
-                )
-                if status_meaning == "OK":
-                    all_speeds.append(speed)
-                    cpt["successful_download"] += 1
-                cpt["status_%s" % status_meaning] += 1
-            except KeyboardInterrupt:
-                cpt["interrupted"] += 1
-                raise ("keyboard interrupt")
-            except:
-                cpt["download_KO"] += 1
-                logging.error(
-                    "impossible to fetch %s from CDS: %s",
-                    url_product,
-                    traceback.format_exc(),
-                )
+        output_filepath = df_products_downloadable["output_path"].iloc[ii]
+        safename_product = df_products_downloadable["safe"].iloc[ii]
+        logging.info("start download : %s", safename_product)
+        date_generation_access_token = datetime.datetime.strptime(
+            os.path.basename(path_semaphore_token).split("_")[4].replace(".txt", ""),
+            "%Y%m%dt%H%M%S",
+        )
+
+        logging.debug("url_product : %s", url_product)
+        if (
+            datetime.datetime.today() - date_generation_access_token
+        ).total_seconds() >= MAX_VALIDITY_ACCESS_TOKEN or not os.path.exists(
+            path_semaphore_token
+        ):
+
+            logging.info("get a new access token")
+            (
+                access_token,
+                date_generation_access_token,
+                login,
+            ) = get_bearer_access_token(specific_account=None)
+            headers = {"Authorization": "Bearer %s" % access_token}
+            session.headers.update(headers)
+        else:
+            logging.debug("reuse same access token, still valid.")
+        # output_filepath = os.path.join(outputdir, safename_product + ".zip")
+        # write_token_semphore_file() already called in  get_bearer_access_token() , called by get_sessions_download_available()
+        # path_semaphore_token = write_token_semphore_file(
+        #     login=login,
+        #     date_generation_access_token=date_generation_access_token,
+        #     token_dir=conf["token_directory"],
+        #     access_token=access_token,
+        # )
+        # try:
+        (
+            speed,
+            status_meaning,
+            safename_base,
+            semaphore_token_file,
+        ) = CDS_Odata_download_one_product_v2(
+            session,
+            headers,
+            url=url_product,
+            output_filepath=output_filepath,
+            semaphore_token_file=path_semaphore_token,
+        )
+        # remove the token file, there is a check in the method on its validity
+        remove_semaphore_token_file(
+            token_dir=conf["token_directory"],
+            login=login,
+            date_generation_access_token=date_generation_access_token,
+        )
+        remove_semaphore_session_file(
+            session_dir=conf["active_session_directory"],
+            safename=safename_base,
+            login=login,
+        )
+        if status_meaning == "OK":
+            all_speeds.append(speed)
+            df_products_downloadable["status"].iloc[ii] = 1
+            cpt["successful_download"] += 1
+        else:
+            df_products_downloadable["status"].iloc[ii] = -1
+        cpt["status_%s" % status_meaning] += 1
+        # except KeyboardInterrupt:
+        #     cpt["interrupted"] += 1
+        #     raise ("keyboard interrupt")
+        # except:
+        #     cpt["download_KO"] += 1
+        #     logging.error(
+        #         "impossible to fetch %s from CDS: %s",
+        #         url_product,
+        #         traceback.format_exc(),
+        #     )
     logging.info("download over.")
     logging.info("counter: %s", cpt)
     if len(all_speeds) > 0:
@@ -422,6 +591,7 @@ def download_list_product(
             np.mean(all_speeds),
             np.std(all_speeds),
         )
+    return df_products_downloadable
 
 
 def main():
@@ -453,6 +623,11 @@ def main():
         help="list of product to treat csv files id,safename",
     )
     parser.add_argument(
+        "--login",
+        required=True,
+        help="CDSE account to be used for download (email address)",
+    )
+    parser.add_argument(
         "--outputdir",
         required=True,
         help="directory where to store fetch files",
@@ -479,5 +654,6 @@ def main():
         list_safename=inputdf["safename"].values,
         outputdir=args.outputdir,
         hideProgressBar=args.hideProgressBar,
+        specific_account=args.login,
     )
     logging.info("end of function")
