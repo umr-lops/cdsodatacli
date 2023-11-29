@@ -3,6 +3,8 @@ import logging
 import pdb
 import random
 import glob
+
+import pandas as pd
 import requests
 from collections import defaultdict
 from cdsodatacli.utils import conf
@@ -28,20 +30,24 @@ def get_list_active_session():
     return lst_sessions
 
 
-def get_a_free_account(counts):
+def get_a_free_account(counts, blacklist=None):
     """
 
     Parameters
     ----------
     counts (collections.defaultdict(int)) counter of active session for each CDSE account
+    blacklist (list): list of account not usable [default=None]
+
     Returns
     -------
 
     """
     candidate = None
+    if blacklist is None:
+        blacklist = []
     all_free_accounts = []
     for acc in counts:
-        if counts[acc] < MAX_SESSION_PER_ACCOUNT:
+        if counts[acc] < MAX_SESSION_PER_ACCOUNT and acc not in blacklist:
             all_free_accounts.append(acc)
         else:
             logging.debug("account: %s is full", acc)
@@ -103,29 +109,33 @@ def remove_semaphore_session_file(session_dir, safename=None, login=None):
         "CDSE_active_session_%s_%s.txt" % (login_str, safename_str),
     )
     lst = glob.glob(path_semphore_session)
-    for llu in  lst:
+    for llu in lst:
         os.remove(llu)
     logging.debug("session semaphore file removed")
 
 
-def get_sessions_download_available(subset_to_treat, hideProgressBar=True):
+def get_sessions_download_available(
+    subset_to_treat, hideProgressBar=True, blacklist=None,logins_group='logins'
+):
     """
 
     Parameters
     ----------
     subset_to_treat (pandas.DatFrame)
     hideProgressBar (bool)
-
+    blacklist (list): list of account not usable [default=None]
+    logins_group (str): logins or loginsbackfill (for instance, it depends on the localconfig.yml)
     Returns
     -------
 
     """
-
+    df_products_downloadable = pd.DataFrame()
     all_sessions = []
     all_headers = []
     all_semaphores = []
     all_session_semaphores = []
     usable_accounts = []
+    all_safe_basename = []
     bunch_product_downloadable = []
     bunch_urls_to_download = []
     outputfiles_download_coming = []
@@ -133,7 +143,7 @@ def get_sessions_download_available(subset_to_treat, hideProgressBar=True):
     lst_sessions_active = get_list_active_session()
     # account_free = None
     account_counter = defaultdict(int)
-    for aa in conf["logins"]:
+    for aa in conf[logins_group]:
         account_counter[aa] = 0
     logging.debug("(re)init the counts for accounts.")
     for toto in lst_sessions_active:
@@ -143,7 +153,9 @@ def get_sessions_download_available(subset_to_treat, hideProgressBar=True):
     for ss in range(len(subset_to_treat)):
         safename_product = subset_to_treat["safe"].iloc[ss]
 
-        account_free, account_counter = get_a_free_account(counts=account_counter)
+        account_free, account_counter = get_a_free_account(
+            counts=account_counter, blacklist=blacklist
+        )
         if account_free is None:
             logging.debug("no more account available for now.")
             break  # no more account free
@@ -160,7 +172,7 @@ def get_sessions_download_available(subset_to_treat, hideProgressBar=True):
                     login,
                     path_semphore_token,
                 ) = get_bearer_access_token(
-                    quiet=hideProgressBar, specific_account=account_free
+                    quiet=hideProgressBar, specific_account=account_free,account_group=logins_group
                 )
             else:  # select randomly one token among existing
                 path_semphore_token = random.choice(lst_usable_tokens)
@@ -184,12 +196,13 @@ def get_sessions_download_available(subset_to_treat, hideProgressBar=True):
                 all_sessions.append(session)
                 all_headers.append(headers)
                 all_semaphores.append(path_semphore_token)
+                all_safe_basename.append(safename_product)
                 all_session_semaphores.append(path_semaphore_session)
-    return (
-        all_sessions,
-        all_headers,
-        all_semaphores,
-        bunch_urls_to_download,
-        outputfiles_download_coming,
-        all_session_semaphores,
-    )
+    df_products_downloadable["session"] = all_sessions
+    df_products_downloadable["header"] = all_headers
+    df_products_downloadable["token_semaphore"] = all_semaphores
+    df_products_downloadable["url"] = bunch_urls_to_download
+    df_products_downloadable["output_path"] = outputfiles_download_coming
+    df_products_downloadable["session_semaphore"] = all_session_semaphores
+    df_products_downloadable['safe'] = all_safe_basename
+    return df_products_downloadable
