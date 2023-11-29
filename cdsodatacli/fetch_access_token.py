@@ -11,7 +11,7 @@ import random
 MAX_VALIDITY_ACCESS_TOKEN = 600  # sec (defined by CDS API)
 
 
-def get_bearer_access_token(quiet=True, specific_account=None):
+def get_bearer_access_token(quiet=True, specific_account=None,account_group='logins'):
     """
     OData access token (validity=600sec)
     specific_account (str) [optional, default=None -> first available account in config file]
@@ -21,13 +21,13 @@ def get_bearer_access_token(quiet=True, specific_account=None):
     """
     url_identity = conf["URL_identity"]
     if specific_account is None:
-        all_accounts = list(conf["logins"].keys())
+        all_accounts = list(conf[account_group].keys())
         login = random.choice(all_accounts)
-        passwd = conf["logins"][all_accounts[0]]
+        passwd = conf[account_group][all_accounts[0]]
     else:
         login = specific_account
-        logging.debug('conf["logins"] %s', type(conf["logins"]))
-        passwd = conf["logins"][specific_account]
+        logging.debug('conf[account_group] %s', type(conf[account_group]))
+        passwd = conf[account_group][specific_account]
     if quiet:
         prefix = "curl -s "
     else:
@@ -106,7 +106,6 @@ def get_list_of_exising_token(token_dir, account=None):
     else:
         lst_token0 = glob.glob(os.path.join(token_dir, "CDSE_access_token_*.txt"))
 
-    # nb_account = len(conf["logins"])
     lst_token = []
     for ll in lst_token0:
         date_generation_access_token = datetime.datetime.strptime(
