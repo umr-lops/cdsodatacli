@@ -7,13 +7,16 @@ import pandas as pd
 import logging
 import os
 import cdsodatacli
-from cdsodatacli.download import download_list_product
+from cdsodatacli.download import download_list_product, download_list_product_sequential
 from cdsodatacli.utils import conf
+
 # listing = './example_WV_listing.txt'
 default_listing = os.path.join(
-    os.path.dirname(os.path.dirname(cdsodatacli.__file__)), "tests_metiers", "example_WV_SLC_listing.txt"
+    os.path.dirname(os.path.dirname(cdsodatacli.__file__)),
+    "tests_metiers",
+    "example_WV_SLC_listing.txt",
 )
-if __name__ == '__main__':
+if __name__ == "__main__":
     root = logging.getLogger()
     if root.handlers:
         for handler in root.handlers:
@@ -34,6 +37,9 @@ if __name__ == '__main__':
         required=True,
         help="pathwhere product will be stored",
     )
+    parser.add_argument(
+        "--version",type=int, choices=[1, 2], help="version of the sequential download method"
+    )
 
     args = parser.parse_args()
     fmt = "%(asctime)s %(levelname)s %(filename)s(%(lineno)d) %(message)s"
@@ -46,18 +52,31 @@ if __name__ == '__main__':
             level=logging.INFO, format=fmt, datefmt="%d/%m/%Y %H:%M:%S", force=True
         )
     listing = args.listing
-    logging.info('listing: %s',listing)
+    logging.info("listing: %s", listing)
     assert os.path.exists(listing)
     # listing = './example_WV_OCN_listing.txt'
     # outputdir = conf['test_default_output_directory']
-    outputdir  = args.outputdir
-    inputdf = pd.read_csv(listing,names=['id','safename'],delimiter=',')
+    outputdir = args.outputdir
+    inputdf = pd.read_csv(listing, names=["id", "safename"], delimiter=",")
     if not os.path.exists(outputdir):
-        logging.debug('mkdir on %s',outputdir)
-        os.makedirs(outputdir,0o0775)
-    specific_account = 'Mickael.accensi@ifremer.fr'
-    logging.info('specific_account : %s',specific_account)
-    download_list_product(list_id=inputdf['id'].values,
-                          list_safename=inputdf['safename'].values, outputdir=outputdir,hideProgressBar=False,
-                          specific_account=specific_account)
-    logging.info('end of function')
+        logging.debug("mkdir on %s", outputdir)
+        os.makedirs(outputdir, 0o0775)
+
+    if args.version == 2:
+        dfout = download_list_product_sequential(
+            list_id=inputdf["id"].values,
+            list_safename=inputdf["safename"].values,
+            outputdir=outputdir,
+            hideProgressBar=False,
+        )
+    elif args.version == 1:
+        specific_account = "Mickael.accensi@ifremer.fr"
+        logging.info("specific_account : %s", specific_account)
+        download_list_product(
+            list_id=inputdf["id"].values,
+            list_safename=inputdf["safename"].values,
+            outputdir=outputdir,
+            hideProgressBar=False,
+            specific_account=specific_account,
+        )
+    logging.info("end of function")
