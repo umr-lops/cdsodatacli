@@ -23,7 +23,7 @@ def test_safe_spool(safename):
 
     Parameters
     ----------
-    safename (str)
+    safename (str) basename
 
     Returns
     -------
