@@ -52,15 +52,18 @@ if __name__ == "__main__":
     assert os.path.exists(listing)
     # listing = './example_WV_OCN_listing.txt'
     # outputdir = conf["test_default_output_directory"]
+    logins_group = 'loginsbackfill'
+    logging.info('logins_group : %s',len(conf[logins_group]))
     outputdir = args.outputdir
     inputdf = pd.read_csv(listing, names=["id", "safename"], delimiter=",")
     if not os.path.exists(outputdir):
         logging.debug("mkdir on %s", outputdir)
         os.makedirs(outputdir, 0o0775)
-    download_list_product_multithread_v2(
+    dfout = download_list_product_multithread_v2(
         list_id=inputdf["id"].values,
         list_safename=inputdf["safename"].values,
         outputdir=outputdir,
         hideProgressBar=False,
+        account_group=logins_group
     )
     logging.info("end of function")
