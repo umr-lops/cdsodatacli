@@ -11,7 +11,7 @@ import random
 MAX_VALIDITY_ACCESS_TOKEN = 600  # sec (defined by CDS API)
 
 
-def get_bearer_access_token(quiet=True, specific_account=None,account_group='logins'):
+def get_bearer_access_token(quiet=True, specific_account=None, account_group="logins"):
     """
     OData access token (validity=600sec)
     specific_account (str) [optional, default=None -> first available account in config file]
@@ -19,6 +19,7 @@ def get_bearer_access_token(quiet=True, specific_account=None,account_group='log
     -------
 
     """
+    path_semphore_token = None
     url_identity = conf["URL_identity"]
     if specific_account is None:
         all_accounts = list(conf[account_group].keys())
@@ -26,7 +27,7 @@ def get_bearer_access_token(quiet=True, specific_account=None,account_group='log
         passwd = conf[account_group][all_accounts[0]]
     else:
         login = specific_account
-        logging.debug('conf[account_group] %s', type(conf[account_group]))
+        logging.debug("conf[account_group] %s", type(conf[account_group]))
         passwd = conf[account_group][specific_account]
     if quiet:
         prefix = "curl -s "
@@ -54,16 +55,18 @@ def get_bearer_access_token(quiet=True, specific_account=None,account_group='log
         token = None
     else:
         token = data["access_token"]
-
-    path_semphore_token = write_token_semphore_file(
-        login=login,
-        date_generation_access_token=date_generation_access_token,
-        token_dir=conf["token_directory"],access_token=token
-    )
+        path_semphore_token = write_token_semphore_file(
+            login=login,
+            date_generation_access_token=date_generation_access_token,
+            token_dir=conf["token_directory"],
+            access_token=token,
+        )
     return token, date_generation_access_token, login, path_semphore_token
 
 
-def write_token_semphore_file(login, date_generation_access_token, token_dir,access_token):
+def write_token_semphore_file(
+    login, date_generation_access_token, token_dir, access_token
+):
     """
 
     Parameters
@@ -109,7 +112,7 @@ def get_list_of_exising_token(token_dir, account=None):
     lst_token = []
     for ll in lst_token0:
         date_generation_access_token = datetime.datetime.strptime(
-            os.path.basename(ll).split("_")[4].replace('.txt',''), "%Y%m%dt%H%M%S"
+            os.path.basename(ll).split("_")[4].replace(".txt", ""), "%Y%m%dt%H%M%S"
         )
         if (
             datetime.datetime.today() - date_generation_access_token
@@ -119,9 +122,7 @@ def get_list_of_exising_token(token_dir, account=None):
     return lst_token
 
 
-def remove_semaphore_token_file(
-    token_dir, login, date_generation_access_token
-):
+def remove_semaphore_token_file(token_dir, login, date_generation_access_token):
     """
     this function is supposed to be used when a download is finished ( could be long time after the validity expired)
 
@@ -140,8 +141,10 @@ def remove_semaphore_token_file(
         % (login, date_generation_access_token.strftime("%Y%m%dt%H%M%S")),
     )
     exists = os.path.exists(path_token)
-    if exists and (
-        datetime.datetime.today() - date_generation_access_token
-    ).total_seconds() >= MAX_VALIDITY_ACCESS_TOKEN:
+    if (
+        exists
+        and (datetime.datetime.today() - date_generation_access_token).total_seconds()
+        >= MAX_VALIDITY_ACCESS_TOKEN
+    ):
         os.remove(path_token)
         logging.debug("token semaphore file removed")
