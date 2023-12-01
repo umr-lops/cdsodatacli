@@ -55,6 +55,7 @@ def fetch_data(
        publication_end (String): representing the ending publication date for the query.
        top (String): representing the ending publication date for the query.
        mode (String): seq ( Sequential) or multi (multithread)
+       timedelta_slice (datetime.timedelta) : optional param to split the queries wrt time in order to avoid missing product because of the 1000 product max returned by Odata
     Return:
         (pd.DataFame): data containing the fetched results.
     """
@@ -208,12 +209,17 @@ def normalize_gdf(
         )
         # no slicing
         timedelta_slice = None
-    worlpolygon = shapely.wkt.loads('POLYGON((-180 -90,180 -90,180 90,-180 90,-180 -90))')
-    norm_gdf['geometry'].fillna(value=worlpolygon, inplace=True) # to replace None by NaN
+    worlpolygon = shapely.wkt.loads(
+        "POLYGON((-180 -90,180 -90,180 90,-180 90,-180 -90))"
+    )
+    norm_gdf["geometry"].fillna(
+        value=worlpolygon, inplace=True
+    )  # to replace None by NaN
     # convert naives dates to utc
     for date_col in norm_gdf.select_dtypes(include=["datetime64"]).columns:
         try:
             norm_gdf[date_col] = norm_gdf[date_col].dt.tz_localize("UTC")
+            logging.debug('norm_gdf[date_col] %s',type(norm_gdf[date_col].iloc[0]))
             # logger.warning("Assuming UTC date on col %s" % date_col)
         except TypeError:
             # already localized
@@ -307,7 +313,11 @@ def create_urls(gdf, top=None):
 
         # Taking all given parameters
         params = {}
-        if "geometry" in gdf_row and not pd.isna(gdf_row["geometry"]) and gdf_row["geometry"] is not None:
+        if (
+            "geometry" in gdf_row
+            and not pd.isna(gdf_row["geometry"])
+            and gdf_row["geometry"] is not None
+        ):
             value = str(gdf_row.geometry)
             geo_type = gdf_row.geometry.geom_type
             coordinates_part = value[value.find("(") + 1 : value.find(")")]
