@@ -7,7 +7,7 @@ import pandas as pd
 import logging
 import os
 import cdsodatacli
-from cdsodatacli.download import download_list_product, download_list_product_sequential
+from cdsodatacli.download import download_list_product_multithread_v2
 from cdsodatacli.utils import conf
 
 # listing = './example_WV_listing.txt'
@@ -37,10 +37,6 @@ if __name__ == "__main__":
         required=True,
         help="pathwhere product will be stored",
     )
-    parser.add_argument(
-        "--version",type=int, choices=[1, 2], help="version of the sequential download method"
-    )
-
     args = parser.parse_args()
     fmt = "%(asctime)s %(levelname)s %(filename)s(%(lineno)d) %(message)s"
     if args.verbose:
@@ -55,28 +51,19 @@ if __name__ == "__main__":
     logging.info("listing: %s", listing)
     assert os.path.exists(listing)
     # listing = './example_WV_OCN_listing.txt'
-    # outputdir = conf['test_default_output_directory']
+    # outputdir = conf["test_default_output_directory"]
+    logins_group = 'loginsbackfill'
+    logging.info('logins_group : %s',len(conf[logins_group]))
     outputdir = args.outputdir
     inputdf = pd.read_csv(listing, names=["id", "safename"], delimiter=",")
     if not os.path.exists(outputdir):
         logging.debug("mkdir on %s", outputdir)
         os.makedirs(outputdir, 0o0775)
-
-    if args.version == 2:
-        dfout = download_list_product_sequential(
-            list_id=inputdf["id"].values,
-            list_safename=inputdf["safename"].values,
-            outputdir=outputdir,
-            hideProgressBar=False,
-        )
-    elif args.version == 1:
-        specific_account = "Mickael.accensi@ifremer.fr"
-        logging.info("specific_account : %s", specific_account)
-        download_list_product(
-            list_id=inputdf["id"].values,
-            list_safename=inputdf["safename"].values,
-            outputdir=outputdir,
-            hideProgressBar=False,
-            specific_account=specific_account,
-        )
+    dfout = download_list_product_multithread_v2(
+        list_id=inputdf["id"].values,
+        list_safename=inputdf["safename"].values,
+        outputdir=outputdir,
+        hideProgressBar=False,
+        account_group=logins_group
+    )
     logging.info("end of function")

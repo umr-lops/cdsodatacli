@@ -1,7 +1,11 @@
-login: dummyemailadress@example.com
-password: examplepasswordtobechanged
+logins:
+  - user1@emailadrress.fr: passwd1
+  - user2@emailadrress.fr: passwd2
 URL_identity: https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token
 URL_download: https://zipper.dataspace.copernicus.eu/odata/v1/Products(%s)/$value
 spool : './my_spool'
+pre_spool: './sentinel1_cdse_pre_spool'
 archive: './my_archive'
 test_default_output_directory: './my_tests'
+token_directory: './CDSE_odata_token_access'
+active_session_directory: './CDSE_odata_active_sessions'
