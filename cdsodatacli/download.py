@@ -80,7 +80,8 @@ def CDS_Odata_download_one_product_v2(
     session (request Obj)
     headers (dict)
     url (str)
-    output_filepath (str) full path where to store fetch file
+    output_filepath (str): full path where to store fetch file
+    semaphore_token_file (str): full path of the file storing an active access token
 
     Returns
     -------
@@ -90,46 +91,16 @@ def CDS_Odata_download_one_product_v2(
     speed = np.nan
     status_meaning = "unknown_code"
     t0 = time.time()
-    output_filepath_tmp = (
-        output_filepath.replace(conf["spool"], conf["pre_spool"]) + ".tmp"
-    )
-
+    # output_filepath_tmp = (
+    #     output_filepath.replace(conf["spool"], conf["pre_spool"]) + ".tmp"
+    # )
+    output_filepath_tmp = os.path.join(conf["pre_spool"],os.path.basename(output_filepath)+ ".tmp")
     safename_base = os.path.basename(output_filepath).replace(".zip", "")
     with open(output_filepath_tmp, "wb") as f:
         logging.debug("Downloading %s" % output_filepath)
         response = session.get(url, headers=headers, stream=True)
         status = response.status_code
         status_meaning = response.reason
-        # if status==200:
-        #     status_meaning = 'OK'
-        #     speed = total_length / elapsed_time
-        # elif status==202:
-        #     status_meaning = 'Accepted'
-        #     logging.debug('202 (Accepted): Indicates that a batch request has been accepted for processing, but that the processing has not been completed.')
-        # elif status==204:
-        #     logging.debug('204 (No Content): Indicates that a request has been received and processed successfully by a data service and that the response does not include a response body.')
-        #     status_meaning = 'No Content'
-        # elif status == 400:
-        #     logging.debug('400 (Bad Request): Indicates that the payload, request headers, or request URI provided in a request are not correctly formatted according to the syntax rules defined in this document.')
-        #     # status_meaning = 'Bad Request'
-        #     status_meaning = 'Unknown query parameter(s).'
-        # elif status == 404:
-        #     # logging.debug("404 (Not Found): Indicates that a segment in the request URI's Resource Path does not map to an existing resource in the data service. A data service MAY<74> respond with a representation of an empty collection of entities if the request URI addressed a collection of entities.")
-        #     # status_meaning = 'Not Found'
-        #     status_meaning = 'Unknown collection.'
-        # elif status == 405:
-        #     logging.debug('405 (Method Not Allowed): Indicates that a request used an HTTP method not supported by the resource identified by the request URI, see Request Types (section 2.2.7).')
-        #     status_meaning = 'Method Not Allowed'
-        # elif status == 412:
-        #     logging.debug('412 (Precondition Failed): Indicates that one or more of the conditions specified in the request headers evaluated to false. This response code is used to indicate an optimistic concurrency check failure, see If-Match (section 2.2.5.5) and If-None-Match (section 2.2.5.6).')
-        #     status_meaning = 'Precondition Failed'
-        # elif status == 500:
-        #     logging.debug('500 (Internal Server Error): Indicates that a request being processed by a data service encountered an unexpected error during processing.')
-        #     status_meaning = 'Internal Server Error'
-        # else:
-        #     status_meaning = 'unknown_code'
-        #     logging.error('unkown API OData code status: %s',status)
-        #     raise ValueError()
         if response.ok:
             total_length = int(
                 int(response.headers.get("content-length")) / 1000 / 1000
@@ -212,7 +183,7 @@ def download_list_product_multithread_v2(
     """
     assert len(list_id) == len(list_safename)
     cpt = defaultdict(int)
-    cpt["total_product_to_download"] = len(list_id)
+    cpt["products_in_initial_listing"] = len(list_id)
 
     if hideProgressBar:
         os.environ["DISABLE_TQDM"] = "True"
@@ -279,6 +250,7 @@ def download_list_product_multithread_v2(
                     login=login,
                     date_generation_access_token=date_generation_access_token,
                 )
+                logging.info('remove session semaphore for %s',login)
                 remove_semaphore_session_file(
                     session_dir=conf["active_session_directory"],
                     safename=safename_base,
@@ -300,6 +272,7 @@ def download_list_product_multithread_v2(
                 else:
                     df2.loc[(df2["safe"] == safename_base), "status"] = -1
                     errors_per_account[login] += 1
+                    logging.info('error found for %s meaning %s',login,status_meaning)
                     # df2["status"][df2["safe"] == safename_base] = -1 # download in error
                 cpt["status_%s" % status_meaning] += 1
 
@@ -346,7 +319,7 @@ def download_list_product(
     assert len(list_id) == len(list_safename)
     cpt = defaultdict(int)
     all_speeds = []
-    cpt["total_product_to_download"] = len(list_id)
+    cpt["products_in_initial_listing"] = len(list_id)
     lst_usable_tokens = get_list_of_exising_token(token_dir=conf["token_directory"])
     if lst_usable_tokens == []:  # in case no token ready to be used -> create new one
         (
@@ -401,55 +374,58 @@ def download_list_product(
                         access_token,
                         date_generation_access_token,
                         specific_account,
+                        path_semphore_token
                     ) = get_bearer_access_token(specific_account=specific_account)
                     headers = {"Authorization": "Bearer %s" % access_token}
                     session.headers.update(headers)
                 else:
                     logging.debug("reuse same access token, still valid.")
                 output_filepath = os.path.join(outputdir, safename_product + ".zip")
-                path_semaphore_token = write_token_semphore_file(
+                # if access_token is None -> crash of the method but it is expected since this method is supposed to be used with a working account
+                # path_semaphore_token = write_token_semphore_file(
+                #     login=specific_account,
+                #     date_generation_access_token=date_generation_access_token,
+                #     token_dir=conf["token_directory"],
+                #     access_token=access_token,
+                # )
+
+                # try:
+                (
+                    speed,
+                    status_meaning,
+                    safename_base,
+                    path_semphore_token,
+                ) = CDS_Odata_download_one_product_v2(
+                    session,
+                    headers,
+                    url=url_product,
+                    output_filepath=output_filepath,
+                    semaphore_token_file=path_semphore_token,
+                )
+                remove_semaphore_token_file(
+                    token_dir=conf["token_directory"],
                     login=specific_account,
                     date_generation_access_token=date_generation_access_token,
-                    token_dir=conf["token_directory"],
-                    access_token=access_token,
                 )
-                try:
-                    (
-                        speed,
-                        status_meaning,
-                        safename_base,
-                        semaphore_token_file,
-                    ) = CDS_Odata_download_one_product_v2(
-                        session,
-                        headers,
-                        url=url_product,
-                        output_filepath=output_filepath,
-                        semaphore_token_file=path_semaphore_token,
-                    )
-                    remove_semaphore_token_file(
-                        token_dir=conf["token_directory"],
-                        login=specific_account,
-                        date_generation_access_token=date_generation_access_token,
-                    )
-                    remove_semaphore_session_file(
-                        session_dir=conf["active_session_directory"],
-                        safename=safename_base,
-                        login=specific_account,
-                    )
-                    if status_meaning == "OK":
-                        all_speeds.append(speed)
-                        cpt["successful_download"] += 1
-                    cpt["status_%s" % status_meaning] += 1
-                except KeyboardInterrupt:
-                    cpt["interrupted"] += 1
-                    raise ("keyboard interrupt")
-                except:
-                    cpt["download_KO"] += 1
-                    logging.error(
-                        "impossible to fetch %s from CDS: %s",
-                        url_product,
-                        traceback.format_exc(),
-                    )
+                remove_semaphore_session_file(
+                    session_dir=conf["active_session_directory"],
+                    safename=safename_base,
+                    login=specific_account,
+                )
+                if status_meaning == "OK":
+                    all_speeds.append(speed)
+                    cpt["successful_download"] += 1
+                cpt["status_%s" % status_meaning] += 1
+                # except KeyboardInterrupt:
+                #     cpt["interrupted"] += 1
+                #     raise ("keyboard interrupt")
+                # except:
+                #     cpt["download_KO"] += 1
+                #     logging.error(
+                #         "impossible to fetch %s from CDS: %s",
+                #         url_product,
+                #         traceback.format_exc(),
+                #     )
     logging.info("download over.")
     logging.info("counter: %s", cpt)
     if len(all_speeds) > 0:
@@ -478,6 +454,7 @@ def download_list_product_sequential(
 
     """
     assert len(list_id) == len(list_safename)
+    logins_group = 'logins'
     cpt = defaultdict(int)
     cpt["total_product_to_download"] = len(list_id)
     df = pd.DataFrame(
@@ -486,7 +463,7 @@ def download_list_product_sequential(
     df2, cpt = filter_product_already_present(cpt, df, outputdir)
 
     df_products_downloadable = get_sessions_download_available(
-        df2, hideProgressBar=hideProgressBar, blacklist=None
+        df2, hideProgressBar=hideProgressBar, blacklist=None,logins_group=logins_group,
     )
     logging.info("product downloadable: %s", len(df_products_downloadable))
     df_products_downloadable["status"] = 0
@@ -529,7 +506,8 @@ def download_list_product_sequential(
                 access_token,
                 date_generation_access_token,
                 login,
-            ) = get_bearer_access_token(specific_account=None)
+                path_semaphore_token
+            ) = get_bearer_access_token(specific_account=None,account_group=logins_group)
             headers = {"Authorization": "Bearer %s" % access_token}
             session.headers.update(headers)
         else:
@@ -547,7 +525,7 @@ def download_list_product_sequential(
             speed,
             status_meaning,
             safename_base,
-            semaphore_token_file,
+            path_semaphore_token,
         ) = CDS_Odata_download_one_product_v2(
             session,
             headers,
