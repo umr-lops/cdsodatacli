@@ -16,18 +16,27 @@ from cdsodatacli.fetch_access_token import (
 MAX_SESSION_PER_ACCOUNT = 4  # each account CDSE have maximum 4 active sessions
 
 
-def get_list_active_session():
+def get_list_active_session(login_group=None):
     """
 
     Returns
     -------
-        lst_sessions (list)
+        consolidated_active_session_semaphore (list)
     """
     lst_sessions = glob.glob(
         os.path.join(conf["active_session_directory"], "CDSE_active_session_*.txt")
     )
+
+    if login_group is not None:
+        consolidated_active_session_semaphore = []
+        for token_sess in lst_sessions:
+            acc_found = os.path.basename(token_sess).split("_")[3]
+            if acc_found in conf[login_group]:
+                consolidated_active_session_semaphore.append(token_sess)
+    else:
+        consolidated_active_session_semaphore = lst_sessions
     logging.debug("Number of active sessions found: %s", len(lst_sessions))
-    return lst_sessions
+    return consolidated_active_session_semaphore
 
 
 def get_a_free_account(counts, blacklist=None):
@@ -115,7 +124,7 @@ def remove_semaphore_session_file(session_dir, safename=None, login=None):
 
 
 def get_sessions_download_available(
-    subset_to_treat, hideProgressBar=True, blacklist=None,logins_group='logins'
+    subset_to_treat, hideProgressBar=True, blacklist=None, logins_group="logins"
 ):
     """
 
@@ -140,7 +149,7 @@ def get_sessions_download_available(
     bunch_urls_to_download = []
     outputfiles_download_coming = []
 
-    lst_sessions_active = get_list_active_session()
+    lst_sessions_active = get_list_active_session(login_group=logins_group)
     # account_free = None
     account_counter = defaultdict(int)
     for aa in conf[logins_group]:
@@ -161,7 +170,7 @@ def get_sessions_download_available(
             break  # no more account free
         else:
             lst_usable_tokens = get_list_of_exising_token(
-                token_dir=conf["token_directory"]
+                token_dir=conf["token_directory"], account=account_free
             )
             if (
                 lst_usable_tokens == []
@@ -172,7 +181,9 @@ def get_sessions_download_available(
                     login,
                     path_semphore_token,
                 ) = get_bearer_access_token(
-                    quiet=hideProgressBar, specific_account=account_free,account_group=logins_group
+                    quiet=hideProgressBar,
+                    specific_account=account_free,
+                    account_group=logins_group,
                 )
             else:  # select randomly one token among existing
                 path_semphore_token = random.choice(lst_usable_tokens)
@@ -204,5 +215,5 @@ def get_sessions_download_available(
     df_products_downloadable["url"] = bunch_urls_to_download
     df_products_downloadable["output_path"] = outputfiles_download_coming
     df_products_downloadable["session_semaphore"] = all_session_semaphores
-    df_products_downloadable['safe'] = all_safe_basename
+    df_products_downloadable["safe"] = all_safe_basename
     return df_products_downloadable
