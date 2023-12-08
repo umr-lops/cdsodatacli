@@ -137,14 +137,15 @@ def CDS_Odata_download_one_product_v2(
     return speed, status_meaning, safename_base, semaphore_token_file
 
 
-def filter_product_already_present(cpt, df, outputdir):
+def filter_product_already_present(cpt, df, outputdir,force_download=False):
     """
 
     Parameters
     ----------
-    cpt
-    df
-    outputdir
+    cpt (collections.defaultdict(int))
+    df (pd.DataFrame)
+    outputdir (str)
+    force_download (bool)
 
     Returns
     -------
@@ -154,12 +155,17 @@ def filter_product_already_present(cpt, df, outputdir):
     all_urls_to_download = []
     index_to_download = []
     for ii, safename_product in enumerate(df["safe"]):
+        to_download = False
+        if force_download:
+            to_download = True
         if test_safe_archive(safename=safename_product):
             cpt["archived_product"] += 1
         elif test_safe_spool(safename=safename_product):
             cpt["in_spool_product"] += 1
         else:
+            to_download = True
             cpt["product_absent_from_local_disks"] += 1
+        if to_download:
             index_to_download.append(ii)
             id_product = df["id"].iloc[ii]
             url_product = conf["URL_download"] % id_product
@@ -180,8 +186,14 @@ def filter_product_already_present(cpt, df, outputdir):
     return df_todownload, cpt
 
 
+
 def download_list_product_multithread_v2(
-    list_id, list_safename, outputdir, hideProgressBar=False, account_group="logins"
+    list_id,
+    list_safename,
+    outputdir,
+    hideProgressBar=False,
+    account_group="logins",
+    check_on_disk=True,
 ):
     """
     v2 is handling multi account round-robin and token semaphore files
@@ -190,13 +202,16 @@ def download_list_product_multithread_v2(
     list_id (list)
     list_safename (list)
     outputdir (str)
-    hideProgressBar (bool)
+    hideProgressBar (bool): True -> no tqdm progress bar in stdout
+    account_group (str)
+    check_on_disk (bool): True -> if the product is in the spool dir or in archive dir the download is skipped
 
     Returns
     -------
-
+        df2 (pd.DataFrame):
     """
     assert len(list_id) == len(list_safename)
+    logging.info("check_on_disk : %s", check_on_disk)
     cpt = defaultdict(int)
     cpt["products_in_initial_listing"] = len(list_id)
 
@@ -207,7 +222,9 @@ def download_list_product_multithread_v2(
     df = pd.DataFrame(
         {"safe": list_safename, "status": np.zeros(len(list_safename)), "id": list_id}
     )
-    df2, cpt = filter_product_already_present(cpt, df, outputdir)
+
+    df2, cpt = filter_product_already_present(cpt, df, outputdir,force_download=check_on_disk==False)
+
     logging.info("%s", cpt)
     while_loop = 0
     blacklist = []
