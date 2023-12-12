@@ -21,7 +21,7 @@ odata client for Copernicus Data Space catalog
 
 ### step 1: create a config file
   
-* create a copy of the config.yml  
+* create a copy of the config.yml  called localconfig.yml where `cdsodatacli` is installed in your python environement.
 ```bash
 cp config.yml localconfig.yml 
 ``` 
