@@ -32,7 +32,7 @@ dependencies = [
 ]
 dynamic = ["version"]
 [project.scripts]
-queryCDS = "cdsodatacli.__main__:app"
+queryCDS = "cdsodatacli.query:query_client"
 downloadFromCDS = "cdsodatacli.download:main"
 #[tool.poetry.dependencies]
 #python = "^3.9"

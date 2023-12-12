@@ -34,6 +34,8 @@ cp config.yml localconfig.yml
 
 ```bash
 queryCDS -h
+# or
+queryCDS --collection SENTINEL-1 --startdate 20230101T00:00:00 --stopdate 20230105T10:10:10 --mode IW --product SLC --querymode seq --geometry "POINT (-5.02 48.4)"
 ```
 
 or use the method `cdsodatacli.query.fetch_data()`
