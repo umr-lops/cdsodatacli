@@ -25,7 +25,7 @@ from collections import defaultdict
 import traceback
 import warnings
 
-
+DEFAULT_TOP_ROWS_PER_QUERY = 1000
 def fetch_data(
     gdf,
     date=None,
@@ -305,7 +305,7 @@ def create_urls(gdf, top=None):
     urlapi = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter="
     urls = []
     if top is None:
-        top = 1000
+        top = DEFAULT_TOP_ROWS_PER_QUERY
     for row in range(len(gdf)):
         gdf_row = gdf.iloc[row]
         # enter_index = gdf.index[row]
@@ -444,6 +444,8 @@ def fetch_one_url(url, cpt, index, cache_dir):
                         # collected_data_x.append(collected_data)
                         cpt["product_proposed_by_CDS"] += len(collected_data["Name"])
                         collected_data["id_original_query"] = index
+                        if len(collected_data)==DEFAULT_TOP_ROWS_PER_QUERY:
+                            logging.warning("%i products found in a single CDSE OData query (maximum is %s): make sure the timedelta_slice parameters is small enough to avoid truncated results",len(collected_data),DEFAULT_TOP_ROWS_PER_QUERY)
                         if pd.isna(collected_data["Name"]).any():
                             raise Exception("Name field contains NaN")
                         cpt["answer_append"] += 1

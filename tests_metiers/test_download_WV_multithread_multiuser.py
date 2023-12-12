@@ -27,6 +27,14 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="highleveltest-fetch_OCN_WV_IDs")
     parser.add_argument("--verbose", action="store_true", default=False)
+    parser.add_argument("--forcedownload", action="store_true", default=False,
+                        help='True -> no test of existence of the products in spool and archive directories.')
+    parser.add_argument(
+        "--logingroup",
+        help="name of the group of CDSE account in the localconfig.yml [default=logins]",
+        default="logins",
+        required=False,
+    )
     parser.add_argument(
         "--listing",
         default=default_listing,
@@ -52,8 +60,9 @@ if __name__ == "__main__":
     assert os.path.exists(listing)
     # listing = './example_WV_OCN_listing.txt'
     # outputdir = conf["test_default_output_directory"]
-    logins_group = 'loginsbackfill'
-    logging.info('logins_group : %s',len(conf[logins_group]))
+    # logins_group = 'loginsbackfill'
+    logins_group = args.logingroup
+    logging.info("logins_group : %s", len(conf[logins_group]))
     outputdir = args.outputdir
     inputdf = pd.read_csv(listing, names=["id", "safename"], delimiter=",")
     if not os.path.exists(outputdir):
@@ -64,6 +73,7 @@ if __name__ == "__main__":
         list_safename=inputdf["safename"].values,
         outputdir=outputdir,
         hideProgressBar=False,
-        account_group=logins_group
+        account_group=logins_group,
+        check_on_disk=args.forcedownload==False,
     )
     logging.info("end of function")
