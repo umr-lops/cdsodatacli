@@ -52,11 +52,6 @@ downloadFromCDS -h
 pip install -U cdsodatacli
 ```
 
-Then you can run
-
-```bash
-cdsodatacli --help
-```
 
 ## 🛡 License
 
