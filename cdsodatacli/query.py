@@ -33,8 +33,12 @@ def fetch_data(
     timedelta_slice=None,
     start_datetime=None,
     end_datetime=None,
+    prod_name=None,
+    geometry=None,
+    collection=None,
+    sensormode=None,
+    producttype=None,
     min_sea_percent=None,
-    fig=None,
     top=None,
     cache_dir=None,
     mode="seq",
@@ -43,21 +47,24 @@ def fetch_data(
     Fetches data based on provided parameters.
 
     Args:
-       gdf (GeoDataFrame): containing the geospatial data for the query.
-       geometry (list of tuples): representing the geometry.
-       collection (String): representing the collection information for filtering the data.
-       name (String): representing the name information for filtering the data.
-       sensormode (String): representing the mode of the sensor for filtering the data.
-       producttype (String): representing the type of product for filtering the data.
-       start_datetime (String): representing the starting date for the query.
-       end_datetime (String): representing the ending date for the query.
-       publication_start (String): representing the starting publication date for the query.
-       publication_end (String): representing the ending publication date for the query.
-       top (String): representing the ending publication date for the query.
-       mode (String): seq ( Sequential) or multi (multithread)
-       timedelta_slice (datetime.timedelta) : optional param to split the queries wrt time in order to avoid missing product because of the 1000 product max returned by Odata
-    Return:
-        (pd.DataFame): data containing the fetched results.
+        gdf (GeoDataFrame): GeoSpatial DataFrame containing the geospatial data for the query.
+        date (str, optional): Specific date for the query.
+        dtime (str, optional): Specific datetime for the query.
+        timedelta_slice (datetime.timedelta, optional): Time interval to split queries and avoid missing products due to the 1000 product limit returned by OData.
+        start_datetime (str, optional): Starting date for the query.
+        end_datetime (str, optional): Ending date for the query.
+        prod_name (str, optional): Prod_name information for filtering the data.
+        geometry (list of tuples, optional): List representing the geometry.
+        collection (str, optional): Collection information for filtering the data.
+        sensormode (str, optional): Mode of the sensor for filtering the data.
+        producttype (str, optional): Type of product for filtering the data.
+        min_sea_percent (float, optional): Minimum sea percentage for filtering the data.
+        top (str, optional): Ending publication date for the query.
+        cache_dir (str, optional): Directory path for caching data.
+        mode (str, optional): 'seq' (Sequential) or 'multi' (multithread).
+
+    Returns:
+        pd.DataFrame: Data containing the fetched results.
     """
     collected_data = None
     if gdf is not None and isinstance(gdf, gpd.GeoDataFrame):
@@ -69,7 +76,20 @@ def fetch_data(
             dtime=dtime,
             timedelta_slice=timedelta_slice,
         )
-        # geopd_norm.sort_index(ascending=False)
+        logging.debug(gdf_norm.keys())
+        logging.info(f"Length of input after slicing in time:{len(gdf_norm)}")
+        urls = create_urls(gdf=gdf_norm, top=top)
+    elif gdf is None:
+        gdf = gdf_create(geometry=geometry, collection=collection, prod_name=prod_name, sensormode=sensormode,
+                         producttype=producttype, start_datetime=start_datetime, end_datetime=end_datetime)
+        gdf_norm = normalize_gdf(
+            gdf=gdf,
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
+            date=date,
+            dtime=dtime,
+            timedelta_slice=timedelta_slice,
+        )
         logging.debug(gdf_norm.keys())
         logging.info(f"Length of input after slicing in time:{len(gdf_norm)}")
         urls = create_urls(gdf=gdf_norm, top=top)
@@ -96,8 +116,6 @@ def fetch_data(
         logging.info(
             "number of product after removing multipolygon: %s", len(full_data["Name"])
         )
-        if fig is not None:
-            fig(collected_data=full_data)
         if min_sea_percent is not None:
             full_data = sea_percent(
                 collected_data=full_data, min_sea_percent=min_sea_percent
@@ -114,38 +132,36 @@ def fetch_data(
 def gdf_create(
     start_datetime=None,
     end_datetime=None,
-    name=None,
+    prod_name=None,
     collection=None,
     sensormode=None,
     producttype=None,
     geometry=None,
-    publication_start=None,
-    publication_end=None,
 ):
+    """
+    return a GeoDataFrame Created from users input
+    """
     data_in = {
         "start_datetime": [None],
         "end_datetime": [None],
-        "name": [None],
+        "prod_name": [None],
         "collection": [None],
         "sensormode": [None],
         "producttype": [None],
         "geometry": [None],
-        "publication_start": [None],
-        "publication_end": [None],
     }
 
     gdf = gpd.GeoDataFrame(data_in)
-
-    if geometry is not None:
-        gdf["geometry"] = shapely.wkt.loads(geometry)
+    if prod_name is not None:
+        gdf["prod_name"] = prod_name
     if collection is not None:
         gdf["collection"] = collection
-    if name is not None:
-        gdf["name"] = name
     if sensormode is not None:
         gdf["sensormode"] = sensormode
     if producttype is not None:
         gdf["producttype"] = producttype
+    if geometry is not None:
+        gdf["geometry"] = shapely.wkt.loads(geometry)
     if start_datetime is not None:
         gdf["start_datetime"] = datetime.datetime.strptime(
             start_datetime, "%Y-%m-%d %H:%M:%S"
@@ -154,10 +170,6 @@ def gdf_create(
         gdf["end_datetime"] = datetime.datetime.strptime(
             end_datetime, "%Y-%m-%d %H:%M:%S"
         )
-    if publication_start is not None:
-        gdf["publication_start"] = publication_start
-    if publication_end is not None:
-        gdf["publication_end"] = publication_end
     return gdf
 
 
@@ -173,9 +185,15 @@ def normalize_gdf(
     start/stop date name will be 'start_datetime' and 'end_datetime'
     """
     # add the index of each rows of input gdf
-    gdf["id_original_query"] = gdf.index
+    if ("Name" in gdf
+        and not gdf["Name"].empty
+        and gdf["Name"] is not None
+    ):
+        gdf["id_original_query"] = gdf.Name
+    else:
+        gdf["id_original_query"] = gdf.index
     start_time = time.time()
-    default_cacherefreshrecent = datetime.timedelta(days=7)
+    # default_cacherefreshrecent = datetime.timedelta(days=7)
     default_timedelta_slice = datetime.timedelta(weeks=1)
     if "startdate" in gdf:
         gdf.rename(columns={"startdate": "start_datetime"}, inplace=True)
@@ -219,7 +237,7 @@ def normalize_gdf(
     for date_col in norm_gdf.select_dtypes(include=["datetime64"]).columns:
         try:
             norm_gdf[date_col] = norm_gdf[date_col].dt.tz_localize("UTC")
-            logging.debug('norm_gdf[date_col] %s',type(norm_gdf[date_col].iloc[0]))
+            logging.debug('norm_gdf[date_col] %s', type(norm_gdf[date_col].iloc[0]))
             # logger.warning("Assuming UTC date on col %s" % date_col)
         except TypeError:
             # already localized
@@ -251,7 +269,7 @@ def normalize_gdf(
         # those index will need to be time expanded
         idx_to_expand = norm_gdf.index[
             (norm_gdf["end_datetime"] - norm_gdf["start_datetime"]) > timedelta_slice
-        ]
+            ]
         # TO make sure that date does not contain future date
         if maxdate > datetime.datetime.utcnow().replace(tzinfo=pytz.UTC):
             maxdate = datetime.datetime.utcnow().replace(
@@ -270,7 +288,7 @@ def normalize_gdf(
                 gdf_slice = norm_gdf[
                     (norm_gdf["start_datetime"] >= slice_begin)
                     & (norm_gdf["end_datetime"] <= slice_end)
-                ]
+                    ]
                 # check if some slices needs to be expanded
                 # index of gdf_slice that where not grouped
                 # not_grouped_index = pd.Index(set(idx_to_expand) - set(gdf_slice.index))
@@ -283,8 +301,10 @@ def normalize_gdf(
                     earliest_end = min(norm_gdf.loc[to_expand].end_datetime, slice_end)
                     overlap = earliest_end - latest_start
                     if overlap >= datetime.timedelta(0):
+                        new_slice = gpd.GeoDataFrame(gpd.GeoDataFrame(norm_gdf.loc[to_expand]).T, geometry='geometry')
+                        new_slice.crs = gdf_slice.crs
                         gdf_slice = pd.concat(
-                            [gdf_slice, gpd.GeoDataFrame(norm_gdf.loc[to_expand]).T]
+                            [gdf_slice, new_slice]
                         )
                         gdf_slice.loc[to_expand, "start_datetime"] = latest_start
                         gdf_slice.loc[to_expand, "end_datetime"] = earliest_end
@@ -301,6 +321,9 @@ def normalize_gdf(
 
 
 def create_urls(gdf, top=None):
+    """
+    return all url created from input
+    """
     start_time = time.time()
     urlapi = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter="
     urls = []
@@ -320,7 +343,7 @@ def create_urls(gdf, top=None):
         ):
             value = str(gdf_row.geometry)
             geo_type = gdf_row.geometry.geom_type
-            coordinates_part = value[value.find("(") + 1 : value.find(")")]
+            coordinates_part = value[value.find("(") + 1: value.find(")")]
             if geo_type == "Point":
                 modified_value = f"{coordinates_part}"
                 coordinates_part = modified_value.replace(" ", "%20")
@@ -336,9 +359,9 @@ def create_urls(gdf, top=None):
             collection = gdf_row["collection"]
             params["Collection/Name eq"] = f" '{collection}'"
 
-        if "name" in gdf_row and not pd.isna(gdf_row["name"]):
-            name = gdf_row["name"]
-            params["contains"] = f"(Name,'{name}')"
+        if "prod_name" in gdf_row and not pd.isna(gdf_row["prod_name"]):
+            prod_name = gdf_row["prod_name"]
+            params["contains"] = f"(Name,'{prod_name}')"
 
         if "sensormode" in gdf_row and not pd.isna(gdf_row["sensormode"]):
             sensormode = gdf_row["sensormode"]
@@ -364,8 +387,8 @@ def create_urls(gdf, top=None):
 
         if "Attributes" in gdf_row and not pd.isna(gdf_row["Attributes"]):
             Attributes = str(gdf_row["Attributes"]).replace(" ", "")
-            Attributes_name = Attributes[0 : Attributes.find(",")]
-            Attributes_value = Attributes[Attributes.find(",") + 1 :]
+            Attributes_name = Attributes[0: Attributes.find(",")]
+            Attributes_value = Attributes[Attributes.find(",") + 1:]
             params[
                 "Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq"
             ] = f" '{Attributes_name}' and att/OData.CSC.DoubleAttribute/Value le {Attributes_value})"
@@ -383,6 +406,16 @@ def create_urls(gdf, top=None):
 
 
 def get_cache_filename(url, cache_dir=None):
+    """
+    Generates a cache filename based on the provided URL and cache directory.
+
+    Args:
+        url (str): The URL for which to generate the cache filename.
+        cache_dir (str, optional): Directory path for caching. If not provided, the cache filename will be generated without a specific directory.
+
+    Returns:
+        str: The cache filename, incorporating the hash of the URL and the '.json' extension.
+    """
     url_hash = hashlib.md5(url.encode("utf-8")).hexdigest()
     return os.path.join(cache_dir, url_hash + ".json")
 
@@ -405,6 +438,7 @@ def fetch_one_url(url, cpt, index, cache_dir):
     """
     json_data = None
     collected_data = None
+    url_ko = None
     if cache_dir is not None:
         cache_file = get_cache_filename(url, cache_dir)
         if os.path.exists(cache_file):
@@ -413,6 +447,7 @@ def fetch_one_url(url, cpt, index, cache_dir):
             with open(cache_file, "r") as f:
                 json_data = json.load(f)
                 collected_data = process_data(json_data)
+                collected_data["id_original_query"] = index
     if (
         json_data is None
     ):  # means that cache cannot be used (or user used cache_dir=None or there is no associated json file
@@ -425,6 +460,7 @@ def fetch_one_url(url, cpt, index, cache_dir):
             raise ("keyboard interrupt")
         except:
             cpt["urls_KO"] += 1
+            url_ko = (index, url)
             logging.error(
                 "impossible to get data from CDSfor query: %s: %s",
                 url,
@@ -451,7 +487,7 @@ def fetch_one_url(url, cpt, index, cache_dir):
                         cpt["nodata_answer"] += 1
                 else:
                     cpt["empty_answer"] += 1
-    return cpt, collected_data
+    return cpt, collected_data, url_ko
 
 
 def fetch_data_from_urls_sequential(urls, cache_dir) -> pd.DataFrame:
@@ -470,6 +506,7 @@ def fetch_data_from_urls_sequential(urls, cache_dir) -> pd.DataFrame:
     start_time = time.time()
     collected_data_x = []
     collected_data_final = None
+    all_url_ko = []
     if cache_dir is not None:
         if not os.path.exists(cache_dir):
             logging.info("mkdir cache dir: %s", cache_dir)
@@ -477,12 +514,25 @@ def fetch_data_from_urls_sequential(urls, cache_dir) -> pd.DataFrame:
     # with tqdm(total=len(urls)) as pbar:
     for ii in tqdm(range(len(urls))):
         # for url in urls:
-        url = urls[ii][1]
         index = urls[ii][0]
-        cpt, collected_data = fetch_one_url(url, cpt, index, cache_dir=cache_dir)
+        url = urls[ii][1]
+        cpt, collected_data, url_ko = fetch_one_url(url, cpt, index, cache_dir=cache_dir)
+        if url_ko is not None:
+            all_url_ko.append(url_ko)
         if collected_data is not None:
             if not collected_data.empty:
                 collected_data_x.append(collected_data)
+    # processing all failed urls
+    if len(all_url_ko) > 0:
+        logging.info(f"retry no result urls:%", len(all_url_ko))
+        for ik in tqdm(range(len(all_url_ko))):
+            index = all_url_ko[ik][0]
+            url = all_url_ko[ik][1]
+            cpt, collected_data, url_ko = fetch_one_url(url, cpt, index, cache_dir=cache_dir)
+            all_url_ko.append(url_ko)
+            if collected_data is not None:
+                if not collected_data.empty:
+                    collected_data_x.append(collected_data)
     if len(collected_data_x) > 0:
         collected_data_final = pd.concat(collected_data_x)
     end_time = time.time()
@@ -505,8 +555,10 @@ def fetch_data_from_urls_multithread(urls, cache_dir=None, max_workers=50):
     -------
 
     """
-    collected_data = pd.DataFrame()
+    collected_data_final = None
     cpt = defaultdict(int)
+    collected_data_x = []
+    all_url_ko = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor, tqdm(
         total=len(urls)
     ) as pbar:
@@ -514,19 +566,35 @@ def fetch_data_from_urls_multithread(urls, cache_dir=None, max_workers=50):
         # url[0] is index of original gdf
         future_to_url = {
             executor.submit(fetch_one_url, url[1], cpt, url[0], cache_dir): (
-                url[0],
                 url[1],
+                url[0],
             )
             for url in urls
         }
         for future in as_completed(future_to_url):
-            cpt, df = future.result()
+            cpt, df, url_ko = future.result()
+            if url_ko is not None:
+                all_url_ko.append(url_ko)
             if df is not None:
                 if not df.empty:
-                    collected_data = pd.concat([collected_data, df])
+                    collected_data_x.append(df)
             pbar.update(1)
+    # processing all failed urls
+    if len(all_url_ko) > 0:
+        logging.info(f"retry no result urls:%", len(all_url_ko))
+        for ik in tqdm(range(len(all_url_ko))):
+            index = all_url_ko[ik][0]
+            url = all_url_ko[ik][1]
+            cpt, collected_data, url_ko = fetch_one_url(url, cpt, index, cache_dir=cache_dir)
+            all_url_ko.append(url_ko)
+            if collected_data is not None:
+                if not collected_data.empty:
+                    collected_data_x.append(collected_data)
+    if len(collected_data_x) > 0:
+        collected_data_final = pd.concat(collected_data_x)
     logging.info("counter: %s", cpt)
-    return collected_data
+    # logging.info("no result urls: %s", all_url_ko)
+    return collected_data_final
 
 
 # def fetch_url(url):
@@ -574,6 +642,15 @@ def remove_duplicates(safes_ori):
 
 
 def multy_to_poly(collected_data=None):
+    """
+    Converts MultiPolygon geometries in the provided GeoDataFrame to Polygons.
+
+    Args:
+        collected_data (GeoDataFrame): GeoSpatial DataFrame containing MultiPolygon geometries in the 'Footprint' column.
+
+    Returns:
+        GeoDataFrame: Updated GeoDataFrame with 'geometry' column containing Polygons instead of MultiPolygons.
+    """
     start_time = time.time()
     collected_data["geometry"] = (
         collected_data["Footprint"].str.split(";", expand=True)[1].str.strip().str[:-1]
@@ -582,13 +659,10 @@ def multy_to_poly(collected_data=None):
     collected_data = gpd.GeoDataFrame(
         collected_data, geometry="geometry", crs="EPSG:4326"
     )
-    collected_data["geometry"] = collected_data["geometry"].apply(
-        lambda geo: unary_union(geo.geoms) if geo.geom_type == "MultiPolygon" else geo
-    )
+    collected_data["geometry"] = collected_data["geometry"].buffer(0)
     collected_data = gpd.GeoDataFrame(
         collected_data, geometry="geometry", crs="EPSG:4326"
     )
-    collected_data.dropna(subset=["Id"], inplace=True)
     end_time = time.time()
     processing_time = end_time - start_time
     logging.info(f"multi_to_poly processing time:{processing_time}s")
@@ -612,7 +686,7 @@ def sea_percent(collected_data, min_sea_percent=None):
     earth = GeometryCollection(
         list(gpd.read_file(gpd.datasets.get_path("naturalearth_lowres")).geometry)
     ).buffer(0)
-
+    collected_data.to_crs(crs="EPSG:4326")
     sea_percentage = (
         (
             collected_data.geometry.area
