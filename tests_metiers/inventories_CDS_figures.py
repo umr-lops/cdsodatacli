@@ -297,6 +297,7 @@ def volume_per_year(collected_data_norm, title,freq = "AS"):
     cptu = 0
     for unit in ["S1A", "S1B"]:
         for pol in ["1SDV", "1SSV", "1SSH", "1SDH", "2SDV", "2SSV", "2SSH", "2SDH"]:
+
             subset = collected_data_norm[
                 (collected_data_norm["Name"].str.contains(unit))
                 & (collected_data_norm["Name"].str.contains(pol))

@@ -14,6 +14,7 @@ from shapely.geometry import (
     Polygon,
     MultiPolygon,
 )
+from shapely import wkt
 import geopandas as gpd
 import shapely
 from shapely.ops import unary_union
@@ -24,6 +25,83 @@ from tqdm import tqdm
 from collections import defaultdict
 import traceback
 import warnings
+
+DEFAULT_TOP_ROWS_PER_QUERY = 1000
+
+
+def query_client():
+    """
+
+    Returns
+    -------
+        result_query (pd.DataFrame): containing columns (footprint, Name, Id, original_query_id, ...)
+    """
+    root = logging.getLogger()
+    if root.handlers:
+        for handler in root.handlers:
+            root.removeHandler(handler)
+
+    import argparse
+
+    parser = argparse.ArgumentParser(description="query-CDSE-OData")
+    parser.add_argument("--verbose", action="store_true", default=False)
+    parser.add_argument(
+        "--collection",
+        required=False,
+        default="SENTINEL-1",
+        help="SENTINEL-1 or SENTINEL-2 ...",
+    )
+    parser.add_argument("--startdate", required=True, help=" YYYYMMDDTHH:MM:SS")
+    parser.add_argument("--stopdate", required=True, help=" YYYYMMDDTHH:MM:SS")
+    parser.add_argument("--mode", choices=["EW", "IW", "WV", "SM"])
+    parser.add_argument("--product", choices=["GRD", "SLC", "RAW", "OCN"])
+    parser.add_argument("--querymode", choices=["seq", "multi"])
+    parser.add_argument(
+        "--geometry",
+        required=False,
+        default=None,
+        help=" [optional, default=None -> global query] example: POINT (-5.02 48.4) or  POLYGON ((-12 35, 15 35, 15 58, -12 58, -12 35))",
+    )
+    args = parser.parse_args()
+    fmt = "%(asctime)s %(levelname)s %(filename)s(%(lineno)d) %(message)s"
+    if args.verbose:
+        logging.basicConfig(
+            level=logging.DEBUG, format=fmt, datefmt="%d/%m/%Y %H:%M:%S", force=True
+        )
+    else:
+        logging.basicConfig(
+            level=logging.INFO, format=fmt, datefmt="%d/%m/%Y %H:%M:%S", force=True
+        )
+    t0 = time.time()
+    sta = datetime.datetime.strptime(args.startdate, "%Y%m%dT%H:%M:%S")
+    sto = datetime.datetime.strptime(args.stopdate, "%Y%m%dT%H:%M:%S")
+    gdf = gpd.GeoDataFrame(
+        {
+            "start_datetime": [sta],
+            "end_datetime": [sto],
+            "geometry": [wkt.loads(args.geometry)],
+            "collection": [args.collection],
+            "name": [None],
+            "sensormode": [args.mode],
+            "producttype": [args.product],
+            "Attributes": [None],
+        }
+    )
+    result_query = fetch_data(
+        gdf,
+        date=None,
+        dtime=None,
+        timedelta_slice=datetime.timedelta(days=14),
+        start_datetime=None,
+        end_datetime=None,
+        min_sea_percent=None,
+        fig=None,
+        top=None,
+        cache_dir=None,
+        mode=args.querymode,
+    )
+    logging.info('time to query : %1.1f sec',time.time()-t0)
+    return result_query
 
 
 def fetch_data(
@@ -328,7 +406,7 @@ def create_urls(gdf, top=None):
     urlapi = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter="
     urls = []
     if top is None:
-        top = 1000
+        top = DEFAULT_TOP_ROWS_PER_QUERY
     for row in range(len(gdf)):
         gdf_row = gdf.iloc[row]
         # enter_index = gdf.index[row]
@@ -480,6 +558,12 @@ def fetch_one_url(url, cpt, index, cache_dir):
                         # collected_data_x.append(collected_data)
                         cpt["product_proposed_by_CDS"] += len(collected_data["Name"])
                         collected_data["id_original_query"] = index
+                        if len(collected_data) == DEFAULT_TOP_ROWS_PER_QUERY:
+                            logging.warning(
+                                "%i products found in a single CDSE OData query (maximum is %s): make sure the timedelta_slice parameters is small enough to avoid truncated results",
+                                len(collected_data),
+                                DEFAULT_TOP_ROWS_PER_QUERY,
+                            )
                         if pd.isna(collected_data["Name"]).any():
                             raise Exception("Name field contains NaN")
                         cpt["answer_append"] += 1
