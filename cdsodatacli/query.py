@@ -200,6 +200,7 @@ def gdf_create(
     publication_start=None,
     publication_end=None,
 ):
+
     data_in = {
         "start_datetime": [None],
         "end_datetime": [None],
