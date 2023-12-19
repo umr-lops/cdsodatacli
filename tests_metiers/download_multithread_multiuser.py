@@ -7,7 +7,11 @@ import pandas as pd
 import logging
 import os
 import cdsodatacli
-from cdsodatacli.download import download_list_product_multithread_v2
+from cdsodatacli.download import (
+    download_list_product_multithread_v2,
+    test_listing_content,
+    add_missing_cdse_hash_ids_in_listing
+)
 from cdsodatacli.utils import conf
 
 # listing = './example_WV_listing.txt'
@@ -27,8 +31,12 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="highleveltest-fetch_OCN_WV_IDs")
     parser.add_argument("--verbose", action="store_true", default=False)
-    parser.add_argument("--forcedownload", action="store_true", default=False,
-                        help='True -> no test of existence of the products in spool and archive directories.')
+    parser.add_argument(
+        "--forcedownload",
+        action="store_true",
+        default=False,
+        help="True -> no test of existence of the products in spool and archive directories.",
+    )
     parser.add_argument(
         "--logingroup",
         help="name of the group of CDSE account in the localconfig.yml [default=logins]",
@@ -64,7 +72,10 @@ if __name__ == "__main__":
     logins_group = args.logingroup
     logging.info("logins_group : %s", len(conf[logins_group]))
     outputdir = args.outputdir
-    inputdf = pd.read_csv(listing, names=["id", "safename"], delimiter=",")
+    if test_listing_content(listing_path=listing):
+        inputdf = pd.read_csv(listing, names=["id", "safename"], delimiter=",")
+    else:
+        inputdf = add_missing_cdse_hash_ids_in_listing(listing_path=listing)
     if not os.path.exists(outputdir):
         logging.debug("mkdir on %s", outputdir)
         os.makedirs(outputdir, 0o0775)
@@ -74,6 +85,6 @@ if __name__ == "__main__":
         outputdir=outputdir,
         hideProgressBar=False,
         account_group=logins_group,
-        check_on_disk=args.forcedownload==False,
+        check_on_disk=args.forcedownload == False,
     )
     logging.info("end of function")
