@@ -8,6 +8,7 @@ import os
 import shutil
 import random
 import pandas as pd
+import geopandas as gpd
 from requests.exceptions import ChunkedEncodingError
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
@@ -24,7 +25,9 @@ from cdsodatacli.session import (
     get_sessions_download_available,
     MAX_SESSION_PER_ACCOUNT,
 )
+from cdsodatacli.query import fetch_data
 from cdsodatacli.utils import conf, test_safe_archive, test_safe_spool
+from cdsodatacli.product_parser import ExplodeSAFE
 from collections import defaultdict
 
 # chunksize = 4096
@@ -132,13 +135,13 @@ def CDS_Odata_download_one_product_v2(
     if status == 200:  # means OK download
         speed = total_length / elapsed_time
         shutil.move(output_filepath_tmp, output_filepath)
-        os.chmod(output_filepath,mode=0o0775)
+        os.chmod(output_filepath, mode=0o0775)
     logging.debug("time to download this product: %1.1f sec", elapsed_time)
     logging.debug("average download speed: %1.1fMo/sec", speed)
     return speed, status_meaning, safename_base, semaphore_token_file
 
 
-def filter_product_already_present(cpt, df, outputdir,force_download=False):
+def filter_product_already_present(cpt, df, outputdir, force_download=False):
     """
 
     Parameters
@@ -187,7 +190,6 @@ def filter_product_already_present(cpt, df, outputdir,force_download=False):
     return df_todownload, cpt
 
 
-
 def download_list_product_multithread_v2(
     list_id,
     list_safename,
@@ -224,7 +226,9 @@ def download_list_product_multithread_v2(
         {"safe": list_safename, "status": np.zeros(len(list_safename)), "id": list_id}
     )
 
-    df2, cpt = filter_product_already_present(cpt, df, outputdir,force_download=check_on_disk==False)
+    df2, cpt = filter_product_already_present(
+        cpt, df, outputdir, force_download=check_on_disk == False
+    )
 
     logging.info("%s", cpt)
     while_loop = 0
@@ -467,6 +471,74 @@ def download_list_product(
             np.mean(all_speeds),
             np.std(all_speeds),
         )
+
+
+def test_listing_content(listing_path):
+    """
+    make sure that a lsiting of products to download respect the following format:
+        cdse-hash-id,safename
+    Arguments:
+    ---------
+        listing_path (str):
+    Returns
+    -------
+
+    """
+    fid = open(listing_path)
+    first_line = fid.readline()
+    listing_OK = False
+    if "," in first_line:
+        if "SAFE" in first_line.split(",")[1] and "S" in first_line.split(",")[1][0]:
+            listing_OK = True
+    return listing_OK
+
+
+def add_missing_cdse_hash_ids_in_listing(listing_path):
+    """
+
+    Parameters
+    ----------
+    listing_path (str):
+
+    Returns
+    -------
+
+    """
+    df_raw = pd.read_csv(listing_path, names=["safenames"])
+    list_safe_a = df_raw["safenames"].values
+
+    delta = datetime.timedelta(seconds=1)
+    gdf = gpd.GeoDataFrame(
+        {
+            # "start_datetime" : [ None  ],
+            # "end_datetime"   : [ None ],
+            "start_datetime": [ExplodeSAFE(jj).startdate - delta for jj in list_safe_a],
+            "end_datetime": [ExplodeSAFE(jj).enddate - delta for jj in list_safe_a],
+            # "start_datetime": [
+            #     datetime.datetime.strptime(jj.split("_")[5], "%Y%m%dT%H%M%S") - delta
+            #     for jj in list_safe_a
+            # ],
+            # "end_datetime": [
+            #     datetime.datetime.strptime(jj.split("_")[6], "%Y%m%dT%H%M%S") + delta
+            #     for jj in list_safe_a
+            # ],
+            "geometry": np.tile([None], len(list_safe_a)),
+            "collection": np.tile(["SENTINEL-1"], len(list_safe_a)),
+            "name": list_safe_a,
+            "sensormode": [ExplodeSAFE(jj).mode for jj in list_safe_a],
+            "producttype": [ExplodeSAFE(jj).product[0:3] for jj in list_safe_a],
+            "Attributes": np.tile([None], len(list_safe_a)),
+        }
+    )
+    sea_min_pct = 0
+    collected_data_norm = fetch_data(gdf, min_sea_percent=sea_min_pct)
+    if collected_data_norm is None:
+        res = pd.DataFrame({"id": [], "safename": []})
+    else:
+        res = collected_data_norm[["Id", "Name"]]
+        res.rename(columns={"Name": "safename"},inplace=True)
+        res.rename(columns={"Id": "id"},inplace=True)
+    return res
 
 
 def download_list_product_sequential(
