@@ -22,7 +22,7 @@ gdf = gpd.GeoDataFrame({
             "name"        : [ None],
             "sensormode"  : [ None],
             "producttype" : [ None],
-            "Attributes"  : [ None],
+            "max_cloud_percent"  : [ None],
         })
 query_name_dfd = qr.fetch_data(gdf=gdf, top=1000)
 
@@ -37,7 +37,7 @@ gdf = gpd.GeoDataFrame({
             "name"        : [ None],
             "sensormode"  : [ None],
             "producttype" : [ None],
-            "Attributes"  : [ None],
+            "max_cloud_percent"  : [ None],
         })
 query_geographic_name = qr.fetch_data(gdf=gdf, top=1000)
 
@@ -52,7 +52,7 @@ gdf = gpd.GeoDataFrame({
             "name"        : [ None],
             "sensormode"  : [ None],
             "producttype" : [ None],
-            "Attributes"  : [ 'cloudCover,40'],
+            "max_cloud_percent"  : [ 40 ],
         })
 query_cloudCover_df = qr.fetch_data(gdf=gdf, top=1000)
 @pytest.mark.parametrize(

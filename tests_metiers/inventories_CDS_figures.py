@@ -55,9 +55,9 @@ def map_footprints(geometry_request, collected_data_norm, title):
     plt.title(title)
     plt.show()
     logging.info("counter: %s", cpt)
-    print(
-        "cpt_multipolygon", cpt_multipolygon, "/", len(collected_data_norm["geometry"])
-    )
+    # print(
+    #     "cpt_multipolygon", cpt_multipolygon, "/", len(collected_data_norm["geometry"])
+    # )
 
 
 def histogram_ocean_coverage(collected_data_norm, title):
@@ -109,7 +109,7 @@ def number_product_per_month(collected_data_norm, title):
     )
     plt.figure(figsize=(15, 6), dpi=110)
     for unit in ["S1A", "S1B"]:
-        for pol in ["1SDV", "1SSV", "1SSH", "1SDH"]:
+        for pol in ["1SDV", "1SSV", "1SSH", "1SDH", "2SDV", "2SSV", "2SSH", "2SDH"]:
             subset = collected_data_norm[
                 (collected_data_norm["Name"].str.contains(unit))
                 & (collected_data_norm["Name"].str.contains(pol))
@@ -140,7 +140,7 @@ def number_product_per_month(collected_data_norm, title):
     plt.yticks(fontsize=18)
     plt.xticks(fontsize=18,rotation=45)
     plt.xlim(ix[0],ix[-1])
-    plt.ylabel("Number of IW SLC products available\nstacked histogram", fontsize=17)
+    plt.ylabel("Number of IW OCN products available\nstacked histogram", fontsize=17)
     plt.show()
 
 
@@ -148,7 +148,8 @@ def number_of_product_per_climato_month(collected_data_norm, title):
     collected_data_norm = add_time_index_based_onstardtate(collected_data_norm)
     plt.figure(figsize=(13, 6), dpi=110)
     for unit in ["S1A", "S1B"]:
-        for pol in ["1SDV", "1SSV", "1SSH", "1SDH"]:
+        # for pol in ["1SDV", "1SSV", "1SSH", "1SDH"]:
+        for pol in ["1SDV", "1SSV", "1SSH", "1SDH", "2SDV", "2SSV", "2SSH", "2SDH"]:
             subset = collected_data_norm[
                 (collected_data_norm["Name"].str.contains(unit))
                 & (collected_data_norm["Name"].str.contains(pol))
@@ -243,7 +244,7 @@ def number_of_product_per_year_asc_desc(collected_data_norm, title):
     plt.title(title, fontsize=18)
     plt.yticks(fontsize=12)
     plt.xticks(fontsize=12)
-    plt.ylabel("Number of IW SLC products available\nstacked histogram", fontsize=15)
+    plt.ylabel("Number of IW OCN products available\nstacked histogram", fontsize=15)
     plt.show()
 
 
@@ -255,10 +256,14 @@ def add_volumetry_column(collected_data_norm):
     """
     vols = []
     for kk in collected_data_norm["Name"]:
-        if "EW" in kk or "WV" in kk:
-            raise Exception("mode no configured")
-        if "1SDV" in kk or "1SDH" in kk:
-            vols.append(7.8/1000.)
+        if "EW" in kk and "OCN" in kk:
+            vols.append(37. / 1000.)
+        elif "EW" in kk and "SLC" in kk:
+            vols.append(3.7 / 1.)
+        # if "1SDV" in kk or "1SDH" in kk:
+        #     vols.append(7.8/1000.)
+        elif "IW" in kk and "OCN" in kk:
+            vols.append(15. / 1000.)
         else:
             vols.append(3.8/1000.)
     collected_data_norm["volume"] = vols
@@ -291,7 +296,8 @@ def volume_per_year(collected_data_norm, title,freq = "AS"):
     )
     cptu = 0
     for unit in ["S1A", "S1B"]:
-        for pol in ["1SDV", "1SSV", "1SSH", "1SDH"]:
+        for pol in ["1SDV", "1SSV", "1SSH", "1SDH", "2SDV", "2SSV", "2SSH", "2SDH"]:
+
             subset = collected_data_norm[
                 (collected_data_norm["Name"].str.contains(unit))
                 & (collected_data_norm["Name"].str.contains(pol))
@@ -304,7 +310,7 @@ def volume_per_year(collected_data_norm, title,freq = "AS"):
                     grp.index,
                     grp,
                     width=width,
-                    label="%s %s: %s products volume: %1.1f To"
+                    label="%s %s: %s products volume: %1.1f Go"
                     % (unit, pol, len(subset), subset.sum()),
                     bottom=cummul_grp,
                     edgecolor="k",
@@ -322,7 +328,7 @@ def volume_per_year(collected_data_norm, title,freq = "AS"):
     plt.yticks(fontsize=12)
     plt.xticks(fontsize=12)
     plt.ylabel(
-        "Volume of IW SLC products available [GigaOctet]\nstacked histogram",
+        "Volume of IW OCN products available [GigaOctet]\nstacked histogram",
         fontsize=15,
     )
     plt.show()
@@ -335,7 +341,7 @@ def volume_wrt_sea_percent(collected_data_norm, title):
 
     plt.figure(dpi=120)
     cummul_grp = np.zeros(len(sea_perc))
-    for pol in ["1SDV", "1SSV", "1SSH", "1SDH"]:
+    for pol in ["1SDV", "1SSV", "1SSH", "1SDH", "2SDV", "2SSV", "2SSH", "2SDH"]:
         total_volumes = []
         subset = collected_data_norm[(collected_data_norm["Name"].str.contains(pol))]
         for seap in sea_perc:
@@ -358,7 +364,7 @@ def volume_wrt_sea_percent(collected_data_norm, title):
     plt.title(title)
 
     plt.xlabel("minimum % of ocean in the footprint")
-    plt.ylabel("total volume of the S-1 product considered [To]")
+    plt.ylabel("total volume of the S-1 product considered [Go]")
     plt.grid(True)
     plt.legend()
     plt.show()
