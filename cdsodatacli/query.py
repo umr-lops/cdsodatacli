@@ -5,6 +5,7 @@ import json
 import hashlib
 import requests
 import pandas as pd
+import argparse
 from shapely.geometry import (
     GeometryCollection,
     Polygon,
@@ -35,8 +36,6 @@ def query_client():
         for handler in root.handlers:
             root.removeHandler(handler)
 
-    import argparse
-
     parser = argparse.ArgumentParser(description="query-CDSE-OData")
     parser.add_argument("--verbose", action="store_true", default=False)
     parser.add_argument(
@@ -54,8 +53,7 @@ def query_client():
         "--geometry",
         required=False,
         default=None,
-        help="[optional, default=None -> global query] example: POINT (-5.02 48.4) or  POLYGON ((-12 35, 15 35, "
-             "15 58, -12 58, -12 35))",
+        help="[optional, default=None -> global query] example: POINT (-5.02 48.4) or  POLYGON ((-12 35, 15 35, 15 58, -12 58, -12 35))",
     )
     args = parser.parse_args()
     fmt = "%(asctime)s %(levelname)s %(filename)s(%(lineno)d) %(message)s"
@@ -413,15 +411,13 @@ def create_urls(gdf, top=None):
         if "sensormode" in gdf_row and not pd.isna(gdf_row["sensormode"]):
             sensormode = gdf_row["sensormode"]
             params[
-                ("Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'operationalMode' and "
-                 "att/OData.CSC.StringAttribute/Value eq")
+                ("Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'operationalMode' and att/OData.CSC.StringAttribute/Value eq")
             ] = f" '{sensormode}')"
 
         if "producttype" in gdf_row and not pd.isna(gdf_row["producttype"]):
             producttype = gdf_row["producttype"]
             params[
-                ("Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and "
-                 "att/OData.CSC.StringAttribute/Value eq")
+                ("Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq")
             ] = f" '{producttype}')"
 
         if "start_datetime" in gdf_row and not pd.isna(gdf_row["start_datetime"]):
@@ -438,8 +434,7 @@ def create_urls(gdf, top=None):
             max_cloud_percent = float(gdf_row["max_cloud_percent"])
             max_cloud_percent = "{:.2f}".format(max_cloud_percent)
             params[
-                ("Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq 'cloudCover' and "
-                 "att/OData.CSC.DoubleAttribute/Value lt")
+                ("Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq 'cloudCover' and att/OData.CSC.DoubleAttribute/Value lt")
             ] = f" {max_cloud_percent})"
 
         str_query = " and ".join([f"{key}{value}" for key, value in params.items()])
