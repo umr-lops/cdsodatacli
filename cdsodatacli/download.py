@@ -1,4 +1,6 @@
 import pdb
+import subprocess
+
 import requests
 import logging
 from tqdm import tqdm
@@ -134,7 +136,9 @@ def CDS_Odata_download_one_product_v2(
     elapsed_time = time.time() - t0
     if status == 200:  # means OK download
         speed = total_length / elapsed_time
-        shutil.move(output_filepath_tmp, output_filepath)
+        # shutil.move(output_filepath_tmp, output_filepath)
+        status = subprocess.check_output('mv '+output_filepath_tmp+' '+output_filepath,shell=True)
+        logging.debug('move status: %s',status)
         os.chmod(output_filepath, mode=0o0775)
     logging.debug("time to download this product: %1.1f sec", elapsed_time)
     logging.debug("average download speed: %1.1fMo/sec", speed)
