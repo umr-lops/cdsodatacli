@@ -47,10 +47,10 @@ def map_footprints(geometry_request, collected_data_norm, title):
                 cpt["unary_union_not_sufficient"] += 1
                 pass
                 # print('unaryunion passe pas')
-        elif uu.geom_type=='Polygon':
+        elif uu.geom_type == "Polygon":
             plt.plot(*uu.exterior.xy, "b--", lw=0.7, alpha=0.8)
         else:
-            print('strange geometry',uu)
+            print("strange geometry", uu)
     # plt.title('Sentinel-1 IW SLC available products %s since 2014'%(len(collected_data_norm['Name'])),fontsize=22)
     plt.title(title)
     plt.show()
@@ -138,8 +138,8 @@ def number_product_per_month(collected_data_norm, title):
     plt.grid(True)
     plt.title(title, fontsize=18)
     plt.yticks(fontsize=18)
-    plt.xticks(fontsize=18,rotation=45)
-    plt.xlim(ix[0],ix[-1])
+    plt.xticks(fontsize=18, rotation=45)
+    plt.xlim(ix[0], ix[-1])
     plt.ylabel("Number of IW SLC products available\nstacked histogram", fontsize=17)
     plt.show()
 
@@ -163,7 +163,7 @@ def number_of_product_per_climato_month(collected_data_norm, title):
                     markeredgecolor="k",
                     lw=0.7,
                 )
-    plt.legend(fontsize=15,bbox_to_anchor=(1,1))
+    plt.legend(fontsize=15, bbox_to_anchor=(1, 1))
     plt.grid(True)
     plt.title(title, fontsize=18)
     plt.yticks(fontsize=18)
@@ -238,7 +238,7 @@ def number_of_product_per_year_asc_desc(collected_data_norm, title):
                 cummul_grp += grp["Name"].fillna(0)
             # print('cummul_grp',cummul_grp)
             cptu += 1
-    plt.legend(fontsize=12, bbox_to_anchor=(1,1))
+    plt.legend(fontsize=12, bbox_to_anchor=(1, 1))
     plt.grid(True)
     plt.title(title, fontsize=18)
     plt.yticks(fontsize=12)
@@ -255,17 +255,25 @@ def add_volumetry_column(collected_data_norm):
     """
     vols = []
     for kk in collected_data_norm["Name"]:
-        if "EW" in kk or "WV" in kk:
-            raise Exception("mode no configured")
-        if "1SDV" in kk or "1SDH" in kk:
-            vols.append(7.8/1000.)
+        if "EW" in kk and "OCN" in kk:
+            vols.append(37.0 / 1000.0)
+        elif "EW" in kk and "SLC" in kk:
+            vols.append(3.7 / 1.0)
+        elif "IW" in kk and "OCN" in kk:
+            vols.append(15.0 / 1000.0)
         else:
-            vols.append(3.8/1000.)
+            vols.append(3.8 / 1000.0)
+        # if "EW" in kk or "WV" in kk:
+        #     raise Exception("mode no configured")
+        # if "1SDV" in kk or "1SDH" in kk:
+        #     vols.append(7.8 / 1000.0)
+        # else:
+        #     vols.append(3.8 / 1000.0)
     collected_data_norm["volume"] = vols
     return collected_data_norm
 
 
-def volume_per_year(collected_data_norm, title,freq = "AS"):
+def volume_per_year(collected_data_norm, title, freq="AS"):
     """
 
     :param collected_data_norm:
@@ -277,7 +285,7 @@ def volume_per_year(collected_data_norm, title,freq = "AS"):
     collected_data_norm = add_time_index_based_onstardtate(collected_data_norm)
     plt.figure(figsize=(10, 6), dpi=110)
     cummul_grp = None
-      # not Y because anchored date is offset to year+1
+    # not Y because anchored date is offset to year+1
     # freq = "M"  # for a test
     if freq == "AS":
         width = 300
@@ -323,6 +331,173 @@ def volume_per_year(collected_data_norm, title,freq = "AS"):
     plt.xticks(fontsize=12)
     plt.ylabel(
         "Volume of IW SLC products available [GigaOctet]\nstacked histogram",
+        fontsize=15,
+    )
+    plt.show()
+
+
+def count_per_year_with_labels(collected_data_norm, title, freq="AS"):
+    """
+
+    :param collected_data_norm:
+    :param title:
+    :param freq: AS is for yearly grouping with anchor at the start of the year
+    :return:
+    """
+    collected_data_norm = add_volumetry_column(collected_data_norm)
+    collected_data_norm = add_time_index_based_onstardtate(collected_data_norm)
+    plt.figure(figsize=(10, 6), dpi=110)
+    cummul_grp = None
+    # not Y because anchored date is offset to year+1
+    # freq = "M"  # for a test
+    if freq == "AS":
+        width = 365
+    elif freq == "M":
+        width = 30
+
+    ix = pd.date_range(
+        start=datetime.datetime(2013, 1, 1),
+        end=datetime.datetime(2024, 1, 1),
+        freq=freq,
+    )
+    cptu = 0
+
+    newdf_per_class_double_entries = {}
+    years = []
+    newdf_per_class_double_entries["1SDV"] = []
+    newdf_per_class_double_entries["1SSV"] = []
+    newdf_per_class_double_entries["1SSH"] = []
+    newdf_per_class_double_entries["1SDH"] = []
+    # newdf_per_class_double_entries["pola"] = []
+    # print('test',collected_data_norm["Name"])
+    for year in range(2014, 2024):
+        years.append(year)
+        for pol in ["1SDV", "1SSV", "1SSH", "1SDH"]:
+            subset = collected_data_norm[
+                (
+                    collected_data_norm["Name"].str.contains(pol + "_" + str(year))
+                )  # & (collected_data_norm["Name"].str.contains(pol))
+            ]
+            # print(subset)
+            # subset = subset["volume"]
+            countsafe = subset["Name"].count()
+            # grp = subset.groupby(pd.Grouper(freq=freq)).sum()
+            # grp = grp.reindex(ix)
+            # if countsafe > 0:
+
+            newdf_per_class_double_entries["%s" % pol].append(countsafe)
+            # newdf_per_class_double_entries["pola"] = pol
+    print("dict ", newdf_per_class_double_entries)
+    newdf = pd.DataFrame(newdf_per_class_double_entries, index=years)
+    print("newdf", newdf)
+    ax = newdf.plot(
+        kind="bar", stacked=True, figsize=(8, 6), rot=0, xlabel="year", ylabel="Count"
+    )
+    for c in ax.containers:
+
+        # Optional: if the segment is small or 0, customize the labels
+        labels = [v.get_height() if v.get_height() > 0 else "" for v in c]
+
+        # remove the labels parameter if it's not needed for customized labels
+        ax.bar_label(c, labels=labels, label_type="center")
+    plt.legend(fontsize=10, loc=2)
+    plt.grid(True)
+    plt.title(title, fontsize=18)
+    plt.yticks(fontsize=12)
+    plt.xticks(fontsize=12)
+    plt.ylabel(
+        "Count IW SLC products available \nstacked histogram",
+        fontsize=15,
+    )
+    plt.show()
+
+
+def count_per_year_with_labels_unit(
+    collected_data_norm,
+    title,
+    freq="AS",
+    yearmin=2013,
+    yearmax=2024,
+    addlegendonlyifcountnotnull=True,
+):
+    """
+
+    :param collected_data_norm:
+    :param title:
+    :param freq: AS is for yearly grouping with anchor at the start of the year
+    :return:
+    """
+    collected_data_norm = add_volumetry_column(collected_data_norm)
+    collected_data_norm = add_time_index_based_onstardtate(collected_data_norm)
+    plt.figure(figsize=(10, 6), dpi=110)
+    cummul_grp = None
+    # not Y because anchored date is offset to year+1
+    # freq = "M"  # for a test
+    if freq == "AS":
+        width = 365
+    elif freq == "M":
+        width = 30
+    newdf_per_class_double_entries = {}
+    years = []
+    for year in range(yearmin, yearmax + 1):
+        years.append(year)
+        for sarunit in ["S1A", "S1B"]:
+            for pol in ["1SDV", "1SSV", "1SSH", "1SDH"]:
+
+                subset = collected_data_norm[
+                    (collected_data_norm["Name"].str.contains(pol + "_" + str(year)))
+                    & (collected_data_norm["Name"].str.contains(sarunit))  #
+                ]
+                # print(subset)
+                # subset = subset["volume"]
+                countsafe = subset["Name"].count()
+                # grp = subset.groupby(pd.Grouper(freq=freq)).sum()
+                # grp = grp.reindex(ix)
+                # if countsafe > 0:
+                if addlegendonlyifcountnotnull:
+                    if countsafe > 0:
+                        if sarunit + "_" + pol not in newdf_per_class_double_entries:
+                            newdf_per_class_double_entries[
+                                "%s" % (sarunit + "_" + pol)
+                            ] = []
+                        newdf_per_class_double_entries[
+                            "%s" % (sarunit + "_" + pol)
+                        ].append(countsafe)
+                else:
+                    if sarunit + "_" + pol not in newdf_per_class_double_entries:
+                        newdf_per_class_double_entries[
+                            "%s" % (sarunit + "_" + pol)
+                        ] = []
+                    newdf_per_class_double_entries["%s" % (sarunit + "_" + pol)].append(
+                        countsafe
+                    )
+                # newdf_per_class_double_entries["pola"] = pol
+    print("dict ", newdf_per_class_double_entries)
+    newdf = pd.DataFrame(newdf_per_class_double_entries, index=years)
+    print("newdf", newdf)
+    ax = newdf.plot(
+        kind="bar",
+        stacked=True,
+        figsize=(8, 6),
+        rot=0,
+        xlabel="year",
+        ylabel="Count",
+        edgecolor="k",
+    )
+    for c in ax.containers:
+
+        # Optional: if the segment is small or 0, customize the labels
+        labels = [v.get_height() if v.get_height() > 0 else "" for v in c]
+
+        # remove the labels parameter if it's not needed for customized labels
+        ax.bar_label(c, labels=labels, label_type="center")
+    plt.legend(fontsize=10, ncols=4,bbox_to_anchor=(1,-0.1))
+    plt.grid(True)
+    plt.title(title, fontsize=18)
+    plt.yticks(fontsize=12)
+    plt.xticks(fontsize=12)
+    plt.ylabel(
+        "Count SAFE products available on CDSE \nstacked histogram",
         fontsize=15,
     )
     plt.show()

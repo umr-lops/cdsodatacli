@@ -79,12 +79,15 @@ if __name__ == "__main__":
     if not os.path.exists(outputdir):
         logging.debug("mkdir on %s", outputdir)
         os.makedirs(outputdir, 0o0775)
-    dfout = download_list_product_multithread_v2(
-        list_id=inputdf["id"].values,
-        list_safename=inputdf["safename"].values,
-        outputdir=outputdir,
-        hideProgressBar=False,
-        account_group=logins_group,
-        check_on_disk=args.forcedownload == False,
-    )
+    if len(inputdf['id'])>0:
+        dfout = download_list_product_multithread_v2(
+            list_id=inputdf["id"].values,
+            list_safename=inputdf["safename"].values,
+            outputdir=outputdir,
+            hideProgressBar=False,
+            account_group=logins_group,
+            check_on_disk=args.forcedownload == False,
+        )
+    else:
+        logging.info('empty listing to treat')
     logging.info("end of function")
