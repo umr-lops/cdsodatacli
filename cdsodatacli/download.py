@@ -504,9 +504,10 @@ def add_missing_cdse_hash_ids_in_listing(listing_path):
     -------
 
     """
+    res = pd.DataFrame({"id": [], "safename": []})
     df_raw = pd.read_csv(listing_path, names=["safenames"])
+    df_raw = df_raw[df_raw['safenames'].str.contains('.SAFE')]
     list_safe_a = df_raw["safenames"].values
-
     delta = datetime.timedelta(seconds=1)
     gdf = gpd.GeoDataFrame(
         {
@@ -531,13 +532,12 @@ def add_missing_cdse_hash_ids_in_listing(listing_path):
         }
     )
     sea_min_pct = 0
-    collected_data_norm = fetch_data(gdf, min_sea_percent=sea_min_pct)
-    if collected_data_norm is None:
-        res = pd.DataFrame({"id": [], "safename": []})
-    else:
-        res = collected_data_norm[["Id", "Name"]]
-        res.rename(columns={"Name": "safename"},inplace=True)
-        res.rename(columns={"Id": "id"},inplace=True)
+    if len(gdf['geometry'])>0:
+        collected_data_norm = fetch_data(gdf, min_sea_percent=sea_min_pct)
+        if not collected_data_norm is None:
+            res = collected_data_norm[["Id", "Name"]]
+            res.rename(columns={"Name": "safename"},inplace=True)
+            res.rename(columns={"Id": "id"},inplace=True)
     return res
 
 
