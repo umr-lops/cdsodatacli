@@ -9,7 +9,7 @@ from shapely.ops import unary_union
 import cartopy.feature as cfeature
 from matplotlib import pyplot as plt
 from shapely.geometry import Point, Polygon
-
+from dateutil import rrule
 
 def map_footprints(geometry_request, collected_data_norm, title):
     """
@@ -83,8 +83,10 @@ def add_time_index_based_onstardtate(collected_data_norm):
             hm.append(datetime.datetime.strptime(uu.split("_")[5], "%Y%m%dT%H%M%S"))
         else:
             hm.append(np.nan)
-    collected_data_norm["startdate"] = hm
+    # collected_data_norm["startdate"] = hm
+    collected_data_norm.insert(0, "startdate", hm)
     collected_data_norm = collected_data_norm.set_index("startdate")
+
     return collected_data_norm
 
 
@@ -94,7 +96,8 @@ def add_orientation_pass_column(collected_data_norm):
         for ll in kk:
             if ll["Name"] == "orbitDirection":
                 all_pass.append(ll["Value"])
-    collected_data_norm["pass"] = all_pass
+    # collected_data_norm["pass"] = all_pass
+    collected_data_norm.insert(0, "pass", all_pass)
     return collected_data_norm
 
 
@@ -269,7 +272,8 @@ def add_volumetry_column(collected_data_norm):
         #     vols.append(7.8 / 1000.0)
         # else:
         #     vols.append(3.8 / 1000.0)
-    collected_data_norm["volume"] = vols
+    # collected_data_norm["volume"] = vols
+    collected_data_norm.insert(0, "volume", vols)
     return collected_data_norm
 
 
@@ -387,16 +391,16 @@ def count_per_year_with_labels(collected_data_norm, title, freq="AS"):
 
             newdf_per_class_double_entries["%s" % pol].append(countsafe)
             # newdf_per_class_double_entries["pola"] = pol
-    print("dict ", newdf_per_class_double_entries)
+    # print("dict ", newdf_per_class_double_entries)
     newdf = pd.DataFrame(newdf_per_class_double_entries, index=years)
-    print("newdf", newdf)
+    # print("newdf", newdf)
     ax = newdf.plot(
         kind="bar", stacked=True, figsize=(8, 6), rot=0, xlabel="year", ylabel="Count"
     )
     for c in ax.containers:
 
         # Optional: if the segment is small or 0, customize the labels
-        labels = [v.get_height() if v.get_height() > 0 else "" for v in c]
+        labels = [int(v.get_height()) if v.get_height() > 0 else "" for v in c]
 
         # remove the labels parameter if it's not needed for customized labels
         ax.bar_label(c, labels=labels, label_type="center")
@@ -427,8 +431,10 @@ def count_per_year_with_labels_unit(
     :param freq: AS is for yearly grouping with anchor at the start of the year
     :return:
     """
-    collected_data_norm = add_volumetry_column(collected_data_norm)
-    collected_data_norm = add_time_index_based_onstardtate(collected_data_norm)
+    if 'volume' not in collected_data_norm:
+        collected_data_norm = add_volumetry_column(collected_data_norm)
+    if 'startdate' not in collected_data_norm:
+        collected_data_norm = add_time_index_based_onstardtate(collected_data_norm)
     plt.figure(figsize=(10, 6), dpi=110)
     cummul_grp = None
     # not Y because anchored date is offset to year+1
@@ -472,9 +478,9 @@ def count_per_year_with_labels_unit(
                         countsafe
                     )
                 # newdf_per_class_double_entries["pola"] = pol
-    print("dict ", newdf_per_class_double_entries)
+    # print("dict ", newdf_per_class_double_entries)
     newdf = pd.DataFrame(newdf_per_class_double_entries, index=years)
-    print("newdf", newdf)
+    # print("newdf", newdf)
     ax = newdf.plot(
         kind="bar",
         stacked=True,
@@ -487,11 +493,11 @@ def count_per_year_with_labels_unit(
     for c in ax.containers:
 
         # Optional: if the segment is small or 0, customize the labels
-        labels = [v.get_height() if v.get_height() > 0 else "" for v in c]
+        labels = [int(v.get_height()) if v.get_height() > 0 else "" for v in c]
 
         # remove the labels parameter if it's not needed for customized labels
         ax.bar_label(c, labels=labels, label_type="center")
-    plt.legend(fontsize=10, ncols=4,bbox_to_anchor=(1,-0.1))
+    plt.legend(fontsize=10, ncols=4, bbox_to_anchor=(1, -0.1))
     plt.grid(True)
     plt.title(title, fontsize=18)
     plt.yticks(fontsize=12)
@@ -536,4 +542,196 @@ def volume_wrt_sea_percent(collected_data_norm, title):
     plt.ylabel("total volume of the S-1 product considered [To]")
     plt.grid(True)
     plt.legend()
+    plt.show()
+
+
+def count_per_year_with_labels_available(
+    collected_data_norm,
+    title,
+    freq="AS",
+    yearmin=2013,
+    yearmax=2024,
+    addlegendonlyifcountnotnull=True,
+):
+    """
+
+    :param collected_data_norm:
+    :param title:
+    :param freq: AS is for yearly grouping with anchor at the start of the year
+    :return:
+    """
+    import matplotlib.patheffects as pe
+
+    assert "available@Ifremer" in collected_data_norm
+    collected_data_norm = add_volumetry_column(collected_data_norm)
+    collected_data_norm = add_time_index_based_onstardtate(collected_data_norm)
+    fig  = plt.figure(figsize=(10, 6), dpi=110)
+    ax = plt.subplot(111)
+    # not Y because anchored date is offset to year+1
+    # freq = "M"  # for a test
+    if freq == "AS":
+        width = 365
+    elif freq == "M":
+        width = 30
+    newdf_per_class_double_entries = {}
+
+    for mode in ["all", "available@Ifremer"]:
+        years = []
+        for year in range(yearmin, yearmax + 1):
+            years.append(year)
+            if mode == "available@Ifremer":
+                subset = collected_data_norm[
+                    (collected_data_norm["available@Ifremer"] == True)
+                    & (collected_data_norm["Name"].str.contains("_" + str(year)))
+                ]
+            else:
+                subset = collected_data_norm[
+                    (collected_data_norm["Name"].str.contains("_" + str(year)))
+                ]
+
+            countsafe = subset["Name"].count()
+            if addlegendonlyifcountnotnull:
+                if countsafe > 0:
+                    if mode not in newdf_per_class_double_entries:
+                        newdf_per_class_double_entries["%s" % mode] = []
+                    newdf_per_class_double_entries["%s" % mode].append(countsafe)
+            else:
+                if mode not in newdf_per_class_double_entries:
+                    newdf_per_class_double_entries["%s" % mode] = []
+                newdf_per_class_double_entries["%s" % mode].append(countsafe)
+        newdf = pd.DataFrame(newdf_per_class_double_entries, index=years)
+        # print("newdf", newdf)
+    ax = newdf.plot(
+        kind="bar",
+        stacked=False,
+        figsize=(8, 6),
+        rot=0,
+        xlabel="year",
+        ylabel="Count",
+        edgecolor="k",
+        ax=ax
+    )
+    for c in ax.containers:
+
+        # Optional: if the segment is small or 0, customize the labels
+        labels = [int(v.get_height()) if v.get_height() > 0 else "" for v in c]
+
+        # remove the labels parameter if it's not needed for customized labels
+        ax.bar_label(
+            c,
+            labels=labels,
+            label_type="center",
+            fontsize=10,
+            path_effects=[pe.withStroke(linewidth=4, foreground="white")],
+        )
+    plt.legend(fontsize=10, ncols=4, bbox_to_anchor=(1, -0.1))
+    plt.grid(True)
+    plt.title(title, fontsize=18)
+    plt.yticks(fontsize=12)
+    plt.xticks(fontsize=12)
+    plt.ylabel(
+        "Count SAFE products",
+        fontsize=15,
+    )
+    plt.show()
+    return fig
+
+
+def count_per_month_with_labels_unit(
+    collected_data_norm,
+    title,
+    freq="AS",
+    monthmin=201301,
+    monthmax=202412,
+    addlegendonlyifcountnotnull=True,
+):
+    """
+
+    :param collected_data_norm:
+    :param title:
+    :param freq: AS is for yearly grouping with anchor at the start of the year
+    :return:
+    """
+    if 'volume' not in collected_data_norm:
+        collected_data_norm = add_volumetry_column(collected_data_norm)
+    if 'startdate' not in collected_data_norm:
+        collected_data_norm = add_time_index_based_onstardtate(collected_data_norm)
+    plt.figure(figsize=(10, 6), dpi=110)
+    cummul_grp = None
+    # not Y because anchored date is offset to year+1
+    # freq = "M"  # for a test
+    if freq == "AS":
+        width = 365
+    elif freq == "M":
+        width = 30
+    newdf_per_class_double_entries = {}
+    months = []
+    months_str = []
+    # for year in range(yearmin, yearmax + 1):
+    for month in rrule.rrule(rrule.MONTHLY,dtstart=datetime.datetime.strptime(monthmin,'%Y%m'),until=datetime.datetime.strptime(monthmax,'%Y%m')):
+        months.append(month)
+        months_str.append(month.strftime('%Y%b'))
+        for sarunit in ["S1A", "S1B"]:
+            for pol in ["1SDV", "1SSV", "1SSH", "1SDH"]:
+
+                subset = collected_data_norm[
+                    (collected_data_norm["Name"].str.contains(pol + "_")) &
+                    (collected_data_norm['startdate']>=month) & (collected_data_norm['startdate']<month+datetime.timedelta(days=30))
+                    & (collected_data_norm["Name"].str.contains(sarunit))  #
+                ]
+                # print(subset)
+                # subset = subset["volume"]
+                countsafe = subset["Name"].count()
+                # grp = subset.groupby(pd.Grouper(freq=freq)).sum()
+                # grp = grp.reindex(ix)
+                # if countsafe > 0:
+                if addlegendonlyifcountnotnull:
+                    if countsafe > 0:
+                        if sarunit + "_" + pol not in newdf_per_class_double_entries:
+                            newdf_per_class_double_entries[
+                                "%s" % (sarunit + "_" + pol)
+                            ] = []
+                        newdf_per_class_double_entries[
+                            "%s" % (sarunit + "_" + pol)
+                        ].append(countsafe)
+                else:
+                    if sarunit + "_" + pol not in newdf_per_class_double_entries:
+                        newdf_per_class_double_entries[
+                            "%s" % (sarunit + "_" + pol)
+                        ] = []
+                    newdf_per_class_double_entries["%s" % (sarunit + "_" + pol)].append(
+                        countsafe
+                    )
+                # newdf_per_class_double_entries["pola"] = pol
+    # print("dict ", newdf_per_class_double_entries)
+    newdf = pd.DataFrame(newdf_per_class_double_entries, index=months)
+    # print("newdf", newdf)
+    ax = newdf.plot(
+        kind="bar",
+        stacked=True,
+        figsize=(8, 6),
+        rot=0,
+        xlabel="year",
+        ylabel="Count",
+        edgecolor="k",
+    )
+    for c in ax.containers:
+
+        # Optional: if the segment is small or 0, customize the labels
+        labels = [int(v.get_height()) if v.get_height() > 0 else "" for v in c]
+
+        # remove the labels parameter if it's not needed for customized labels
+        ax.bar_label(c, labels=labels, label_type="center")
+    # plt.legend(fontsize=10, ncols=4, bbox_to_anchor=(1, -0.1))
+    plt.legend(fontsize=10, ncols=2, bbox_to_anchor=(1, 1))
+    plt.grid(True)
+    plt.title(title, fontsize=18)
+    plt.yticks(fontsize=12)
+    ax = plt.gca()
+    ti = ax.get_xticks()
+    plt.xticks(ticks=ti,labels=months_str,fontsize=12,rotation=45)
+    plt.ylabel(
+        "Count SAFE products available on CDSE \nstacked histogram",
+        fontsize=15,
+    )
     plt.show()
