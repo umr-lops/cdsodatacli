@@ -28,7 +28,8 @@ dependencies = [
     "requests",
     "shapely",
     'tqdm',
-    'pyyaml'
+    'pyyaml',
+
 ]
 dynamic = ["version"]
 [project.scripts]

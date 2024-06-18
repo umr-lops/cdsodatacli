@@ -11,7 +11,7 @@ from matplotlib import pyplot as plt
 from shapely.geometry import Point, Polygon
 from dateutil import rrule
 
-def map_footprints(geometry_request, collected_data_norm, title):
+def map_footprints(geometry_request, collected_data_norm, title,alpha=0.8):
     """
 
     :param geometry_request (pd.Serie): for buoys location
@@ -30,7 +30,7 @@ def map_footprints(geometry_request, collected_data_norm, title):
         for poly in geometry_request:
             if not isinstance(poly, Polygon):
                 print("alerte", poly)
-            plt.plot(*poly.exterior.xy, "--", lw=2)
+            plt.plot(*poly.exterior.xy, "r--", lw=2)
     ax.add_feature(cfeature.LAND)
     ax.add_feature(cfeature.COASTLINE)
     ax.gridlines(draw_labels=True, dms=True, x_inline=False, y_inline=False)
@@ -48,7 +48,7 @@ def map_footprints(geometry_request, collected_data_norm, title):
                 pass
                 # print('unaryunion passe pas')
         elif uu.geom_type == "Polygon":
-            plt.plot(*uu.exterior.xy, "b--", lw=0.7, alpha=0.8)
+            plt.plot(*uu.exterior.xy, "b--", lw=0.7, alpha=alpha)
         else:
             print("strange geometry", uu)
     # plt.title('Sentinel-1 IW SLC available products %s since 2014'%(len(collected_data_norm['Name'])),fontsize=22)
@@ -69,8 +69,31 @@ def histogram_ocean_coverage(collected_data_norm, title):
         label="CDS results total:%s" % len(collected_data_norm["sea_percent"]),
         edgecolor="k",
     )
-    plt.xlabel("% sea in footprint of slices found")
+    plt.xlabel("minimum % sea in footprint of slices found")
     plt.ylabel("number of slices found")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+def histogram_ocean_coverage_cumsum(collected_data_norm, title):
+    # bins = np.arange(100,0,-5)
+    valh , bins =np.histogram(collected_data_norm["sea_percent"],bins=20)
+    cumsum = np.cumsum(valh[::-1]) # [::-1]
+    bins2 = bins[::-1][1:]
+    print('cumsum',cumsum)
+    print('bins2',bins2)
+    plt.figure(dpi=100)
+    plt.title(title)
+    plt.bar(
+        bins2,
+        cumsum,
+        width=4,
+        label="CDS results total:%s" % len(collected_data_norm["sea_percent"]),
+        edgecolor="k",
+        fc='y'
+    )
+    plt.xlabel("minimum % sea in footprint of slices found")
+    plt.ylabel("cumulative number of slices found")
     plt.legend()
     plt.grid(True)
     plt.show()
@@ -148,7 +171,8 @@ def number_product_per_month(collected_data_norm, title):
 
 
 def number_of_product_per_climato_month(collected_data_norm, title):
-    collected_data_norm = add_time_index_based_onstardtate(collected_data_norm)
+    if 'startdate' not in collected_data_norm:
+        collected_data_norm = add_time_index_based_onstardtate(collected_data_norm)
     plt.figure(figsize=(13, 6), dpi=110)
     for unit in ["S1A", "S1B"]:
         for pol in ["1SDV", "1SSV", "1SSH", "1SDH"]:
@@ -156,7 +180,8 @@ def number_of_product_per_climato_month(collected_data_norm, title):
                 (collected_data_norm["Name"].str.contains(unit))
                 & (collected_data_norm["Name"].str.contains(pol))
             ]
-            grp = subset.groupby(subset.index.month).count()
+            # grp = subset.groupby(subset.index.month).count()
+            grp = subset.groupby(subset['startdate'].dt.month).count()
             # print('grp',grp)
             if len(grp["Name"]) > 0:
                 grp["Name"].plot(
@@ -348,8 +373,10 @@ def count_per_year_with_labels(collected_data_norm, title, freq="AS"):
     :param freq: AS is for yearly grouping with anchor at the start of the year
     :return:
     """
-    collected_data_norm = add_volumetry_column(collected_data_norm)
-    collected_data_norm = add_time_index_based_onstardtate(collected_data_norm)
+    if 'volume' not in collected_data_norm:
+        collected_data_norm = add_volumetry_column(collected_data_norm)
+    if 'startdate' not in collected_data_norm:
+        collected_data_norm = add_time_index_based_onstardtate(collected_data_norm)
     plt.figure(figsize=(10, 6), dpi=110)
     cummul_grp = None
     # not Y because anchored date is offset to year+1
@@ -703,7 +730,7 @@ def count_per_month_with_labels_unit(
                         countsafe
                     )
                 # newdf_per_class_double_entries["pola"] = pol
-    # print("dict ", newdf_per_class_double_entries)
+    print("dict ", newdf_per_class_double_entries)
     newdf = pd.DataFrame(newdf_per_class_double_entries, index=months)
     # print("newdf", newdf)
     ax = newdf.plot(
