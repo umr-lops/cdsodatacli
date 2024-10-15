@@ -103,14 +103,32 @@ def query_client():
     logging.info('time to query : %1.1f sec',time.time()-t0)
     return result_query
 
+def check_gdf(gdf):
+    """
+
+    Parameters
+    ----------
+    gdf (GeoDataFrame):
+
+    Returns
+    -------
+        gdf_valid (bool): True -> the geodataframe is already conform to cdsodatacli input, False-> the geodataframe needs to be normalized
+    """
+    needed_variables = ['start_datetime','end_datetime','geometry','collection','name','sensormode',
+    'producttype','Attributes','id_original_query']
+    gdf_valid = True
+    for vv in needed_variables:
+        if vv not in gdf:
+            gdf_valid = False
+    return gdf_valid
 
 def fetch_data(
     gdf,
-    date=None,
+    start_datetime_var_name='start_datetime',
+    end_datetime_var_name='stop_datetime',
+    date_varname=None,
     dtime=None,
     timedelta_slice=None,
-    start_datetime=None,
-    end_datetime=None,
     min_sea_percent=None,
     fig=None,
     top=None,
@@ -123,12 +141,13 @@ def fetch_data(
     Args:
        gdf (GeoDataFrame): containing the geospatial data for the query.
        geometry (list of tuples): representing the geometry.
+       start_datetime_var_name (str):
+       end_datetime_var_name (str):
+       date_varname (str):
        collection (String): representing the collection information for filtering the data.
        name (String): representing the name information for filtering the data.
        sensormode (String): representing the mode of the sensor for filtering the data.
        producttype (String): representing the type of product for filtering the data.
-       start_datetime (String): representing the starting date for the query.
-       end_datetime (String): representing the ending date for the query.
        publication_start (String): representing the starting publication date for the query.
        publication_end (String): representing the ending publication date for the query.
        top (String): representing the ending publication date for the query.
@@ -139,20 +158,25 @@ def fetch_data(
     """
     collected_data = None
     if gdf is not None and isinstance(gdf, gpd.GeoDataFrame):
-        gdf_norm = normalize_gdf(
-            gdf=gdf,
-            start_datetime=start_datetime,
-            end_datetime=end_datetime,
-            date=date,
-            dtime=dtime,
-            timedelta_slice=timedelta_slice,
-        )
+        logging.debug('gdf is not None')
+        if check_gdf(gdf) is False:
+            gdf_norm = normalize_gdf(
+                gdf=gdf,
+                start_datetime_var_name=start_datetime_var_name,
+                end_datetime_var_name=end_datetime_var_name,
+                date_varname=date_varname,
+                dtime=dtime,
+                timedelta_slice=timedelta_slice,
+            )
+        else:
+            gdf_norm = gdf
         # geopd_norm.sort_index(ascending=False)
         logging.debug(gdf_norm.keys())
         logging.info(f"Length of input after slicing in time:{len(gdf_norm)}")
         urls = create_urls(gdf=gdf_norm, top=top)
     else:
         urls = []
+        logging.info('geoDataFrame provided is None or not conform. Impossible to query OData API.')
     if mode == "seq":
         collected_data = fetch_data_from_urls_sequential(urls=urls, cache_dir=cache_dir)
     elif mode == "multi":
@@ -239,92 +263,26 @@ def gdf_create(
     return gdf
 
 
-def normalize_gdf(
-    gdf,
-    start_datetime=None,
-    end_datetime=None,
-    date=None,
-    dtime=None,
-    timedelta_slice=None,
-):
-    """return a normalized gdf list
-    start/stop date name will be 'start_datetime' and 'end_datetime'
+def split_query_to_avoid_limit_of_product_returned(norm_gdf,timedelta_slice):
     """
-    # add the index of each rows of input gdf
-    gdf["id_original_query"] = gdf.index
-    start_time = time.time()
-    default_cacherefreshrecent = datetime.timedelta(days=7)
-    default_timedelta_slice = datetime.timedelta(weeks=1)
-    if "startdate" in gdf:
-        gdf.rename(columns={"startdate": "start_datetime"}, inplace=True)
-    if "stopdate" in gdf:
-        gdf.rename(columns={"stopdate": "end_datetime"}, inplace=True)
-    if "geofeature" in gdf:
-        gdf.rename(columns={"geofeature": "geometry"}, inplace=True)
 
-    if timedelta_slice is None:
-        timedelta_slice = default_timedelta_slice
-    if gdf is not None:
-        if not gdf.index.is_unique:
-            raise IndexError(
-                "Index must be unique. Duplicate founds : %s"
-                % list(gdf.index[gdf.index.duplicated(keep=False)].unique())
-            )
-        if len(gdf) == 0:
-            return []
-        norm_gdf = gdf.copy()
-        norm_gdf.set_geometry("geometry", inplace=True)
-    else:
-        norm_gdf = gpd.GeoDataFrame(
-            {
-                "start_datetime": start_datetime,
-                "end_datetime": end_datetime,
-                "geometry": Polygon(),
-            },
-            geometry="geometry",
-            index=[0],
-            crs="EPSG:4326",
-        )
-        # no slicing
-        timedelta_slice = None
-    worlpolygon = shapely.wkt.loads(
-        "POLYGON((-180 -90,180 -90,180 90,-180 90,-180 -90))"
-    )
-    norm_gdf["geometry"].fillna(
-        value=worlpolygon, inplace=True
-    )  # to replace None by NaN
-    # convert naives dates to utc
-    for date_col in norm_gdf.select_dtypes(include=["datetime64"]).columns:
-        try:
-            norm_gdf[date_col] = norm_gdf[date_col].dt.tz_localize("UTC")
-            logging.debug("norm_gdf[date_col] %s", type(norm_gdf[date_col].iloc[0]))
-            # logger.warning("Assuming UTC date on col %s" % date_col)
-        except TypeError:
-            # already localized
-            pass
+    split a given query along time to get queries with at maximum a duration of  timedelta_slice
 
-    # check valid input geometry
-    if not all(norm_gdf.is_valid):
-        raise ValueError("Invalid geometries found. Check them with gdf.is_valid")
+    Parameters
+    ----------
+    norm_gdf : geopandas.GeoDataFrame
+    timedelta_slice datetime.timedelta
 
-    if date in norm_gdf:
-        if (start_datetime not in norm_gdf) and (end_datetime not in norm_gdf):
-            norm_gdf["start_datetime"] = norm_gdf[date] - dtime
-            norm_gdf["end_datetime"] = norm_gdf[date] + dtime
-        else:
-            raise ValueError("date keyword conflict with startdate/stopdate")
-
-    if (start_datetime in norm_gdf) and (start_datetime != "start_datetime"):
-        norm_gdf["start_datetime"] = norm_gdf[start_datetime]
-
-    if (end_datetime in norm_gdf) and (end_datetime != "end_datetime"):
-        norm_gdf["end_datetime"] = norm_gdf[end_datetime]
-
-    gdf_slices = norm_gdf
-
+    Returns
+    -------
+        gdf_norm: geopandas.GeoDataFrame
+    """
+    gdf_slices = [norm_gdf]
+    logging.debug('norm_gdf : %s',norm_gdf)
     # slice
     if timedelta_slice is not None:
         mindate = norm_gdf["start_datetime"].min()
+        logging.debug('mindate : %s',mindate)
         maxdate = norm_gdf["end_datetime"].max()
         # those index will need to be time expanded
         idx_to_expand = norm_gdf.index[
@@ -341,6 +299,8 @@ def normalize_gdf(
             slice_begin = mindate
             slice_end = slice_begin
             islice = 0
+            logging.debug('slice_begin : %s',slice_begin)
+            logging.debug('slice_end : %s',slice_end)
             while slice_end < maxdate:
                 islice += 1
                 slice_end = slice_begin + timedelta_slice
@@ -366,12 +326,115 @@ def normalize_gdf(
                         )
                         gdf_slice.loc[to_expand, "start_datetime"] = latest_start
                         gdf_slice.loc[to_expand, "end_datetime"] = earliest_end
+                        logging.debug('latest_start : %s',latest_start)
+                        logging.debug('earliest_end : %s',earliest_end)
                 if not gdf_slice.empty:
                     gdf_slices.append(gdf_slice)
                 slice_begin = slice_end
+    logging.debug('gdf_slices : %s type: %s',gdf_slices,type(gdf_slices))
     gdf_norm = gpd.GeoDataFrame(
         pd.concat(gdf_slices, ignore_index=False), crs=gdf_slices[0].crs
     )
+    return gdf_norm
+
+
+def normalize_gdf(
+    gdf,
+    start_datetime_var_name,
+    end_datetime_var_name,
+    date_varname=None,
+    dtime=None,
+    timedelta_slice=None,
+):
+    """
+    normalize geodataframe
+
+    gdf : GeoDataFrame
+    start_datetime_var_name : str name of the variable to give start time
+    end_datetime_var_name  : str name of the variable to give end time
+    date_varname : str name of the variable to describe the dates in original gdf
+    dtime : datetime.timedelta time step between 2 dates in the original gdf [optional], if provided -> start and stop bounds are extended to get all data
+    timedelta_slice : datetime.timedelta time step to split a query in time because of the limit of 1000 products returned by query, it should be adapt depending on the polygon of the request and/or the time to do the query (more queries -> more time)
+
+
+    """
+    logging.debug('end_datetime_var_name %s',end_datetime_var_name)
+    logging.debug('start_datetime_var_name %s',start_datetime_var_name)
+    # add the index of each rows of input gdf
+    gdf["id_original_query"] = gdf.index
+    start_time = time.time()
+    default_cacherefreshrecent = datetime.timedelta(days=7)
+    default_timedelta_slice = datetime.timedelta(weeks=1)
+    if "startdate" in gdf:
+        gdf.rename(columns={"startdate": "start_datetime"}, inplace=True)
+    if "stopdate" in gdf:
+        gdf.rename(columns={"stopdate": "end_datetime"}, inplace=True)
+    if "geofeature" in gdf:
+        gdf.rename(columns={"geofeature": "geometry"}, inplace=True)
+
+    if timedelta_slice is None:
+        timedelta_slice = default_timedelta_slice
+    logging.debug('timedelta_slice : %s',timedelta_slice)
+    if gdf is not None:
+        if not gdf.index.is_unique:
+            raise IndexError(
+                "Index must be unique. Duplicate founds : %s"
+                % list(gdf.index[gdf.index.duplicated(keep=False)].unique())
+            )
+        if len(gdf) == 0:
+            return []
+        norm_gdf = gdf.copy()
+        norm_gdf.set_geometry("geometry", inplace=True)
+    # else:
+    #     norm_gdf = gpd.GeoDataFrame(
+    #         {
+    #             "start_datetime": start_datetime,
+    #             "end_datetime": end_datetime,
+    #             "geometry": Polygon(),
+    #         },
+    #         geometry="geometry",
+    #         index=[0],
+    #         crs="EPSG:4326",
+    #     )
+        # no slicing
+        timedelta_slice = None
+    # default polygon
+    worlpolygon = shapely.wkt.loads(
+        "POLYGON((-180 -90,180 -90,180 90,-180 90,-180 -90))"
+    )
+    norm_gdf["geometry"].fillna(
+        value=worlpolygon, inplace=True
+    )  # to replace None by NaN
+    # convert naives dates to utc
+    for date_col in norm_gdf.select_dtypes(include=["datetime64"]).columns:
+        try:
+            norm_gdf[date_col] = norm_gdf[date_col].dt.tz_localize("UTC")
+            logging.debug("norm_gdf[date_col] %s", type(norm_gdf[date_col].iloc[0]))
+            # logger.warning("Assuming UTC date on col %s" % date_col)
+        except TypeError:
+            # already localized
+            pass
+
+    # check valid input geometry
+    if not all(norm_gdf.is_valid):
+        raise ValueError("Invalid geometries found. Check them with gdf.is_valid")
+
+    if date_varname in norm_gdf:
+        logging.debug('dtime : %s',dtime)
+        if (start_datetime_var_name not in norm_gdf) and (end_datetime_var_name not in norm_gdf):
+            norm_gdf["start_datetime"] = norm_gdf[date_varname] - dtime
+            norm_gdf["end_datetime"] = norm_gdf[date_varname] + dtime
+        else:
+            raise ValueError("date keyword conflict with startdate/stopdate")
+
+    if (start_datetime_var_name in norm_gdf) and (start_datetime_var_name != "start_datetime"):
+        norm_gdf["start_datetime"] = norm_gdf[start_datetime_var_name]
+
+    if (end_datetime_var_name in norm_gdf) and (end_datetime_var_name != "end_datetime"):
+        norm_gdf["end_datetime"] = norm_gdf[end_datetime_var_name]
+
+
+    gdf_norm = split_query_to_avoid_limit_of_product_returned(norm_gdf,timedelta_slice)
     end_time = time.time()
     processing_time = end_time - start_time
     logging.info(f"normalize_gdf processing time:{processing_time}s")
@@ -518,10 +581,11 @@ def fetch_one_url(url, cpt, index, cache_dir):
                 collected_data = process_data(json_data)
                 # collected_data = pd.DataFrame.from_dict(json_data['value'])
                 if collected_data is not None:
+                    collected_data["id_original_query"] = index
                     if len(collected_data.index) > 0:
                         # collected_data_x.append(collected_data)
                         cpt["product_proposed_by_CDS"] += len(collected_data["Name"])
-                        collected_data["id_original_query"] = index
+
                         if len(collected_data) == DEFAULT_TOP_ROWS_PER_QUERY:
                             logging.warning(
                                 "%i products found in a single CDSE OData query (maximum is %s): make sure the timedelta_slice parameters is small enough to avoid truncated results",
