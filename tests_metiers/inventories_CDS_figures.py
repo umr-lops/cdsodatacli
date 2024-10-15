@@ -77,7 +77,7 @@ def histogram_ocean_coverage(collected_data_norm, title):
 
 def histogram_ocean_coverage_cumsum(collected_data_norm, title):
     # bins = np.arange(100,0,-5)
-    valh , bins =np.histogram(collected_data_norm["sea_percent"],bins=20)
+    valh , bins =np.histogram(collected_data_norm["sea_percent"],bins=40)
     cumsum = np.cumsum(valh[::-1]) # [::-1]
     bins2 = bins[::-1][1:]
     print('cumsum',cumsum)
