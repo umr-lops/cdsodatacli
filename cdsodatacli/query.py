@@ -8,7 +8,6 @@ import pandas as pd
 import argparse
 import pdb
 from shapely.geometry import (
-    GeometryCollection,
     LineString,
     Point,
     Polygon,
@@ -25,6 +24,7 @@ from tqdm import tqdm
 from collections import defaultdict
 import traceback
 import warnings
+from geodatasets import get_path
 
 DEFAULT_TOP_ROWS_PER_QUERY = 1000
 
@@ -693,18 +693,9 @@ def sea_percent(collected_data, min_sea_percent=None):
     """
     start_time = time.time()
     warnings.simplefilter(action="ignore", category=FutureWarning)
-    earth = GeometryCollection(
-        list(gpd.read_file(gpd.datasets.get_path("naturalearth_lowres")).geometry)
-    ).buffer(0)
-
-    sea_percentage = (
-        (
-            collected_data.geometry.area
-            - collected_data.geometry.intersection(earth).area
-        )
-        / collected_data.geometry.area
-        * 100
-    )
+    earth = collected_data.read_file(get_path("naturalearth.land")).buffer(0)
+    collected_data = collected_data.to_crs(earth.crs) if collected_data.crs != earth.crs else collected_data
+    sea_percentage = ((collected_data.geometry.area - collected_data.geometry.intersection(earth.union_all()).area) / collected_data.geometry.area) * 100
     collected_data["sea_percent"] = sea_percentage
     collected_data = collected_data[collected_data["sea_percent"] >= min_sea_percent]
     end_time = time.time()
