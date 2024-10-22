@@ -25,6 +25,7 @@ from collections import defaultdict
 import traceback
 import warnings
 from geodatasets import get_path
+import numpy as np
 
 DEFAULT_TOP_ROWS_PER_QUERY = 1000
 
@@ -62,6 +63,7 @@ def query_client():
         default=None,
         help=" [optional, default=None -> global query] example: POINT (-5.02 48.4) or  POLYGON ((-12 35, 15 35, 15 58, -12 58, -12 35))",
     )
+    parser.add_argument("--id_query", required=False, default=None)
     args = parser.parse_args()
     fmt = "%(asctime)s %(levelname)s %(filename)s(%(lineno)d) %(message)s"
     if args.verbose:
@@ -85,6 +87,7 @@ def query_client():
             "sensormode": [args.mode],
             "producttype": [args.product],
             "Attributes": [None],
+            "id_query": [args.id_query],
         }
     )
     result_query = fetch_data(
@@ -250,8 +253,9 @@ def normalize_gdf(
     """return a normalized gdf list
     start/stop date name will be 'start_datetime' and 'end_datetime'
     """
-    # add the index of each rows of input gdf
-    gdf["id_original_query"] = gdf.index
+    # add the input index as id_original_query if id_query is None
+    gdf["id_original_query"] = np.where(gdf["id_query"].isnull(), gdf.index, gdf["id_query"])
+
     start_time = time.time()
     default_cacherefreshrecent = datetime.timedelta(days=7)
     default_timedelta_slice = datetime.timedelta(weeks=1)
@@ -693,9 +697,9 @@ def sea_percent(collected_data, min_sea_percent=None):
     """
     start_time = time.time()
     warnings.simplefilter(action="ignore", category=FutureWarning)
-    earth = collected_data.read_file(get_path("naturalearth.land")).buffer(0)
+    earth = gpd.read_file(get_path("naturalearth.land")).buffer(0)
     collected_data = collected_data.to_crs(earth.crs) if collected_data.crs != earth.crs else collected_data
-    sea_percentage = ((collected_data.geometry.area - collected_data.geometry.intersection(earth.union_all()).area) / collected_data.geometry.area) * 100
+    sea_percentage = ((collected_data.geometry.area - collected_data.geometry.intersection(earth.unary_union).area) / collected_data.geometry.area) * 100
     collected_data["sea_percent"] = sea_percentage
     collected_data = collected_data[collected_data["sea_percent"] >= min_sea_percent]
     end_time = time.time()
