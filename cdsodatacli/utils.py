@@ -54,17 +54,26 @@ def WhichArchiveDir(safe):
     Args:
         safe (str): safe base name
     """
-
-    firstdate = safe[17:25]
+    logging.debug('safe: %s',safe)
+    if 'S1' in safe:
+        firstdate = safe[17:32]
+    elif 'S2' in safe:
+        firstdate = safe[11:26]
     year = firstdate[0:4]
-    doy = str(
-        datetime.datetime.strptime(firstdate, "%Y%m%d").timetuple().tm_yday
-    ).zfill(3)
+    # try:
+    # doy = str(
+    #     datetime.datetime.strptime(firstdate, "%Y%m%d").timetuple().tm_yday
+    # ).zfill(3)
+    doy = datetime.datetime.strptime(firstdate, "%Y%m%dT%H%M%S").strftime('%j')
     sat = safe.split("_")[0]
     if sat == "S1A":
         satdir = "sentinel-1a"
     elif sat == "S1B":
         satdir = "sentinel-1b"
+    elif sat =='S2B':
+        satdir = 'sentinel-2b'
+    elif sat =='S2A':
+        satdir = 'sentinel-2a'
     else:
         satdir = ""
         logging.error("%s is not a  good satellite name", sat)
