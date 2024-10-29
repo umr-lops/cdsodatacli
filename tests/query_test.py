@@ -24,6 +24,17 @@ gdf = gpd.GeoDataFrame({
             "producttype" : [ None],
             "Attributes"  : [ None],
         })
+gdf = gpd.GeoDataFrame({
+            "start_datetime" : [ np.datetime64('2022-05-03 00:00:00') ],
+            "end_datetime"   : [ np.datetime64('2022-05-03 00:11:00')],
+            "geometry"   : [ None],
+            "collection"  : [ None],
+            "collection"  : [ None],
+            "name"        : [ None],
+            "sensormode"  : [ None],
+            "producttype" : [ None],
+            "Attributes"  : [ None],
+        })
 query_name_dfd = qr.fetch_data(gdf=gdf, top=1000)
 
 # Test Query by Geographic Criteria
