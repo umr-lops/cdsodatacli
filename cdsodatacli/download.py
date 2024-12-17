@@ -692,6 +692,7 @@ def download_list_product_sequential(
 
 def main():
     """
+    download data from an existing listing of product
     package as an alias for this method
     Returns
     -------
