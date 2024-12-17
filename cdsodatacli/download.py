@@ -28,7 +28,7 @@ from cdsodatacli.session import (
     MAX_SESSION_PER_ACCOUNT,
 )
 from cdsodatacli.query import fetch_data
-from cdsodatacli.utils import conf, test_safe_archive, test_safe_spool
+from cdsodatacli.utils import conf, test_safe_archive, test_safe_spool, test_safe_in_outputdir
 from cdsodatacli.product_parser import ExplodeSAFE
 from collections import defaultdict
 
@@ -170,6 +170,8 @@ def filter_product_already_present(cpt, df, outputdir, force_download=False):
             cpt["archived_product"] += 1
         elif test_safe_spool(safename=safename_product):
             cpt["in_spool_product"] += 1
+        elif test_safe_in_outputdir(outputdir=outputdir,safename=safename_product):
+            cpt["in_outdir_product"] += 1
         else:
             to_download = True
             cpt["product_absent_from_local_disks"] += 1

@@ -2,7 +2,6 @@
 #        'a7d833c4-6b92-4bf8-9f79-0b39add53e16']
 # list_safe = ['S1A_WV_SLC__1SSV_20231110T201811_20231110T203308_051159_062BA3_954C.SAFE',
 #        'S1A_WV_SLC__1SSV_20231110T234523_20231110T235358_051161_062BB4_B4D0.SAFE']
-from cdsodatacli.download import main
 import pandas as pd
 import logging
 import os
@@ -10,7 +9,7 @@ import cdsodatacli
 from cdsodatacli.download import (
     download_list_product_multithread_v2,
     test_listing_content,
-    add_missing_cdse_hash_ids_in_listing
+    add_missing_cdse_hash_ids_in_listing,
 )
 from cdsodatacli.utils import conf
 
@@ -79,15 +78,15 @@ if __name__ == "__main__":
     if not os.path.exists(outputdir):
         logging.debug("mkdir on %s", outputdir)
         os.makedirs(outputdir, 0o0775)
-    if len(inputdf['id'])>0:
+    if len(inputdf["id"]) > 0:
         dfout = download_list_product_multithread_v2(
             list_id=inputdf["id"].values,
             list_safename=inputdf["safename"].values,
             outputdir=outputdir,
             hideProgressBar=False,
             account_group=logins_group,
-            check_on_disk=args.forcedownload == False,
+            check_on_disk=args.forcedownload is False,
         )
     else:
-        logging.info('empty listing to treat')
+        logging.info("empty listing to treat")
     logging.info("end of function")

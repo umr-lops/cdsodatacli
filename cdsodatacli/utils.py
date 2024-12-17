@@ -48,6 +48,36 @@ def test_safe_spool(safename):
     logging.debug("present_in_spool : %s", present_in_spool)
     return present_in_spool
 
+def test_safe_in_outputdir(outputdir,safename):
+    """
+
+    Parameters
+    ----------
+    safename (str) basename
+
+    Returns
+    -------
+        present_in_outputdir (bool): True -> the product is already in the spool dir
+
+    """
+    present_in_outdir = False
+    for uu in ["", ".zip", "replaced"]:
+        if uu == "":
+            potential_file = os.path.join(outputdir, safename)
+        elif uu == ".zip":
+            potential_file = os.path.join(outputdir, safename + ".zip")
+        elif uu == "replaced":
+            potential_file = os.path.join(
+                outputdir, safename.replace(".SAFE", ".zip")
+            )
+        else:
+            raise NotImplemented
+        if os.path.exists(potential_file):
+            present_in_outdir = True
+            break
+    logging.debug("present_in_spool : %s", present_in_outdir)
+    return present_in_outdir
+
 
 def WhichArchiveDir(safe):
     """
