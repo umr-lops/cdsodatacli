@@ -107,7 +107,9 @@ fabric.properties
 # modules.xml
 # .idea/misc.xml
 # *.ipr
+.idea
 
+localconfig.yml
 # Sonarlint plugin
 .idea/**/sonarlint/
 
