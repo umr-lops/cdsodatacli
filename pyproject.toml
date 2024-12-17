@@ -30,9 +30,24 @@ dependencies = [
     "shapely",
     'tqdm',
     'pyyaml',
-    'cartopy'
+    'cartopy',
+    "python-dotenv"
 
 ]
+[project.optional-dependencies]
+dev = [
+  "pre-commit",
+  "pytest",
+  "pytest-cov",
+  "pytest-env",
+  "pytest-xdist",
+  "pytest-timeout",
+  "ruff>=0.8.0",
+  "sphinx",
+  "sphinx_autosummary_accessors",
+
+]
+
 dynamic = ["version"]
 [project.scripts]
 queryCDS = "cdsodatacli.query:query_client"

@@ -19,3 +19,4 @@ dependencies:
   - tqdm
   - pyyaml
   - cartopy
+  - python-dotenv
