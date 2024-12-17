@@ -32,6 +32,8 @@ def test_secrets():
     ]
 )
 def test_download_WV_OCN_SAFE(listing,outputdir):
+    if './' in outputdir:
+        outputdir = os.path.abspath(os.path.join(os.getcwd(),outputdir))
     login_cdse = os.getenv("DEFAULT_LOGIN_CDSE")
     passwd = os.getenv("DEFAULT_PASSWD_CDSE")
     logging.info("listing: %s", listing)
