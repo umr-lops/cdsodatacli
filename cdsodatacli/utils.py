@@ -8,17 +8,17 @@ import pdb
 local_config_pontential_path = os.path.join(
     os.path.dirname(cdsodatacli.__file__), "localconfig.yml"
 )
-
+config_path = os.path.join(os.path.dirname(cdsodatacli.__file__), "config.yml")
 if os.path.exists(local_config_pontential_path):
-    config_path = local_config_pontential_path
+    used_config_path = local_config_pontential_path
 else:
-    config_path = os.path.join(os.path.dirname(cdsodatacli.__file__), "config.yml")
-logging.info("config path: %s", config_path)
-stream = open(config_path, "r")
+    used_config_path = config_path
+logging.info("config path that is used: %s", used_config_path)
+stream = open(used_config_path, "r")
 conf = load(stream, Loader=Loader)
 
 
-def test_safe_spool(safename):
+def check_safe_in_spool(safename):
     """
 
     Parameters
@@ -47,6 +47,36 @@ def test_safe_spool(safename):
             break
     logging.debug("present_in_spool : %s", present_in_spool)
     return present_in_spool
+
+def check_safe_in_outputdir(outputdir,safename):
+    """
+
+    Parameters
+    ----------
+    safename (str) basename
+
+    Returns
+    -------
+        present_in_outputdir (bool): True -> the product is already in the spool dir
+
+    """
+    present_in_outdir = False
+    for uu in ["", ".zip", "replaced"]:
+        if uu == "":
+            potential_file = os.path.join(outputdir, safename)
+        elif uu == ".zip":
+            potential_file = os.path.join(outputdir, safename + ".zip")
+        elif uu == "replaced":
+            potential_file = os.path.join(
+                outputdir, safename.replace(".SAFE", ".zip")
+            )
+        else:
+            raise NotImplemented
+        if os.path.exists(potential_file):
+            present_in_outdir = True
+            break
+    logging.debug("present_in_spool : %s", present_in_outdir)
+    return present_in_outdir
 
 
 def WhichArchiveDir(safe):
@@ -90,7 +120,7 @@ def WhichArchiveDir(safe):
     return gooddir
 
 
-def test_safe_archive(safename):
+def check_safe_in_archive(safename):
     """
 
     Parameters

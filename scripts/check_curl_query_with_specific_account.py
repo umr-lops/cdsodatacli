@@ -1,7 +1,7 @@
 import subprocess
-import os
 import logging
 from cdsodatacli.utils import conf
+
 if __name__ == "__main__":
     root = logging.getLogger()
     if root.handlers:
@@ -9,6 +9,7 @@ if __name__ == "__main__":
             root.removeHandler(handler)
 
     import argparse
+
     parser = argparse.ArgumentParser(description="highleveltest-test_CDSE_account")
     parser.add_argument("--verbose", action="store_true", default=False)
     parser.add_argument(
@@ -18,7 +19,8 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--password",
-        required=False,default=None,
+        required=False,
+        default=None,
         help="password [optional, default is the one from config file]",
     )
     args = parser.parse_args()
@@ -34,18 +36,21 @@ if __name__ == "__main__":
     if args.login:
         logins = [args.login]
     else:
-        logins = conf['logins']
+        logins = conf["logins"]
     for logii in logins:
         # print('test',logii)
         if args.password is None:
-            passwd = conf['logins'][logii]
+            passwd = conf["logins"][logii]
         else:
             passwd = args.password
-        cmd = "curl -s --location --request POST https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token --header 'Content-Type: application/x-www-form-urlencoded' --data-urlencode 'grant_type=password' --data-urlencode 'username=%s' --data-urlencode 'password=%s'  --data-urlencode 'client_id=cdse-public'"%(logii,passwd)
+        cmd = (
+            "curl -s --location --request POST https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token --header 'Content-Type: application/x-www-form-urlencoded' --data-urlencode 'grant_type=password' --data-urlencode 'username=%s' --data-urlencode 'password=%s'  --data-urlencode 'client_id=cdse-public'"
+            % (logii, passwd)
+        )
         try:
             print(cmd)
-            res = subprocess.check_output(cmd,shell=True).decode()
-            #print(res,type(res))
-            print(logii,'access_token' in res)
-        except:
-            print('error for',logii)
+            res = subprocess.check_output(cmd, shell=True).decode()
+            # print(res,type(res))
+            print(logii, "access_token" in res)
+        except subprocess.SubprocessError:
+            print("error for", logii)

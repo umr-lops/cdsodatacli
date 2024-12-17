@@ -11,10 +11,11 @@ import random
 MAX_VALIDITY_ACCESS_TOKEN = 600  # sec (defined by CDS API)
 
 
-def get_bearer_access_token(quiet=True, specific_account=None, account_group="logins"):
+def get_bearer_access_token(quiet=True, specific_account=None,passwd=None, account_group="logins"):
     """
     OData access token (validity=600sec)
     specific_account (str) [optional, default=None -> first available account in config file]
+    passwd (str): [optional, default is to search in config files]
     Returns
     -------
 
@@ -24,11 +25,13 @@ def get_bearer_access_token(quiet=True, specific_account=None, account_group="lo
     if specific_account is None:
         all_accounts = list(conf[account_group].keys())
         login = random.choice(all_accounts)
-        passwd = conf[account_group][all_accounts[0]]
+        if passwd is None:
+            passwd = conf[account_group][all_accounts[0]]
     else:
         login = specific_account
-        logging.debug("conf[account_group] %s", type(conf[account_group]))
-        passwd = conf[account_group][specific_account]
+        if passwd is None:
+            logging.debug("conf[account_group] %s", type(conf[account_group]))
+            passwd = conf[account_group][specific_account]
     if quiet:
         prefix = "curl -s "
     else:

@@ -23,17 +23,7 @@ gdf = gpd.GeoDataFrame({
             "sensormode"  : [ None],
             "producttype" : [ None],
             "Attributes"  : [ None],
-        })
-gdf = gpd.GeoDataFrame({
-            "start_datetime" : [ np.datetime64('2022-05-03 00:00:00') ],
-            "end_datetime"   : [ np.datetime64('2022-05-03 00:11:00')],
-            "geometry"   : [ None],
-            "collection"  : [ None],
-            "collection"  : [ None],
-            "name"        : [ None],
-            "sensormode"  : [ None],
-            "producttype" : [ None],
-            "Attributes"  : [ None],
+            'id_query' : ['test1']
         })
 query_name_dfd = qr.fetch_data(gdf=gdf, top=1000)
 
@@ -49,6 +39,7 @@ gdf = gpd.GeoDataFrame({
             "sensormode"  : [ None],
             "producttype" : [ None],
             "Attributes"  : [ None],
+            'id_query' : ['test2']
         })
 query_geographic_name = qr.fetch_data(gdf=gdf, top=1000)
 
@@ -64,6 +55,7 @@ gdf = gpd.GeoDataFrame({
             "sensormode"  : [ None],
             "producttype" : [ None],
             "Attributes"  : [ 'cloudCover,40'],
+            'id_query': ['test3']
         })
 query_cloudCover_df = qr.fetch_data(gdf=gdf, top=1000)
 @pytest.mark.parametrize(
@@ -98,3 +90,9 @@ def test_queries(expected,result):
 # def test_querycloudcover(query_cloudCover_df=query_cloudCover_df, cloudCover_df=cloudCover_df):
 #     """Example test with parametrization."""
 #     assert all(item in list(query_cloudCover_df['Name']) for item in list(cloudCover_df['Name']))
+
+if __name__ == '__main__':
+    expected = name_df
+    result = query_name_dfd
+    pdb.set_trace()
+    test_queries(expected, result)
