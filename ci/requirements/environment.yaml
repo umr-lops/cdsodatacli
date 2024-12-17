@@ -18,3 +18,4 @@ dependencies:
   - shapely
   - tqdm
   - pyyaml
+  - cartopy
