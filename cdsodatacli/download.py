@@ -28,7 +28,7 @@ from cdsodatacli.session import (
     MAX_SESSION_PER_ACCOUNT,
 )
 from cdsodatacli.query import fetch_data
-from cdsodatacli.utils import conf, test_safe_archive, test_safe_spool, test_safe_in_outputdir
+from cdsodatacli.utils import conf, check_safe_in_archive, check_safe_in_spool, check_safe_in_outputdir
 from cdsodatacli.product_parser import ExplodeSAFE
 from collections import defaultdict
 
@@ -166,11 +166,11 @@ def filter_product_already_present(cpt, df, outputdir, force_download=False):
         to_download = False
         if force_download:
             to_download = True
-        if test_safe_archive(safename=safename_product):
+        if check_safe_in_archive(safename=safename_product):
             cpt["archived_product"] += 1
-        elif test_safe_spool(safename=safename_product):
+        elif check_safe_in_spool(safename=safename_product):
             cpt["in_spool_product"] += 1
-        elif test_safe_in_outputdir(outputdir=outputdir,safename=safename_product):
+        elif check_safe_in_outputdir(outputdir=outputdir,safename=safename_product):
             cpt["in_outdir_product"] += 1
         else:
             to_download = True
@@ -208,11 +208,11 @@ def download_list_product_multithread_v2(
     v2 is handling multi account round-robin and token semaphore files
     Parameters
     ----------
-    list_id (list)
-    list_safename (list)
-    outputdir (str)
+    list_id (list): product hash
+    list_safename (list): product names
+    outputdir (str): the directory where to store the product collected
     hideProgressBar (bool): True -> no tqdm progress bar in stdout
-    account_group (str)
+    account_group (str): the name of the group of CDSE logins to be used
     check_on_disk (bool): True -> if the product is in the spool dir or in archive dir the download is skipped
 
     Returns
@@ -343,7 +343,7 @@ def download_list_product_multithread_v2(
 
 
 def download_list_product(
-    list_id, list_safename, outputdir, specific_account, hideProgressBar=False
+    list_id, list_safename, outputdir, specific_account,specific_passwd=None, hideProgressBar=False
 ):
     """
 
@@ -352,8 +352,10 @@ def download_list_product(
     list_id (list) of string could be hash (eg a1e74573-aa77-55d6-a08d-7b6612761819) provided by CDS Odata
     list_safename (list) of string basename of SAFE product (eg. S1A_IW_GRDH_1SDV_20221013T065030_20221013T0650...SAFE)
     outputdir (str) path where product will be stored
+    specific_account (str): CDSE account to use
+    specific_passwd (str): CDSE password associated to specific_account (optional)
     hideProgressBar (bool): True -> no tqdm progress bar
-    specific_account (str):
+
 
     Returns
     -------
@@ -371,7 +373,7 @@ def download_list_product(
             login,
             path_semphore_token,
         ) = get_bearer_access_token(
-            quiet=hideProgressBar, specific_account=specific_account
+            quiet=hideProgressBar, specific_account=specific_account,passwd=specific_passwd
         )
     else:  # select randomly one token among existing
         path_semphore_token = random.choice(lst_usable_tokens)
@@ -396,9 +398,9 @@ def download_list_product(
             id_product = list_id[ii]
             url_product = conf["URL_download"] % id_product
             safename_product = list_safename[ii]
-            if test_safe_archive(safename=safename_product):
+            if check_safe_in_archive(safename=safename_product):
                 cpt["archived_product"] += 1
-            elif test_safe_spool(safename=safename_product):
+            elif check_safe_in_spool(safename=safename_product):
                 cpt["in_spool_product"] += 1
             else:
                 cpt["product_absent_from_local_disks"] += 1

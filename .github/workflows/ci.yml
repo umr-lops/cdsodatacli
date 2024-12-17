@@ -80,5 +80,8 @@ jobs:
           python -c "import cdsodatacli"
 
       - name: Run tests
+        env:
+          DEFAULT_LOGIN_CDSE: ${{ secrets.DEFAULT_LOGIN_CDSE }}
+          DEFAULT_PASSWD_CDSE: ${{ secrets.DEFAULT_PASSWD_CDSE }}
         run: |
           python -m pytest --cov=cdsodatacli
