@@ -78,10 +78,21 @@ jobs:
       - name: Import cdsodatacli
         run: |
           python -c "import cdsodatacli"
+      - name: Create secrets.yml from GitHub Secret
+        run: |
+            echo "${{ secrets.SECRET_FOR_TEST_DOWNLOAD_CDSE }}" > secrets.yml
+        shell: bash
 
+      - name: Export secrets as environment variables
+        run: |
+          export DEFAULT_LOGIN_CDSE=$(grep 'DEFAULT_LOGIN_CDSE' secrets.yml | cut -d':' -f2 | tr -d ' ')
+          export DEFAULT_PASSWD_CDSE=$(grep 'DEFAULT_PASSWD_CDSE' secrets.yml | cut -d':' -f2 | tr -d ' ')
+          echo "DEFAULT_LOGIN_CDSE=${DEFAULT_LOGIN_CDSE}" >> $GITHUB_ENV
+          echo "DEFAULT_PASSWD_CDSE=${DEFAULT_PASSWD_CDSE}" >> $GITHUB_ENV
+        shell: bash
       - name: Run tests
         env:
-          DEFAULT_LOGIN_CDSE: ${{ secrets.DEFAULT_LOGIN_CDSE }}
-          DEFAULT_PASSWD_CDSE: ${{ secrets.DEFAULT_PASSWD_CDSE }}
+          DEFAULT_LOGIN_CDSE: ${{ env.DEFAULT_LOGIN_CDSE }}
+          DEFAULT_PASSWD_CDSE: ${{ env.DEFAULT_PASSWD_CDSE }}
         run: |
           python -m pytest --cov=cdsodatacli
