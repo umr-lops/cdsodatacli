@@ -6,6 +6,7 @@ import pandas as pd
 import logging
 import os
 import pytest
+import sys
 import cdsodatacli
 from cdsodatacli.download import download_list_product
 from cdsodatacli.utils import conf, check_safe_in_outputdir
@@ -25,6 +26,7 @@ def test_secrets():
     assert login_cdse is not None, "DEFAULT_LOGIN_CDSE is not defined (.env absent? or SECRETS from github undefined)"
     assert login_cdse == "antoine.grouazel@ifremer.fr"
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Test not supported on Windows")
 @pytest.mark.parametrize(
     ("listing", "outputdir"),
     [
