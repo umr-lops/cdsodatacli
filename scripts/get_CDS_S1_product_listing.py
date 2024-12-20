@@ -87,6 +87,7 @@ def get_missing_WV_safe(
             "sensormode": [mode],
             "producttype": [producttype],
             "Attributes": [None],
+            "id_query": ['query_production_ifremer_archives']
         }
     )
     logging.info("cache_dir : %s", cachedir)
