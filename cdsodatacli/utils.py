@@ -100,6 +100,10 @@ def WhichArchiveDir(safe):
         satdir = "sentinel-1a"
     elif sat == "S1B":
         satdir = "sentinel-1b"
+    elif sat == 'S1C':
+        satdir = "sentinel-1c"
+    elif sat == 'S1D':
+        satdir = "sentinel-1d"
     elif sat =='S2B':
         satdir = 'sentinel-2b'
     elif sat =='S2A':
