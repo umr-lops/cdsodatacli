@@ -7,4 +7,4 @@ tqdm
 pyyaml
 cartopy
 python-dotenv
-git+https://gitlab.ifremer.fr/lops-wave/s1ifr/
+git+https://gitlab.ifremer.fr/lops-wave/s1ifr.git@main
