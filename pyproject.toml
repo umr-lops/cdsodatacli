@@ -19,18 +19,19 @@ classifiers = [ #! Update me
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.9",
 ]
-dependencies = [
-  "geopandas",
-  "geodatasets",
-  "numpy",
-  "requests",
-  "shapely",
-  'tqdm',
-  'pyyaml',
-  'cartopy',
-  "python-dotenv",
-  "git+https://gitlab.ifremer.fr/lops-wave/s1ifr/"
-]
+#dependencies = [
+#  "geopandas",
+#  "geodatasets",
+#  "numpy",
+#  "requests",
+#  "shapely",
+#  'tqdm',
+#  'pyyaml',
+#  'cartopy',
+#  "python-dotenv",
+#  "git+https://gitlab.ifremer.fr/lops-wave/s1ifr/"
+#]
+dependencies = []
 
 
 dynamic = ["version"]
