@@ -29,9 +29,8 @@ dependencies = [
   'pyyaml',
   'cartopy',
   "python-dotenv",
-  "s1ifr @ git+https://gitlab.ifremer.fr/lops-wave/s1ifr/"
 ]
-#dependencies = []
+
 
 
 dynamic = ["version"]
