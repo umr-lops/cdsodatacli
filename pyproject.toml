@@ -29,8 +29,8 @@ dependencies = [
   'pyyaml',
   'cartopy',
   "python-dotenv",
-
 ]
+
 
 
 dynamic = ["version"]
