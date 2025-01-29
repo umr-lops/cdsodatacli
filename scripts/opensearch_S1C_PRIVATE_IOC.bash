@@ -1,9 +1,10 @@
 #!/bin/bash
 echo start
 
+passwd_cdse_expert=$4
 ACCESS_TOKEN=$(curl -d 'client_id=cdse-public' \
                     -d 'username=antoine.grouazel@ifremer.fr' \
-                    -d 'password=qsdmlk898_TYbk$dyZ2' \
+                    -d 'password=$passwd_cdse_expert' \
                     -d 'grant_type=password' \
                     'https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token' | \
                     python3 -m json.tool | grep "access_token" | awk -F\" '{print $4}')
