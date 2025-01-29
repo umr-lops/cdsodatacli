@@ -6,12 +6,8 @@ import hashlib
 import requests
 import pandas as pd
 import argparse
-import pdb
 from shapely.geometry import (
-    LineString,
-    Point,
     Polygon,
-    MultiPolygon,
 )
 from shapely import wkt
 import geopandas as gpd
@@ -42,7 +38,6 @@ def query_client():
         for handler in root.handlers:
             root.removeHandler(handler)
 
-    import argparse
 
     parser = argparse.ArgumentParser(description="query-CDSE-OData")
     parser.add_argument("--verbose", action="store_true", default=False)
@@ -103,7 +98,7 @@ def query_client():
         cache_dir=None,
         mode=args.querymode,
     )
-    logging.info('time to query : %1.1f sec',time.time()-t0)
+    logging.info("time to query : %1.1f sec", time.time() - t0)
     return result_query
 
 
@@ -254,7 +249,9 @@ def normalize_gdf(
     start/stop date name will be 'start_datetime' and 'end_datetime'
     """
     # add the input index as id_original_query if id_query is None
-    gdf["id_original_query"] = np.where(gdf["id_query"].isnull(), gdf.index, gdf["id_query"])
+    gdf["id_original_query"] = np.where(
+        gdf["id_query"].isnull(), gdf.index, gdf["id_query"]
+    )
 
     start_time = time.time()
     default_cacherefreshrecent = datetime.timedelta(days=7)
@@ -406,13 +403,13 @@ def create_urls(gdf, top=None):
             if geo_type == "Point":
                 modified_value = f"{coordinates_part}"
                 coordinates_part = modified_value.replace(" ", "%20")
-                params[
-                    "OData.CSC.Intersects"
-                ] = f"(area=geography'SRID=4326;POINT({coordinates_part})')"
+                params["OData.CSC.Intersects"] = (
+                    f"(area=geography'SRID=4326;POINT({coordinates_part})')"
+                )
             elif geo_type == "Polygon":
-                params[
-                    "OData.CSC.Intersects"
-                ] = f"(area=geography'SRID=4326;POLYGON({coordinates_part}))')"
+                params["OData.CSC.Intersects"] = (
+                    f"(area=geography'SRID=4326;POLYGON({coordinates_part}))')"
+                )
 
         if "collection" in gdf_row and not pd.isna(gdf_row["collection"]):
             collection = gdf_row["collection"]
@@ -448,9 +445,9 @@ def create_urls(gdf, top=None):
             Attributes = str(gdf_row["Attributes"]).replace(" ", "")
             Attributes_name = Attributes[0 : Attributes.find(",")]
             Attributes_value = Attributes[Attributes.find(",") + 1 :]
-            params[
-                "Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq"
-            ] = f" '{Attributes_name}' and att/OData.CSC.DoubleAttribute/Value le {Attributes_value})"
+            params["Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq"] = (
+                f" '{Attributes_name}' and att/OData.CSC.DoubleAttribute/Value le {Attributes_value})"
+            )
 
         str_query = " and ".join([f"{key}{value}" for key, value in params.items()])
 
@@ -459,7 +456,7 @@ def create_urls(gdf, top=None):
         urls.append((enter_index, url))
     end_time = time.time()
     processing_time = end_time - start_time
-    logging.info(f"create_urls() processing time:%1.1fs", processing_time)
+    logging.info("create_urls() processing time:%1.1fs", processing_time)
     logging.debug("example of URL created: %s", urls[0])
     return urls
 
@@ -575,7 +572,7 @@ def fetch_data_from_urls_sequential(urls, cache_dir) -> pd.DataFrame:
         collected_data_final = pd.concat(collected_data_x)
     end_time = time.time()
     processing_time = end_time - start_time
-    logging.info(f"fetch_data_from_urls time:%1.1fsec", processing_time)
+    logging.info("fetch_data_from_urls time:%1.1fsec", processing_time)
     logging.info("counter: %s", cpt)
     return collected_data_final
 
@@ -595,9 +592,10 @@ def fetch_data_from_urls_multithread(urls, cache_dir=None, max_workers=50):
     """
     collected_data = pd.DataFrame()
     cpt = defaultdict(int)
-    with ThreadPoolExecutor(max_workers=max_workers) as executor, tqdm(
-        total=len(urls)
-    ) as pbar:
+    with (
+        ThreadPoolExecutor(max_workers=max_workers) as executor,
+        tqdm(total=len(urls)) as pbar,
+    ):
         # url[1] is a CDS Odata query URL
         # url[0] is index of original gdf
         future_to_url = {
@@ -657,7 +655,7 @@ def remove_duplicates(safes_ori):
     processing_time = end_time - start_time
     nb_duplicate = len(safes_ori) - len(safes_dedup)
     logging.info("nb duplicate removed: %s", nb_duplicate)
-    logging.info(f"remove_duplicates processing time:%1.1f sec", processing_time)
+    logging.info("remove_duplicates processing time:%1.1f sec", processing_time)
     return safes_dedup
 
 
@@ -698,8 +696,18 @@ def sea_percent(collected_data, min_sea_percent=None):
     start_time = time.time()
     warnings.simplefilter(action="ignore", category=FutureWarning)
     earth = gpd.read_file(get_path("naturalearth.land")).buffer(0)
-    collected_data = collected_data.to_crs(earth.crs) if collected_data.crs != earth.crs else collected_data
-    sea_percentage = ((collected_data.geometry.area - collected_data.geometry.intersection(earth.unary_union).area) / collected_data.geometry.area) * 100
+    collected_data = (
+        collected_data.to_crs(earth.crs)
+        if collected_data.crs != earth.crs
+        else collected_data
+    )
+    sea_percentage = (
+        (
+            collected_data.geometry.area
+            - collected_data.geometry.intersection(earth.unary_union).area
+        )
+        / collected_data.geometry.area
+    ) * 100
     collected_data["sea_percent"] = sea_percentage
     collected_data = collected_data[collected_data["sea_percent"] >= min_sea_percent]
     end_time = time.time()

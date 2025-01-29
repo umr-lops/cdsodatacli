@@ -1,4 +1,3 @@
-import pdb
 import subprocess
 
 import requests
@@ -7,17 +6,14 @@ from tqdm import tqdm
 import datetime
 import time
 import os
-import shutil
 import random
 import pandas as pd
 import geopandas as gpd
 from requests.exceptions import ChunkedEncodingError
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
-import traceback
 from cdsodatacli.fetch_access_token import (
     get_bearer_access_token,
-    write_token_semphore_file,
     remove_semaphore_token_file,
     MAX_VALIDITY_ACCESS_TOKEN,
     get_list_of_exising_token,
@@ -28,7 +24,12 @@ from cdsodatacli.session import (
     MAX_SESSION_PER_ACCOUNT,
 )
 from cdsodatacli.query import fetch_data
-from cdsodatacli.utils import conf, check_safe_in_archive, check_safe_in_spool, check_safe_in_outputdir
+from cdsodatacli.utils import (
+    conf,
+    check_safe_in_archive,
+    check_safe_in_spool,
+    check_safe_in_outputdir,
+)
 from cdsodatacli.product_parser import ExplodeSAFE
 from collections import defaultdict
 
@@ -127,7 +128,7 @@ def CDS_Odata_download_one_product_v2(
                 for chunk in response.iter_content(chunk_size=chunksize):
                     if chunk:
                         f.write(chunk)
-            except ChunkedEncodingError as e:
+            except ChunkedEncodingError:
                 status = -1
                 status_meaning = "ChunkedEncodingError"
     if (not response.ok or status == -1) and os.path.exists(output_filepath_tmp):
@@ -137,8 +138,10 @@ def CDS_Odata_download_one_product_v2(
     if status == 200:  # means OK download
         speed = total_length / elapsed_time
         # shutil.move(output_filepath_tmp, output_filepath)
-        status = subprocess.check_output('mv '+output_filepath_tmp+' '+output_filepath,shell=True)
-        logging.debug('move status: %s',status)
+        status = subprocess.check_output(
+            "mv " + output_filepath_tmp + " " + output_filepath, shell=True
+        )
+        logging.debug("move status: %s", status)
         os.chmod(output_filepath, mode=0o0775)
     logging.debug("time to download this product: %1.1f sec", elapsed_time)
     logging.debug("average download speed: %1.1fMo/sec", speed)
@@ -170,7 +173,7 @@ def filter_product_already_present(cpt, df, outputdir, force_download=False):
             cpt["archived_product"] += 1
         elif check_safe_in_spool(safename=safename_product):
             cpt["in_spool_product"] += 1
-        elif check_safe_in_outputdir(outputdir=outputdir,safename=safename_product):
+        elif check_safe_in_outputdir(outputdir=outputdir, safename=safename_product):
             cpt["in_outdir_product"] += 1
         else:
             to_download = True
@@ -256,9 +259,10 @@ def download_list_product_multithread_v2(
             len(dfproductDownloaddable),
             cpt,
         )
-        with ThreadPoolExecutor(
-            max_workers=len(dfproductDownloaddable)
-        ) as executor, tqdm(total=len(dfproductDownloaddable)) as pbar:
+        with (
+            ThreadPoolExecutor(max_workers=len(dfproductDownloaddable)) as executor,
+            tqdm(total=len(dfproductDownloaddable)) as pbar,
+        ):
             future_to_url = {
                 executor.submit(
                     CDS_Odata_download_one_product_v2,
@@ -343,7 +347,12 @@ def download_list_product_multithread_v2(
 
 
 def download_list_product(
-    list_id, list_safename, outputdir, specific_account,specific_passwd=None, hideProgressBar=False
+    list_id,
+    list_safename,
+    outputdir,
+    specific_account,
+    specific_passwd=None,
+    hideProgressBar=False,
 ):
     """
 
@@ -373,7 +382,9 @@ def download_list_product(
             login,
             path_semphore_token,
         ) = get_bearer_access_token(
-            quiet=hideProgressBar, specific_account=specific_account,passwd=specific_passwd
+            quiet=hideProgressBar,
+            specific_account=specific_account,
+            passwd=specific_passwd,
         )
     else:  # select randomly one token among existing
         path_semphore_token = random.choice(lst_usable_tokens)
@@ -514,7 +525,7 @@ def add_missing_cdse_hash_ids_in_listing(listing_path):
     """
     res = pd.DataFrame({"id": [], "safename": []})
     df_raw = pd.read_csv(listing_path, names=["safenames"])
-    df_raw = df_raw[df_raw['safenames'].str.contains('.SAFE')]
+    df_raw = df_raw[df_raw["safenames"].str.contains(".SAFE")]
     list_safe_a = df_raw["safenames"].values
     delta = datetime.timedelta(seconds=1)
     gdf = gpd.GeoDataFrame(
@@ -537,16 +548,16 @@ def add_missing_cdse_hash_ids_in_listing(listing_path):
             "sensormode": [ExplodeSAFE(jj).mode for jj in list_safe_a],
             "producttype": [ExplodeSAFE(jj).product[0:3] for jj in list_safe_a],
             "Attributes": np.tile([None], len(list_safe_a)),
-            "id_query":np.tile(['dummy2getProducthash'], len(list_safe_a)),
+            "id_query": np.tile(["dummy2getProducthash"], len(list_safe_a)),
         }
     )
     sea_min_pct = 0
-    if len(gdf['geometry'])>0:
+    if len(gdf["geometry"]) > 0:
         collected_data_norm = fetch_data(gdf, min_sea_percent=sea_min_pct)
-        if not collected_data_norm is None:
+        if collected_data_norm is not None:
             res = collected_data_norm[["Id", "Name"]]
-            res.rename(columns={"Name": "safename"},inplace=True)
-            res.rename(columns={"Id": "id"},inplace=True)
+            res.rename(columns={"Name": "safename"}, inplace=True)
+            res.rename(columns={"Id": "id"}, inplace=True)
     return res
 
 
