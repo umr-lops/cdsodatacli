@@ -2,18 +2,15 @@
 name = "cdsodatacli"
 description = "OData client for Copernicus Data Space catalog"
 readme = "README.md"
-authors = [
-  {name = "Antoine Grouazel"},
-  {name = "Jean-Renaud Miadana"}
-]
-license = {text = "MIT"}
+authors = [{ name = "Antoine Grouazel" }, { name = "Jean-Renaud Miadana" }]
+license = { text = "MIT" }
 #repository = "https://github.com/umr-lops/cdsodatacli"
 #homepage = "https://github.com/umr-lops/cdsodatacli"
 
-keywords = ["Odata","copernicus-data-space","api"]
+keywords = ["Odata", "copernicus-data-space", "api"]
 
 # Pypi classifiers: https://pypi.org/classifiers/
-classifiers = [  #! Update me
+classifiers = [ #! Update me
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
   "Operating System :: OS Independent",
@@ -23,42 +20,36 @@ classifiers = [  #! Update me
   "Programming Language :: Python :: 3.9",
 ]
 dependencies = [
-    "geopandas",
-    "geodatasets",
-    "numpy",
-    "requests",
-    "shapely",
-    'tqdm',
-    'pyyaml',
+  "geopandas",
+  "geodatasets",
+  "numpy",
+  "requests",
+  "shapely",
+  'tqdm',
+  'pyyaml',
+  'cartopy',
+  "python-dotenv",
+]
+
+
+
+dynamic = ["version"]
+[project.optional-dependencies]
+dev = [
+  "pre-commit",
+  "pytest",
+  "pytest-cov",
+  "pytest-env",
+  "pytest-xdist",
+  "pytest-timeout",
+  "ruff>=0.8.0",
+  "sphinx",
+  "sphinx_autosummary_accessors",
 
 ]
-dynamic = ["version"]
 [project.scripts]
 queryCDS = "cdsodatacli.query:query_client"
-downloadFromCDS = "cdsodatacli.download:main"
-#[tool.poetry.dependencies]
-#python = "^3.9"
-#
-#typer = {extras = ["all"], version = ">=0.4,<0.10"}
-#rich = ">=10.14,<14.0"
-
-#[tool.poetry.dev-dependencies]
-#bandit = "^1.7.1"
-#black = {version = "^23.10", allow-prereleases = true}
-#darglint = "^1.8.1"
-#isort = {extras = ["colors"], version = "^5.10.1"}
-#mypy = "^1.0"
-#mypy-extensions = "^1.0.0"
-#pre-commit = "^3.5.0"
-#pydocstyle = "^6.1.1"
-#pylint = "^3.0.2"
-#pytest = "^7.4.3"
-#pyupgrade = "^3.15.0"
-#safety = "^2.3.4"
-#coverage = "^7.3.2"
-#coverage-badge = "^1.1.0"
-#pytest-html = "^4.1.1"
-#pytest-cov = "^4.1.0"
+downloadListingFromCDS = "cdsodatacli.download:main"
 
 
 [build-system]
@@ -99,8 +90,21 @@ exclude = '''
 py_version = 39
 line_length = 88
 
-known_typing = ["typing", "types", "typing_extensions", "mypy", "mypy_extensions"]
-sections = ["FUTURE", "TYPING", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
+known_typing = [
+  "typing",
+  "types",
+  "typing_extensions",
+  "mypy",
+  "mypy_extensions",
+]
+sections = [
+  "FUTURE",
+  "TYPING",
+  "STDLIB",
+  "THIRDPARTY",
+  "FIRSTPARTY",
+  "LOCALFOLDER",
+]
 include_trailing_comma = true
 profile = "black"
 multi_line_output = 3
@@ -137,8 +141,22 @@ warn_unused_ignores = true
 [tool.pytest.ini_options]
 # https://docs.pytest.org/en/6.2.x/customize.html#pyproject-toml
 # Directories that are not visited by pytest collector:
-norecursedirs =["hooks", "*.egg", ".eggs", "dist", "build", "docs", ".tox", ".git", "__pycache__"]
-doctest_optionflags = ["NUMBER", "NORMALIZE_WHITESPACE", "IGNORE_EXCEPTION_DETAIL"]
+norecursedirs = [
+  "hooks",
+  "*.egg",
+  ".eggs",
+  "dist",
+  "build",
+  "docs",
+  ".tox",
+  ".git",
+  "__pycache__",
+]
+doctest_optionflags = [
+  "NUMBER",
+  "NORMALIZE_WHITESPACE",
+  "IGNORE_EXCEPTION_DETAIL",
+]
 
 # Extra options:
 addopts = [

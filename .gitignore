@@ -107,7 +107,9 @@ fabric.properties
 # modules.xml
 # .idea/misc.xml
 # *.ipr
+.idea
 
+localconfig.yml
 # Sonarlint plugin
 .idea/**/sonarlint/
 
@@ -616,3 +618,5 @@ MigrationBackup/
 
 # End of https://www.gitignore.io/api/osx,python,pycharm,windows,visualstudio,visualstudiocode
 .cdsodatacli/api_cache/
+
+.env
