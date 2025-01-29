@@ -75,7 +75,6 @@ if __name__ == "__main__":
         inputdf = pd.read_csv(listing, names=["id", "safename"], delimiter=",")
     else:
         inputdf = add_missing_cdse_hash_ids_in_listing(listing_path=listing)
-    #inputdf['id_query'] = ['downloadlisting']
     if not os.path.exists(outputdir):
         logging.debug("mkdir on %s", outputdir)
         os.makedirs(outputdir, 0o0775)
