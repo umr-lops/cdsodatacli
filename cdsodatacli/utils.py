@@ -4,7 +4,10 @@ import os
 import cdsodatacli
 from yaml import CLoader as Loader
 import datetime
+import pandas as pd
 import pdb
+import json
+
 local_config_pontential_path = os.path.join(
     os.path.dirname(cdsodatacli.__file__), "localconfig.yml"
 )
@@ -154,3 +157,27 @@ def check_safe_in_archive(safename):
     if present_in_archive:
         logging.debug('the product is stored in : %s',arch_potential_file)
     return present_in_archive
+
+
+def convert_json_opensearch_query_to_listing_safe_4_dowload(json_path)->str:
+    """
+
+    Parameters
+    ----------
+    json_path str: full path of the OpenSearch file giving the meta data from the CDSE
+
+    Returns
+    -------
+        output_txt str: listing with 2 columns: id,safename
+    """
+    logging.info('input json file: %s',json_path)
+    with open(json_path, "r") as f:
+        data = json.load(f)
+    df = pd.json_normalize(data['features'])
+    sub = df[['id','properties.title']]
+    sub.drop_duplicates()
+    output_txt = json_path.replace('.json','.txt')
+    sub.to_csv(output_txt,header=False,index=False)
+    logging.info('output_txt : %s',output_txt)
+    return output_txt
+

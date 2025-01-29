@@ -537,6 +537,7 @@ def add_missing_cdse_hash_ids_in_listing(listing_path):
             "sensormode": [ExplodeSAFE(jj).mode for jj in list_safe_a],
             "producttype": [ExplodeSAFE(jj).product[0:3] for jj in list_safe_a],
             "Attributes": np.tile([None], len(list_safe_a)),
+            "id_query":np.tile(['dummy2getProducthash'], len(list_safe_a)),
         }
     )
     sea_min_pct = 0
