@@ -14,7 +14,7 @@ name_json = requests.get(
     "https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter=Collection/Name eq 'SENTINEL-2' and ContentDate/Start gt 2022-05-03T00:00:00.000Z and ContentDate/Start lt 2022-05-03T00:11:00.000Z&$top=1000"
 ).json()
 name_df = pd.DataFrame.from_dict(name_json["value"])
-name_df = name_df[~name_df['Name'].str.contains('_OPER_', na=False)]
+name_df = name_df[~name_df["Name"].str.contains("_OPER_", na=False)]
 gdf = gpd.GeoDataFrame(
     {
         "start_datetime": [np.datetime64("2022-05-03 00:00:00")],
@@ -107,8 +107,9 @@ def test_queries(expected, result):
 # def test_querycloudcover(query_cloudCover_df=query_cloudCover_df, cloudCover_df=cloudCover_df):
 #     """Example test with parametrization."""
 #     assert all(item in list(query_cloudCover_df['Name']) for item in list(cloudCover_df['Name']))
-if __name__ == '__main__':
+if __name__ == "__main__":
     import pdb
+
     expected = name_df
     result = query_name_dfd
     pdb.set_trace()

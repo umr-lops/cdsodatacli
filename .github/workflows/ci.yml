@@ -80,7 +80,7 @@ jobs:
           python -c "import cdsodatacli"
       - name: Create secrets.yml from GitHub Secret
         run: |
-            echo "${{ secrets.SECRET_FOR_TEST_DOWNLOAD_CDSE }}" > secrets.yml
+          echo "${{ secrets.SECRET_FOR_TEST_DOWNLOAD_CDSE }}" > secrets.yml
         shell: bash
 
       - name: Export secrets as environment variables
