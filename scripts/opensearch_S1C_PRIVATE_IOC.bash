@@ -3,9 +3,11 @@ echo start
 
 passwd_cdse_expert=$4
 email_account_cdse=$5
+echo 'email_account_cdse '$email_account_cdse
+echo 'passwd_cdse_expert '$passwd_cdse_expert
 ACCESS_TOKEN=$(curl -d 'client_id=cdse-public' \
-                    -d 'username=$email_account_cdse' \
-                    -d 'password=$passwd_cdse_expert' \
+                    -d 'username='${email_account_cdse} \
+                    -d 'password='${passwd_cdse_expert} \
                     -d 'grant_type=password' \
                     'https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token' | \
                     python3 -m json.tool | grep "access_token" | awk -F\" '{print $4}')
@@ -20,7 +22,7 @@ ouputjsonfile=$3
 echo 'output JSON file '$ouputjsonfile
 maxrec=2000 #current limit january 2025
 
-curl -X GET "https://catalogue.dataspace.copernicus.eu/resto/api/collections/SENTINEL-1/search.json?publishedAfter=$mindate&exactCount=true&platform=S1C&productType=$productType&maxRecords=$maxrec" \
+curl --insecure -X GET "https://catalogue.dataspace.copernicus.eu/resto/api/collections/SENTINEL-1/search.json?publishedAfter=$mindate&exactCount=true&platform=S1C&productType=$productType&maxRecords=$maxrec" \
 -H "Authorization: Bearer $ACCESS_TOKEN" \
 -d '{
   "query": {

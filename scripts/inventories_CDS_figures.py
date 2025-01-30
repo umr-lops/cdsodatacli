@@ -379,14 +379,14 @@ def count_per_year_with_labels(collected_data_norm, title, freq="AS"):
     if "startdate" not in collected_data_norm:
         collected_data_norm = add_time_index_based_onstardtate(collected_data_norm)
     plt.figure(figsize=(10, 6), dpi=110)
+    # not Y because anchored date is offset to year+1
+
     newdf_per_class_double_entries = {}
     years = []
     newdf_per_class_double_entries["1SDV"] = []
     newdf_per_class_double_entries["1SSV"] = []
     newdf_per_class_double_entries["1SSH"] = []
     newdf_per_class_double_entries["1SDH"] = []
-    # newdf_per_class_double_entries["pola"] = []
-    # print('test',collected_data_norm["Name"])
     for year in range(2014, 2024):
         years.append(year)
         for pol in ["1SDV", "1SSV", "1SSH", "1SDH"]:
@@ -449,6 +449,7 @@ def count_per_year_with_labels_unit(
     if "startdate" not in collected_data_norm:
         collected_data_norm = add_time_index_based_onstardtate(collected_data_norm)
     plt.figure(figsize=(10, 6), dpi=110)
+    # not Y because anchored date is offset to year+1
     newdf_per_class_double_entries = {}
     years = []
     for year in range(yearmin, yearmax + 1):
@@ -573,7 +574,7 @@ def count_per_year_with_labels_available(
     collected_data_norm = add_time_index_based_onstardtate(collected_data_norm)
     fig = plt.figure(figsize=(10, 6), dpi=110)
     ax = plt.subplot(111)
-
+    # not Y because anchored date is offset to year+1
     newdf_per_class_double_entries = {}
 
     for mode in ["all", "available@Ifremer"]:
@@ -582,7 +583,7 @@ def count_per_year_with_labels_available(
             years.append(year)
             if mode == "available@Ifremer":
                 subset = collected_data_norm[
-                    (collected_data_norm["available@Ifremer"] is True)
+                    (collected_data_norm["available@Ifremer"])
                     & (collected_data_norm["Name"].str.contains("_" + str(year)))
                 ]
             else:
@@ -658,6 +659,10 @@ def count_per_month_with_labels_unit(
     if "startdate" not in collected_data_norm:
         collected_data_norm = add_time_index_based_onstardtate(collected_data_norm)
     plt.figure(figsize=(10, 6), dpi=110)
+    # not Y because anchored date is offset to year+1
+    # freq = "M"  # for a test
+
+    width = 30
     newdf_per_class_double_entries = {}
     months = []
     months_str = []
@@ -677,7 +682,7 @@ def count_per_month_with_labels_unit(
                     & (collected_data_norm["startdate"] >= month)
                     & (
                         collected_data_norm["startdate"]
-                        < month + datetime.timedelta(days=30)
+                        < month + datetime.timedelta(days=width)
                     )
                     & (collected_data_norm["Name"].str.contains(sarunit))  #
                 ]

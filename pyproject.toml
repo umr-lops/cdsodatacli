@@ -32,7 +32,6 @@ dependencies = [
 ]
 
 
-
 dynamic = ["version"]
 [project.optional-dependencies]
 dev = [
@@ -47,9 +46,10 @@ dev = [
   "sphinx_autosummary_accessors",
 
 ]
+
 [project.scripts]
 queryCDS = "cdsodatacli.query:query_client"
-downloadListingFromCDS = "cdsodatacli.download:main"
+downloadFromCDS = "cdsodatacli.download:main"
 
 
 [build-system]

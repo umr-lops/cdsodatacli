@@ -1,4 +1,3 @@
-import pdb
 from cdsodatacli.utils import conf
 import subprocess
 import logging
@@ -11,7 +10,9 @@ import random
 MAX_VALIDITY_ACCESS_TOKEN = 600  # sec (defined by CDS API)
 
 
-def get_bearer_access_token(quiet=True, specific_account=None,passwd=None, account_group="logins"):
+def get_bearer_access_token(
+    quiet=True, specific_account=None, passwd=None, account_group="logins"
+):
     """
     OData access token (validity=600sec)
     specific_account (str) [optional, default=None -> first available account in config file]
@@ -36,13 +37,15 @@ def get_bearer_access_token(quiet=True, specific_account=None,passwd=None, accou
         prefix = "curl -s "
     else:
         prefix = "curl "
-    option_insecure = ' --insecure' # added because workers have deprecated SSL certificates
+    option_insecure = (
+        " --insecure"  # added because workers have deprecated SSL certificates
+    )
     cmd = (
         prefix
         + " --location --request POST "
         + url_identity
         + " --header 'Content-Type: application/x-www-form-urlencoded' --data-urlencode 'grant_type=password' --data-urlencode 'username=%s' --data-urlencode 'password=%s' --data-urlencode 'client_id=cdse-public' %s"
-        % (login, passwd,option_insecure)
+        % (login, passwd, option_insecure)
     )
 
     logging.debug("cmd: %s", cmd)

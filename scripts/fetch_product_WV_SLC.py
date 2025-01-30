@@ -55,7 +55,7 @@ if __name__ == "__main__":
             # "producttype": ["SLC_PRIVATE"],
             "producttype": ["WV_OCN__2S_PRIVATE"],
             "Attributes": [None],
-            "id_query": ['WVtest']
+            "id_query": ["WVtest"],
         }
     )
 
@@ -68,4 +68,4 @@ if __name__ == "__main__":
         collected_data_norm[["Id", "Name"]].to_csv(outf, header=False, index=False)
         logging.info("outf : %s", outf)
     else:
-        logging.info('no data..')
+        logging.info("no data..")

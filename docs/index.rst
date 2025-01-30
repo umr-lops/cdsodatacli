@@ -67,4 +67,3 @@ Last documentation build: |today|
    basic_api
 
 .. _on github: https://github.com/umr-lops/cdsodatacli
-

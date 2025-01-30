@@ -9,8 +9,9 @@ import pytest
 import sys
 import cdsodatacli
 from cdsodatacli.download import download_list_product
-from cdsodatacli.utils import conf, check_safe_in_outputdir
+from cdsodatacli.utils import conf
 from dotenv import load_dotenv
+
 load_dotenv()
 
 # listing = './example_WV_listing.txt'
@@ -23,27 +24,31 @@ default_listing = os.path.join(
 
 def test_secrets():
     login_cdse = os.getenv("DEFAULT_LOGIN_CDSE")
-    assert login_cdse is not None, "DEFAULT_LOGIN_CDSE is not defined (.env absent? or SECRETS from github undefined)"
+    assert (
+        login_cdse is not None
+    ), "DEFAULT_LOGIN_CDSE is not defined (.env absent? or SECRETS from github undefined)"
     assert login_cdse == "antoine.grouazel@ifremer.fr"
+
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Test not supported on Windows")
 @pytest.mark.parametrize(
     ("listing", "outputdir"),
     [
-        (default_listing,conf['test_default_output_directory']),
-    ]
+        (default_listing, conf["test_default_output_directory"]),
+    ],
 )
-def test_download_WV_OCN_SAFE(listing,outputdir):
-    if './' in outputdir:
-        outputdir = os.path.abspath(os.path.join(os.getcwd(),outputdir))
+def test_download_WV_OCN_SAFE(listing, outputdir):
+    if "./" in outputdir:
+        outputdir = os.path.abspath(os.path.join(os.getcwd(), outputdir))
     login_cdse = os.getenv("DEFAULT_LOGIN_CDSE")
     passwd = os.getenv("DEFAULT_PASSWD_CDSE")
     logging.info("listing: %s", listing)
     assert os.path.exists(listing)
     inputdf = pd.read_csv(listing, names=["id", "safename"], delimiter=",")
-    maskok = inputdf['safename'].str.contains('CORRUPTED')==False
+    # maskok = inputdf["safename"].str.contains("CORRUPTED") == False
+    maskok = ~inputdf["safename"].str.contains("CORRUPTED", na=False)
     inputdfclean = inputdf[maskok]
-    assert len(inputdfclean['safename'])==3
+    assert len(inputdfclean["safename"]) == 3
     if not os.path.exists(outputdir):
         logging.debug("mkdir on %s", outputdir)
         os.makedirs(outputdir, 0o0775)
@@ -55,16 +60,21 @@ def test_download_WV_OCN_SAFE(listing,outputdir):
     #     account_group='defaultgroup'
     # )
     download_list_product(
-        list_id=inputdfclean["id"].values, list_safename=inputdfclean["safename"].values,
-        outputdir=outputdir, specific_account=login_cdse,specific_passwd=passwd, hideProgressBar=False
+        list_id=inputdfclean["id"].values,
+        list_safename=inputdfclean["safename"].values,
+        outputdir=outputdir,
+        specific_account=login_cdse,
+        specific_passwd=passwd,
+        hideProgressBar=False,
     )
-    from cdsodatacli.utils import conf, check_safe_in_outputdir
+
     # assert check_safe_in_outputdir(outputdir=outputdir,safename=inputdfclean['safename'].iloc[0]) is True
     # clear the test  download output directory
     # for ii in range(len(inputdfclean['safename'])):
     #     os.remove(os.path.join(outputdir,inputdfclean['safename'].iloc[ii]+'.zip'))
     # assert check_safe_in_outputdir(outputdir=outputdir, safename=inputdfclean['safename'].iloc[0]) is False
     assert True
+
 
 if __name__ == "__main__":
     root = logging.getLogger()

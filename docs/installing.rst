@@ -8,7 +8,7 @@ conda install
 #############
 
 
-.. code-block::
+.. code-block:: bash
 
     conda create -n cdsodataclienv
     conda activate cdsodataclienv
@@ -23,13 +23,13 @@ Update xsar_slc to the latest version
 
 To be up to date with the development team, it's recommended to update the installation using pip:
 
-.. code-block::
+.. code-block:: bash
 
     pip install git+https://github.com/umr-lops/cdsodatacli.git
 
 or
 
-.. code-block::
+.. code-block:: bash
 
   git clone https://github.com/umr-lops/cdsodatacli.git
   cd cdsodatacli

@@ -5,7 +5,6 @@ import cdsodatacli
 from yaml import CLoader as Loader
 import datetime
 import pandas as pd
-import pdb
 import json
 
 local_config_pontential_path = os.path.join(
@@ -19,6 +18,35 @@ else:
 logging.info("config path that is used: %s", used_config_path)
 stream = open(used_config_path, "r")
 conf = load(stream, Loader=Loader)
+
+
+def check_safe_in_outputdir(outputdir, safename):
+    """
+
+    Parameters
+    ----------
+    safename (str) basename
+
+    Returns
+    -------
+        present_in_outputdir (bool): True -> the product is already in the spool dir
+
+    """
+    present_in_outdir = False
+    for uu in ["", ".zip", "replaced"]:
+        if uu == "":
+            potential_file = os.path.join(outputdir, safename)
+        elif uu == ".zip":
+            potential_file = os.path.join(outputdir, safename + ".zip")
+        elif uu == "replaced":
+            potential_file = os.path.join(outputdir, safename.replace(".SAFE", ".zip"))
+        else:
+            raise NotImplementedError
+        if os.path.exists(potential_file):
+            present_in_outdir = True
+            break
+    logging.debug("present_in_spool : %s", present_in_outdir)
+    return present_in_outdir
 
 
 def check_safe_in_spool(safename):
@@ -44,42 +72,12 @@ def check_safe_in_spool(safename):
                 conf["spool"], safename.replace(".SAFE", ".zip")
             )
         else:
-            raise NotImplemented
+            raise NotImplementedError
         if os.path.exists(spool_potential_file):
             present_in_spool = True
             break
     logging.debug("present_in_spool : %s", present_in_spool)
     return present_in_spool
-
-def check_safe_in_outputdir(outputdir,safename):
-    """
-
-    Parameters
-    ----------
-    safename (str) basename
-
-    Returns
-    -------
-        present_in_outputdir (bool): True -> the product is already in the spool dir
-
-    """
-    present_in_outdir = False
-    for uu in ["", ".zip", "replaced"]:
-        if uu == "":
-            potential_file = os.path.join(outputdir, safename)
-        elif uu == ".zip":
-            potential_file = os.path.join(outputdir, safename + ".zip")
-        elif uu == "replaced":
-            potential_file = os.path.join(
-                outputdir, safename.replace(".SAFE", ".zip")
-            )
-        else:
-            raise NotImplemented
-        if os.path.exists(potential_file):
-            present_in_outdir = True
-            break
-    logging.debug("present_in_spool : %s", present_in_outdir)
-    return present_in_outdir
 
 
 def WhichArchiveDir(safe):
@@ -87,30 +85,30 @@ def WhichArchiveDir(safe):
     Args:
         safe (str): safe base name
     """
-    logging.debug('safe: %s',safe)
-    if 'S1' in safe:
+    logging.debug("safe: %s", safe)
+    if "S1" in safe:
         firstdate = safe[17:32]
-    elif 'S2' in safe:
+    elif "S2" in safe:
         firstdate = safe[11:26]
     year = firstdate[0:4]
     # try:
     # doy = str(
     #     datetime.datetime.strptime(firstdate, "%Y%m%d").timetuple().tm_yday
     # ).zfill(3)
-    doy = datetime.datetime.strptime(firstdate, "%Y%m%dT%H%M%S").strftime('%j')
+    doy = datetime.datetime.strptime(firstdate, "%Y%m%dT%H%M%S").strftime("%j")
     sat = safe.split("_")[0]
     if sat == "S1A":
         satdir = "sentinel-1a"
     elif sat == "S1B":
         satdir = "sentinel-1b"
-    elif sat == 'S1C':
+    elif sat == "S1C":
         satdir = "sentinel-1c"
-    elif sat == 'S1D':
+    elif sat == "S1D":
         satdir = "sentinel-1d"
-    elif sat =='S2B':
-        satdir = 'sentinel-2b'
-    elif sat =='S2A':
-        satdir = 'sentinel-2a'
+    elif sat == "S2B":
+        satdir = "sentinel-2b"
+    elif sat == "S2A":
+        satdir = "sentinel-2a"
     else:
         satdir = ""
         logging.error("%s is not a  good satellite name", sat)
@@ -141,7 +139,7 @@ def check_safe_in_archive(safename):
     """
     present_in_archive = False
     for uu in ["", ".zip", "replaced"]:
-        arch_potential_file0 = os.path.join(WhichArchiveDir(safename),safename)
+        arch_potential_file0 = os.path.join(WhichArchiveDir(safename), safename)
         if uu == "":
             arch_potential_file = arch_potential_file0
         elif uu == ".zip":
@@ -149,17 +147,17 @@ def check_safe_in_archive(safename):
         elif uu == "replaced":
             arch_potential_file = arch_potential_file0.replace(".SAFE", ".zip")
         else:
-            raise NotImplemented
+            raise NotImplementedError
         if os.path.exists(arch_potential_file):
             present_in_archive = True
             break
     logging.debug("present_in_archive : %s", present_in_archive)
     if present_in_archive:
-        logging.debug('the product is stored in : %s',arch_potential_file)
+        logging.debug("the product is stored in : %s", arch_potential_file)
     return present_in_archive
 
 
-def convert_json_opensearch_query_to_listing_safe_4_dowload(json_path)->str:
+def convert_json_opensearch_query_to_listing_safe_4_dowload(json_path) -> str:
     """
 
     Parameters
@@ -170,14 +168,13 @@ def convert_json_opensearch_query_to_listing_safe_4_dowload(json_path)->str:
     -------
         output_txt str: listing with 2 columns: id,safename
     """
-    logging.info('input json file: %s',json_path)
+    logging.info("input json file: %s", json_path)
     with open(json_path, "r") as f:
         data = json.load(f)
-    df = pd.json_normalize(data['features'])
-    sub = df[['id','properties.title']]
+    df = pd.json_normalize(data["features"])
+    sub = df[["id", "properties.title"]]
     sub.drop_duplicates()
-    output_txt = json_path.replace('.json','.txt')
-    sub.to_csv(output_txt,header=False,index=False)
-    logging.info('output_txt : %s',output_txt)
+    output_txt = json_path.replace(".json", ".txt")
+    sub.to_csv(output_txt, header=False, index=False)
+    logging.info("output_txt : %s", output_txt)
     return output_txt
-
