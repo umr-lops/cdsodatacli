@@ -169,12 +169,21 @@ def convert_json_opensearch_query_to_listing_safe_4_dowload(json_path) -> str:
         output_txt str: listing with 2 columns: id,safename
     """
     logging.info("input json file: %s", json_path)
+    output_txt = json_path.replace(".json", ".txt")
     with open(json_path, "r") as f:
         data = json.load(f)
-    df = pd.json_normalize(data["features"])
-    sub = df[["id", "properties.title"]]
-    sub.drop_duplicates()
-    output_txt = json_path.replace(".json", ".txt")
-    sub.to_csv(output_txt, header=False, index=False)
+    if len(data["features"]) > 0:
+        df = pd.json_normalize(data["features"])
+        sub = df[["id", "properties.title"]]
+        sub.drop_duplicates()
+
+        sub.to_csv(output_txt, header=False, index=False)
+    else:
+        if os.path.exists(output_txt):
+            fid = open(output_txt, "a")
+            fid.close()
+        else:
+            fid = open(output_txt, "w")
+            fid.close()
     logging.info("output_txt : %s", output_txt)
     return output_txt
