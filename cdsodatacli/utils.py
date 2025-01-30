@@ -20,6 +20,35 @@ stream = open(used_config_path, "r")
 conf = load(stream, Loader=Loader)
 
 
+def check_safe_in_outputdir(outputdir, safename):
+    """
+
+    Parameters
+    ----------
+    safename (str) basename
+
+    Returns
+    -------
+        present_in_outputdir (bool): True -> the product is already in the spool dir
+
+    """
+    present_in_outdir = False
+    for uu in ["", ".zip", "replaced"]:
+        if uu == "":
+            potential_file = os.path.join(outputdir, safename)
+        elif uu == ".zip":
+            potential_file = os.path.join(outputdir, safename + ".zip")
+        elif uu == "replaced":
+            potential_file = os.path.join(outputdir, safename.replace(".SAFE", ".zip"))
+        else:
+            raise NotImplementedError
+        if os.path.exists(potential_file):
+            present_in_outdir = True
+            break
+    logging.debug("present_in_spool : %s", present_in_outdir)
+    return present_in_outdir
+
+
 def check_safe_in_spool(safename):
     """
 
@@ -126,3 +155,26 @@ def check_safe_in_archive(safename):
     if present_in_archive:
         logging.debug("the product is stored in : %s", arch_potential_file)
     return present_in_archive
+
+
+def convert_json_opensearch_query_to_listing_safe_4_dowload(json_path) -> str:
+    """
+
+    Parameters
+    ----------
+    json_path str: full path of the OpenSearch file giving the meta data from the CDSE
+
+    Returns
+    -------
+        output_txt str: listing with 2 columns: id,safename
+    """
+    logging.info("input json file: %s", json_path)
+    with open(json_path, "r") as f:
+        data = json.load(f)
+    df = pd.json_normalize(data["features"])
+    sub = df[["id", "properties.title"]]
+    sub.drop_duplicates()
+    output_txt = json_path.replace(".json", ".txt")
+    sub.to_csv(output_txt, header=False, index=False)
+    logging.info("output_txt : %s", output_txt)
+    return output_txt

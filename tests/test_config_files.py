@@ -3,8 +3,7 @@ import os.path
 from yaml import CLoader as Loader
 from yaml import load
 import logging
-import pytest
-from cdsodatacli.utils import local_config_pontential_path,config_path
+from cdsodatacli.utils import local_config_pontential_path, config_path
 
 
 def test_to_make_sure_localconfig_and_config_contains_same_keys():
@@ -17,17 +16,21 @@ def test_to_make_sure_localconfig_and_config_contains_same_keys():
         defaultconf = load(stream, Loader=Loader)
 
         for keyc in conflocal:
-            assert keyc in defaultconf, f"Key '{keyc}' is missing from the default configuration"
+            assert (
+                keyc in defaultconf
+            ), f"Key '{keyc}' is missing from the default configuration"
             if keyc not in defaultconf:
                 all_keys_are_presents = False
 
         for keyc in defaultconf:
-            assert keyc in conflocal, f"Key '{keyc}' is missing from the local configuration"
+            assert (
+                keyc in conflocal
+            ), f"Key '{keyc}' is missing from the local configuration"
             if keyc not in conflocal:
                 all_keys_are_presents = False
     else:
-        logging.info("you don't have localconfig.yml defined for cdsodatacli lib (it is not mandatory but it means you cant download data)")
+        logging.info(
+            "you don't have localconfig.yml defined for cdsodatacli lib (it is not mandatory but it means you cant download data)"
+        )
 
     assert all_keys_are_presents is True
-
-
