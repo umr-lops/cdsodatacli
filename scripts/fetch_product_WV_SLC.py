@@ -50,9 +50,12 @@ if __name__ == "__main__":
             ],
             "collection": ["SENTINEL-1"],
             "name": ["1SSV"],
+            # "name": ["S1C_WV_SLC__1SSV"],
             "sensormode": ["WV"],
-            "producttype": ["SLC"],
+            # "producttype": ["SLC_PRIVATE"],
+            "producttype": ["WV_OCN__2S_PRIVATE"],
             "Attributes": [None],
+            "id_query": ["WVtest"],
         }
     )
 
@@ -61,5 +64,8 @@ if __name__ == "__main__":
         conf["test_default_output_directory"],
         "test_WV_SLC_%s_%s.txt" % (args.startdate, args.stopdate),
     )
-    collected_data_norm[["Id", "Name"]].to_csv(outf, header=False, index=False)
-    logging.info("outf : %s", outf)
+    if collected_data_norm is not None:
+        collected_data_norm[["Id", "Name"]].to_csv(outf, header=False, index=False)
+        logging.info("outf : %s", outf)
+    else:
+        logging.info("no data..")

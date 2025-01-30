@@ -4,21 +4,23 @@ import os
 import cdsodatacli
 from yaml import CLoader as Loader
 import datetime
+import pandas as pd
+import json
 
 local_config_pontential_path = os.path.join(
     os.path.dirname(cdsodatacli.__file__), "localconfig.yml"
 )
-
+config_path = os.path.join(os.path.dirname(cdsodatacli.__file__), "config.yml")
 if os.path.exists(local_config_pontential_path):
-    config_path = local_config_pontential_path
+    used_config_path = local_config_pontential_path
 else:
-    config_path = os.path.join(os.path.dirname(cdsodatacli.__file__), "config.yml")
-logging.info("config path: %s", config_path)
-stream = open(config_path, "r")
+    used_config_path = config_path
+logging.info("config path that is used: %s", used_config_path)
+stream = open(used_config_path, "r")
 conf = load(stream, Loader=Loader)
 
 
-def test_safe_spool(safename):
+def check_safe_in_spool(safename):
     """
 
     Parameters
@@ -70,6 +72,10 @@ def WhichArchiveDir(safe):
         satdir = "sentinel-1a"
     elif sat == "S1B":
         satdir = "sentinel-1b"
+    elif sat == "S1C":
+        satdir = "sentinel-1c"
+    elif sat == "S1D":
+        satdir = "sentinel-1d"
     elif sat == "S2B":
         satdir = "sentinel-2b"
     elif sat == "S2A":
@@ -90,7 +96,7 @@ def WhichArchiveDir(safe):
     return gooddir
 
 
-def test_safe_archive(safename):
+def check_safe_in_archive(safename):
     """
 
     Parameters
