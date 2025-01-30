@@ -14,4 +14,3 @@ processing
 
 .. automodule:: cdsodatacli.query
     :members: fetch_data
-

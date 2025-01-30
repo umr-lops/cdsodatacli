@@ -1,4 +1,3 @@
-import cartopy
 import cartopy.crs as ccrs
 import pandas as pd
 import numpy as np
@@ -11,7 +10,8 @@ from matplotlib import pyplot as plt
 from shapely.geometry import Point, Polygon
 from dateutil import rrule
 
-def map_footprints(geometry_request, collected_data_norm, title,alpha=0.8):
+
+def map_footprints(geometry_request, collected_data_norm, title, alpha=0.8):
     """
 
     :param geometry_request (pd.Serie): for buoys location
@@ -43,7 +43,7 @@ def map_footprints(geometry_request, collected_data_norm, title,alpha=0.8):
             # dslmfkdmkfsl
             try:
                 plt.plot(*unary_union(uu.geoms).exterior.xy)
-            except:
+            except ValueError:
                 cpt["unary_union_not_sufficient"] += 1
                 pass
                 # print('unaryunion passe pas')
@@ -75,13 +75,14 @@ def histogram_ocean_coverage(collected_data_norm, title):
     plt.grid(True)
     plt.show()
 
+
 def histogram_ocean_coverage_cumsum(collected_data_norm, title):
     # bins = np.arange(100,0,-5)
-    valh , bins =np.histogram(collected_data_norm["sea_percent"],bins=20)
-    cumsum = np.cumsum(valh[::-1]) # [::-1]
+    valh, bins = np.histogram(collected_data_norm["sea_percent"], bins=20)
+    cumsum = np.cumsum(valh[::-1])  # [::-1]
     bins2 = bins[::-1][1:]
-    print('cumsum',cumsum)
-    print('bins2',bins2)
+    print("cumsum", cumsum)
+    print("bins2", bins2)
     plt.figure(dpi=100)
     plt.title(title)
     plt.bar(
@@ -90,7 +91,7 @@ def histogram_ocean_coverage_cumsum(collected_data_norm, title):
         width=4,
         label="CDS results total:%s" % len(collected_data_norm["sea_percent"]),
         edgecolor="k",
-        fc='y'
+        fc="y",
     )
     plt.xlabel("minimum % sea in footprint of slices found")
     plt.ylabel("cumulative number of slices found")
@@ -171,7 +172,7 @@ def number_product_per_month(collected_data_norm, title):
 
 
 def number_of_product_per_climato_month(collected_data_norm, title):
-    if 'startdate' not in collected_data_norm:
+    if "startdate" not in collected_data_norm:
         collected_data_norm = add_time_index_based_onstardtate(collected_data_norm)
     plt.figure(figsize=(13, 6), dpi=110)
     for unit in ["S1A", "S1B"]:
@@ -181,7 +182,7 @@ def number_of_product_per_climato_month(collected_data_norm, title):
                 & (collected_data_norm["Name"].str.contains(pol))
             ]
             # grp = subset.groupby(subset.index.month).count()
-            grp = subset.groupby(subset['startdate'].dt.month).count()
+            grp = subset.groupby(subset["startdate"].dt.month).count()
             # print('grp',grp)
             if len(grp["Name"]) > 0:
                 grp["Name"].plot(
@@ -373,25 +374,12 @@ def count_per_year_with_labels(collected_data_norm, title, freq="AS"):
     :param freq: AS is for yearly grouping with anchor at the start of the year
     :return:
     """
-    if 'volume' not in collected_data_norm:
+    if "volume" not in collected_data_norm:
         collected_data_norm = add_volumetry_column(collected_data_norm)
-    if 'startdate' not in collected_data_norm:
+    if "startdate" not in collected_data_norm:
         collected_data_norm = add_time_index_based_onstardtate(collected_data_norm)
     plt.figure(figsize=(10, 6), dpi=110)
-    cummul_grp = None
     # not Y because anchored date is offset to year+1
-    # freq = "M"  # for a test
-    if freq == "AS":
-        width = 365
-    elif freq == "M":
-        width = 30
-
-    ix = pd.date_range(
-        start=datetime.datetime(2013, 1, 1),
-        end=datetime.datetime(2024, 1, 1),
-        freq=freq,
-    )
-    cptu = 0
 
     newdf_per_class_double_entries = {}
     years = []
@@ -399,8 +387,6 @@ def count_per_year_with_labels(collected_data_norm, title, freq="AS"):
     newdf_per_class_double_entries["1SSV"] = []
     newdf_per_class_double_entries["1SSH"] = []
     newdf_per_class_double_entries["1SDH"] = []
-    # newdf_per_class_double_entries["pola"] = []
-    # print('test',collected_data_norm["Name"])
     for year in range(2014, 2024):
         years.append(year)
         for pol in ["1SDV", "1SSV", "1SSH", "1SDH"]:
@@ -458,18 +444,12 @@ def count_per_year_with_labels_unit(
     :param freq: AS is for yearly grouping with anchor at the start of the year
     :return:
     """
-    if 'volume' not in collected_data_norm:
+    if "volume" not in collected_data_norm:
         collected_data_norm = add_volumetry_column(collected_data_norm)
-    if 'startdate' not in collected_data_norm:
+    if "startdate" not in collected_data_norm:
         collected_data_norm = add_time_index_based_onstardtate(collected_data_norm)
     plt.figure(figsize=(10, 6), dpi=110)
-    cummul_grp = None
     # not Y because anchored date is offset to year+1
-    # freq = "M"  # for a test
-    if freq == "AS":
-        width = 365
-    elif freq == "M":
-        width = 30
     newdf_per_class_double_entries = {}
     years = []
     for year in range(yearmin, yearmax + 1):
@@ -498,9 +478,9 @@ def count_per_year_with_labels_unit(
                         ].append(countsafe)
                 else:
                     if sarunit + "_" + pol not in newdf_per_class_double_entries:
-                        newdf_per_class_double_entries[
-                            "%s" % (sarunit + "_" + pol)
-                        ] = []
+                        newdf_per_class_double_entries["%s" % (sarunit + "_" + pol)] = (
+                            []
+                        )
                     newdf_per_class_double_entries["%s" % (sarunit + "_" + pol)].append(
                         countsafe
                     )
@@ -592,14 +572,9 @@ def count_per_year_with_labels_available(
     assert "available@Ifremer" in collected_data_norm
     collected_data_norm = add_volumetry_column(collected_data_norm)
     collected_data_norm = add_time_index_based_onstardtate(collected_data_norm)
-    fig  = plt.figure(figsize=(10, 6), dpi=110)
+    fig = plt.figure(figsize=(10, 6), dpi=110)
     ax = plt.subplot(111)
     # not Y because anchored date is offset to year+1
-    # freq = "M"  # for a test
-    if freq == "AS":
-        width = 365
-    elif freq == "M":
-        width = 30
     newdf_per_class_double_entries = {}
 
     for mode in ["all", "available@Ifremer"]:
@@ -608,7 +583,7 @@ def count_per_year_with_labels_available(
             years.append(year)
             if mode == "available@Ifremer":
                 subset = collected_data_norm[
-                    (collected_data_norm["available@Ifremer"] == True)
+                    (collected_data_norm["available@Ifremer"])
                     & (collected_data_norm["Name"].str.contains("_" + str(year)))
                 ]
             else:
@@ -636,7 +611,7 @@ def count_per_year_with_labels_available(
         xlabel="year",
         ylabel="Count",
         edgecolor="k",
-        ax=ax
+        ax=ax,
     )
     for c in ax.containers:
 
@@ -679,31 +654,36 @@ def count_per_month_with_labels_unit(
     :param freq: AS is for yearly grouping with anchor at the start of the year
     :return:
     """
-    if 'volume' not in collected_data_norm:
+    if "volume" not in collected_data_norm:
         collected_data_norm = add_volumetry_column(collected_data_norm)
-    if 'startdate' not in collected_data_norm:
+    if "startdate" not in collected_data_norm:
         collected_data_norm = add_time_index_based_onstardtate(collected_data_norm)
     plt.figure(figsize=(10, 6), dpi=110)
-    cummul_grp = None
     # not Y because anchored date is offset to year+1
     # freq = "M"  # for a test
-    if freq == "AS":
-        width = 365
-    elif freq == "M":
-        width = 30
+
+    width = 30
     newdf_per_class_double_entries = {}
     months = []
     months_str = []
     # for year in range(yearmin, yearmax + 1):
-    for month in rrule.rrule(rrule.MONTHLY,dtstart=datetime.datetime.strptime(monthmin,'%Y%m'),until=datetime.datetime.strptime(monthmax,'%Y%m')):
+    for month in rrule.rrule(
+        rrule.MONTHLY,
+        dtstart=datetime.datetime.strptime(monthmin, "%Y%m"),
+        until=datetime.datetime.strptime(monthmax, "%Y%m"),
+    ):
         months.append(month)
-        months_str.append(month.strftime('%Y%b'))
+        months_str.append(month.strftime("%Y%b"))
         for sarunit in ["S1A", "S1B"]:
             for pol in ["1SDV", "1SSV", "1SSH", "1SDH"]:
 
                 subset = collected_data_norm[
-                    (collected_data_norm["Name"].str.contains(pol + "_")) &
-                    (collected_data_norm['startdate']>=month) & (collected_data_norm['startdate']<month+datetime.timedelta(days=30))
+                    (collected_data_norm["Name"].str.contains(pol + "_"))
+                    & (collected_data_norm["startdate"] >= month)
+                    & (
+                        collected_data_norm["startdate"]
+                        < month + datetime.timedelta(days=width)
+                    )
                     & (collected_data_norm["Name"].str.contains(sarunit))  #
                 ]
                 # print(subset)
@@ -723,9 +703,9 @@ def count_per_month_with_labels_unit(
                         ].append(countsafe)
                 else:
                     if sarunit + "_" + pol not in newdf_per_class_double_entries:
-                        newdf_per_class_double_entries[
-                            "%s" % (sarunit + "_" + pol)
-                        ] = []
+                        newdf_per_class_double_entries["%s" % (sarunit + "_" + pol)] = (
+                            []
+                        )
                     newdf_per_class_double_entries["%s" % (sarunit + "_" + pol)].append(
                         countsafe
                     )
@@ -756,7 +736,7 @@ def count_per_month_with_labels_unit(
     plt.yticks(fontsize=12)
     ax = plt.gca()
     ti = ax.get_xticks()
-    plt.xticks(ticks=ti,labels=months_str,fontsize=12,rotation=45)
+    plt.xticks(ticks=ti, labels=months_str, fontsize=12, rotation=45)
     plt.ylabel(
         "Count SAFE products available on CDSE \nstacked histogram",
         fontsize=15,

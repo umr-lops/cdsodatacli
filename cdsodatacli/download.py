@@ -1,4 +1,3 @@
-import pdb
 import subprocess
 
 import requests
@@ -7,17 +6,14 @@ from tqdm import tqdm
 import datetime
 import time
 import os
-import shutil
 import random
 import pandas as pd
 import geopandas as gpd
 from requests.exceptions import ChunkedEncodingError
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
-import traceback
 from cdsodatacli.fetch_access_token import (
     get_bearer_access_token,
-    write_token_semphore_file,
     remove_semaphore_token_file,
     MAX_VALIDITY_ACCESS_TOKEN,
     get_list_of_exising_token,
@@ -127,7 +123,7 @@ def CDS_Odata_download_one_product_v2(
                 for chunk in response.iter_content(chunk_size=chunksize):
                     if chunk:
                         f.write(chunk)
-            except ChunkedEncodingError as e:
+            except ChunkedEncodingError:
                 status = -1
                 status_meaning = "ChunkedEncodingError"
     if (not response.ok or status == -1) and os.path.exists(output_filepath_tmp):
@@ -137,8 +133,10 @@ def CDS_Odata_download_one_product_v2(
     if status == 200:  # means OK download
         speed = total_length / elapsed_time
         # shutil.move(output_filepath_tmp, output_filepath)
-        status = subprocess.check_output('mv '+output_filepath_tmp+' '+output_filepath,shell=True)
-        logging.debug('move status: %s',status)
+        status = subprocess.check_output(
+            "mv " + output_filepath_tmp + " " + output_filepath, shell=True
+        )
+        logging.debug("move status: %s", status)
         os.chmod(output_filepath, mode=0o0775)
     logging.debug("time to download this product: %1.1f sec", elapsed_time)
     logging.debug("average download speed: %1.1fMo/sec", speed)
@@ -229,9 +227,9 @@ def download_list_product_multithread_v2(
     df = pd.DataFrame(
         {"safe": list_safename, "status": np.zeros(len(list_safename)), "id": list_id}
     )
-
+    force_download = not check_on_disk
     df2, cpt = filter_product_already_present(
-        cpt, df, outputdir, force_download=check_on_disk == False
+        cpt, df, outputdir, force_download=force_download
     )
 
     logging.info("%s", cpt)
@@ -254,9 +252,10 @@ def download_list_product_multithread_v2(
             len(dfproductDownloaddable),
             cpt,
         )
-        with ThreadPoolExecutor(
-            max_workers=len(dfproductDownloaddable)
-        ) as executor, tqdm(total=len(dfproductDownloaddable)) as pbar:
+        with (
+            ThreadPoolExecutor(max_workers=len(dfproductDownloaddable)) as executor,
+            tqdm(total=len(dfproductDownloaddable)) as pbar,
+        ):
             future_to_url = {
                 executor.submit(
                     CDS_Odata_download_one_product_v2,
@@ -510,7 +509,7 @@ def add_missing_cdse_hash_ids_in_listing(listing_path):
     """
     res = pd.DataFrame({"id": [], "safename": []})
     df_raw = pd.read_csv(listing_path, names=["safenames"])
-    df_raw = df_raw[df_raw['safenames'].str.contains('.SAFE')]
+    df_raw = df_raw[df_raw["safenames"].str.contains(".SAFE")]
     list_safe_a = df_raw["safenames"].values
     delta = datetime.timedelta(seconds=1)
     gdf = gpd.GeoDataFrame(
@@ -536,12 +535,12 @@ def add_missing_cdse_hash_ids_in_listing(listing_path):
         }
     )
     sea_min_pct = 0
-    if len(gdf['geometry'])>0:
+    if len(gdf["geometry"]) > 0:
         collected_data_norm = fetch_data(gdf, min_sea_percent=sea_min_pct)
-        if not collected_data_norm is None:
+        if collected_data_norm is not None:
             res = collected_data_norm[["Id", "Name"]]
-            res.rename(columns={"Name": "safename"},inplace=True)
-            res.rename(columns={"Id": "id"},inplace=True)
+            res.rename(columns={"Name": "safename"}, inplace=True)
+            res.rename(columns={"Id": "id"}, inplace=True)
     return res
 
 
@@ -748,4 +747,5 @@ def main():
         hideProgressBar=args.hideProgressBar,
         specific_account=args.login,
     )
-    logging.info("end of function")
+    elapsed = t0 - time.time()
+    logging.info("end of function in %s seconds", elapsed)

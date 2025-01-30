@@ -4,7 +4,7 @@ import os
 import cdsodatacli
 from yaml import CLoader as Loader
 import datetime
-import pdb
+
 local_config_pontential_path = os.path.join(
     os.path.dirname(cdsodatacli.__file__), "localconfig.yml"
 )
@@ -41,7 +41,7 @@ def test_safe_spool(safename):
                 conf["spool"], safename.replace(".SAFE", ".zip")
             )
         else:
-            raise NotImplemented
+            raise NotImplementedError
         if os.path.exists(spool_potential_file):
             present_in_spool = True
             break
@@ -54,26 +54,26 @@ def WhichArchiveDir(safe):
     Args:
         safe (str): safe base name
     """
-    logging.debug('safe: %s',safe)
-    if 'S1' in safe:
+    logging.debug("safe: %s", safe)
+    if "S1" in safe:
         firstdate = safe[17:32]
-    elif 'S2' in safe:
+    elif "S2" in safe:
         firstdate = safe[11:26]
     year = firstdate[0:4]
     # try:
     # doy = str(
     #     datetime.datetime.strptime(firstdate, "%Y%m%d").timetuple().tm_yday
     # ).zfill(3)
-    doy = datetime.datetime.strptime(firstdate, "%Y%m%dT%H%M%S").strftime('%j')
+    doy = datetime.datetime.strptime(firstdate, "%Y%m%dT%H%M%S").strftime("%j")
     sat = safe.split("_")[0]
     if sat == "S1A":
         satdir = "sentinel-1a"
     elif sat == "S1B":
         satdir = "sentinel-1b"
-    elif sat =='S2B':
-        satdir = 'sentinel-2b'
-    elif sat =='S2A':
-        satdir = 'sentinel-2a'
+    elif sat == "S2B":
+        satdir = "sentinel-2b"
+    elif sat == "S2A":
+        satdir = "sentinel-2a"
     else:
         satdir = ""
         logging.error("%s is not a  good satellite name", sat)
@@ -104,7 +104,7 @@ def test_safe_archive(safename):
     """
     present_in_archive = False
     for uu in ["", ".zip", "replaced"]:
-        arch_potential_file0 = os.path.join(WhichArchiveDir(safename),safename)
+        arch_potential_file0 = os.path.join(WhichArchiveDir(safename), safename)
         if uu == "":
             arch_potential_file = arch_potential_file0
         elif uu == ".zip":
@@ -112,11 +112,11 @@ def test_safe_archive(safename):
         elif uu == "replaced":
             arch_potential_file = arch_potential_file0.replace(".SAFE", ".zip")
         else:
-            raise NotImplemented
+            raise NotImplementedError
         if os.path.exists(arch_potential_file):
             present_in_archive = True
             break
     logging.debug("present_in_archive : %s", present_in_archive)
     if present_in_archive:
-        logging.debug('the product is stored in : %s',arch_potential_file)
+        logging.debug("the product is stored in : %s", arch_potential_file)
     return present_in_archive

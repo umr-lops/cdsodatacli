@@ -1,4 +1,3 @@
-import pandas as pd
 import datetime
 import shapely
 import geopandas as gpd
@@ -15,7 +14,6 @@ if __name__ == "__main__":
             root.removeHandler(handler)
 
     import argparse
-    import pandas as pd
 
     parser = argparse.ArgumentParser(description="highleveltest-fetch_S1_worldwide_IDs")
     parser.add_argument("--verbose", action="store_true", default=False)
@@ -53,7 +51,7 @@ if __name__ == "__main__":
             level=logging.INFO, format=fmt, datefmt="%d/%m/%Y %H:%M:%S", force=True
         )
     pola = "2SSV"
-    pola= None
+    pola = None
     t0 = time.time()
     gdf = gpd.GeoDataFrame(
         {
@@ -75,7 +73,8 @@ if __name__ == "__main__":
     collected_data_norm = cdsodatacli.query.fetch_data(gdf, min_sea_percent=0)
     outf = os.path.join(
         conf["test_default_output_directory"],
-        "test_%s_%s_%s_%s.txt" % (args.mode,args.product,args.startdate, args.stopdate),
+        "test_%s_%s_%s_%s.txt"
+        % (args.mode, args.product, args.startdate, args.stopdate),
     )
     collected_data_norm[["Id", "Name"]].to_csv(outf, header=False, index=False)
     logging.info("outf : %s", outf)

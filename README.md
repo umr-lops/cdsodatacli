@@ -20,15 +20,18 @@ odata client for Copernicus Data Space catalog
 ## Very first steps
 
 ### step 1: create a config file
-  
-* create a copy of the config.yml  called localconfig.yml where `cdsodatacli` is installed in your python environement.
+
+- create a copy of the config.yml called localconfig.yml where `cdsodatacli` is installed in your python environement.
+
 ```bash
-cp config.yml localconfig.yml 
-``` 
- * edit the localconfig.yml to set your own path for output directories and CDSE accounts
+cp config.yml localconfig.yml
+```
+
+- edit the localconfig.yml to set your own path for output directories and CDSE accounts
+
 ```bash
  vi  localconfig.yml
- ```
+```
 
 ### step 2: do a query on CDSE Odata API
 
@@ -51,7 +54,6 @@ downloadFromCDS -h
 ```bash
 pip install -U cdsodatacli
 ```
-
 
 ## 🛡 License
 

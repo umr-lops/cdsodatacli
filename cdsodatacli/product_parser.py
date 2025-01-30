@@ -5,6 +5,7 @@
     Arguments: basename SAFE directory
     note: valid also for Sentinel3 SRAL data
 """
+
 import sys
 import logging
 import datetime

@@ -2,18 +2,15 @@
 name = "cdsodatacli"
 description = "OData client for Copernicus Data Space catalog"
 readme = "README.md"
-authors = [
-  {name = "Antoine Grouazel"},
-  {name = "Jean-Renaud Miadana"}
-]
-license = {text = "MIT"}
+authors = [{ name = "Antoine Grouazel" }, { name = "Jean-Renaud Miadana" }]
+license = { text = "MIT" }
 #repository = "https://github.com/umr-lops/cdsodatacli"
 #homepage = "https://github.com/umr-lops/cdsodatacli"
 
-keywords = ["Odata","copernicus-data-space","api"]
+keywords = ["Odata", "copernicus-data-space", "api"]
 
 # Pypi classifiers: https://pypi.org/classifiers/
-classifiers = [  #! Update me
+classifiers = [ #! Update me
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
   "Operating System :: OS Independent",
@@ -23,13 +20,13 @@ classifiers = [  #! Update me
   "Programming Language :: Python :: 3.9",
 ]
 dependencies = [
-    "geopandas",
-    "geodatasets",
-    "numpy",
-    "requests",
-    "shapely",
-    'tqdm',
-    'pyyaml',
+  "geopandas",
+  "geodatasets",
+  "numpy",
+  "requests",
+  "shapely",
+  'tqdm',
+  'pyyaml',
 
 ]
 dynamic = ["version"]
@@ -99,8 +96,21 @@ exclude = '''
 py_version = 39
 line_length = 88
 
-known_typing = ["typing", "types", "typing_extensions", "mypy", "mypy_extensions"]
-sections = ["FUTURE", "TYPING", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
+known_typing = [
+  "typing",
+  "types",
+  "typing_extensions",
+  "mypy",
+  "mypy_extensions",
+]
+sections = [
+  "FUTURE",
+  "TYPING",
+  "STDLIB",
+  "THIRDPARTY",
+  "FIRSTPARTY",
+  "LOCALFOLDER",
+]
 include_trailing_comma = true
 profile = "black"
 multi_line_output = 3
@@ -137,8 +147,22 @@ warn_unused_ignores = true
 [tool.pytest.ini_options]
 # https://docs.pytest.org/en/6.2.x/customize.html#pyproject-toml
 # Directories that are not visited by pytest collector:
-norecursedirs =["hooks", "*.egg", ".eggs", "dist", "build", "docs", ".tox", ".git", "__pycache__"]
-doctest_optionflags = ["NUMBER", "NORMALIZE_WHITESPACE", "IGNORE_EXCEPTION_DETAIL"]
+norecursedirs = [
+  "hooks",
+  "*.egg",
+  ".eggs",
+  "dist",
+  "build",
+  "docs",
+  ".tox",
+  ".git",
+  "__pycache__",
+]
+doctest_optionflags = [
+  "NUMBER",
+  "NORMALIZE_WHITESPACE",
+  "IGNORE_EXCEPTION_DETAIL",
+]
 
 # Extra options:
 addopts = [
