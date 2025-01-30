@@ -46,7 +46,7 @@ def test_download_WV_OCN_SAFE(listing, outputdir):
     assert os.path.exists(listing)
     inputdf = pd.read_csv(listing, names=["id", "safename"], delimiter=",")
     # maskok = inputdf["safename"].str.contains("CORRUPTED") == False
-    maskok = ~inputdf['safename'].str.contains('CORRUPTED', na=False)
+    maskok = ~inputdf["safename"].str.contains("CORRUPTED", na=False)
     inputdfclean = inputdf[maskok]
     assert len(inputdfclean["safename"]) == 3
     if not os.path.exists(outputdir):
