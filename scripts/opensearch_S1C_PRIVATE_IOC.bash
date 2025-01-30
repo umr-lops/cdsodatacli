@@ -5,7 +5,8 @@ passwd_cdse_expert=$4
 email_account_cdse=$5
 echo 'email_account_cdse '$email_account_cdse
 echo 'passwd_cdse_expert '$passwd_cdse_expert
-ACCESS_TOKEN=$(curl -d 'client_id=cdse-public' \
+ACCESS_TOKEN=$(curl --insecure \
+                    -d 'client_id=cdse-public' \
                     -d 'username='${email_account_cdse} \
                     -d 'password='${passwd_cdse_expert} \
                     -d 'grant_type=password' \
