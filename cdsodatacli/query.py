@@ -694,10 +694,16 @@ def sea_percent(collected_data, min_sea_percent=None):
     start_time = time.time()
     warnings.simplefilter(action="ignore", category=FutureWarning)
     earth = gpd.read_file(get_path("naturalearth.land")).buffer(0)
+
     collected_data = (
         collected_data.to_crs(earth.crs)
         if collected_data.crs != earth.crs
         else collected_data
+    )
+
+    # try to fix invalid geometries
+    collected_data["geometry"] = collected_data["geometry"].apply(
+        lambda geom: geom.buffer(0) if not geom.is_valid else geom
     )
     sea_percentage = (
         (
