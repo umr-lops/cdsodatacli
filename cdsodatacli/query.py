@@ -471,7 +471,7 @@ def fetch_one_url(url, cpt, index, cache_dir):
     ----------
     url (str)
     cpt (defaultdict(int))
-    index (int)
+    index (str): id_query
     cache_dir (str)
 
     Returns
@@ -562,7 +562,7 @@ def fetch_data_from_urls_sequential(urls, cache_dir) -> pd.DataFrame:
         # for url in urls:
         url = urls[ii][1]
         index = urls[ii][0]
-        cpt, collected_data = fetch_one_url(url, cpt, index, cache_dir=cache_dir)
+        cpt, collected_data = fetch_one_url(url, cpt, index=index, cache_dir=cache_dir)
         if collected_data is not None:
             if not collected_data.empty:
                 collected_data_x.append(collected_data)
