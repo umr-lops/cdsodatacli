@@ -89,6 +89,47 @@ def test_queries(expected, result):
     assert all(item in list(result["Name"]) for item in list(expected["Name"]))
 
 
+# a test to make sure "id_original_query" column is correctly set in the result dataframe
+@pytest.mark.parametrize(
+    ("expected", "result", "id_query"),
+    [
+        (name_df, query_name_dfd, "test1"),
+        (geographic_df, query_geographic_name, "test2"),
+        (cloudCover_df, query_cloudCover_df, "test3"),
+    ],
+)
+def test_id_original_query(expected, result, id_query):
+    assert all(result["id_original_query"] == id_query)
+
+
+# a test to make sure a single product is present twice if the id_query is not the same
+def test_multiple_id_original_query():
+    gdf_multi_id = gpd.GeoDataFrame(
+        {
+            "start_datetime": [
+                np.datetime64("2022-05-03 00:00:00"),
+                np.datetime64("2022-05-03 00:00:00"),
+            ],
+            "end_datetime": [
+                np.datetime64("2022-05-03 00:02:00"),
+                np.datetime64("2022-05-03 00:02:00"),
+            ],
+            "geometry": [None, None],
+            "collection": ["SENTINEL-2", "SENTINEL-2"],
+            "name": [None, None],
+            "sensormode": [None, None],
+            "producttype": [None, None],
+            "Attributes": [None, None],
+            "id_query": ["test1", "test2"],
+        }
+    )
+    result = qr.fetch_data(gdf=gdf_multi_id, top=1000)
+    # check that a product is present twice with different id_original_query
+    counts = result["id_original_query"].value_counts()
+    assert all(counts[counts > 1].index.isin(["test1", "test2"]))
+    assert counts["test1"] == counts["test2"]  # expect 78 products for each id_query
+
+
 # for uu in range(3):
 # test_queries(name_df,query_name_dfd)
 # test_queries(geographic_df,query_geographic_name)
@@ -108,9 +149,8 @@ def test_queries(expected, result):
 #     """Example test with parametrization."""
 #     assert all(item in list(query_cloudCover_df['Name']) for item in list(cloudCover_df['Name']))
 if __name__ == "__main__":
-    import pdb
 
     expected = name_df
     result = query_name_dfd
-    pdb.set_trace()
-    test_queries(expected, result)
+    # test_queries(expected, result)
+    test_multiple_id_original_query()

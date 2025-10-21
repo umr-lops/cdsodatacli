@@ -21,6 +21,7 @@ default_listing = os.path.join(
     "example_WV_OCN_listing.txt",
 )
 
+
 @pytest.fixture(scope="session")
 def test_secrets():
     login_cdse = os.getenv("DEFAULT_LOGIN_CDSE")
@@ -28,6 +29,7 @@ def test_secrets():
         login_cdse is not None
     ), "DEFAULT_LOGIN_CDSE is not defined (.env absent? or SECRETS from github undefined)"
     assert login_cdse == "cprevost@ifremer.fr"
+
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Test not supported on Windows")
 @pytest.mark.parametrize(
@@ -39,14 +41,13 @@ def test_secrets():
 def test_download_WV_OCN_SAFE(listing, outputdir):
     if "./" in outputdir:
         outputdir = os.path.abspath(os.path.join(os.getcwd(), outputdir))
-  
 
     login_cdse = os.getenv("DEFAULT_LOGIN_CDSE", None)
-    passwd = os.getenv("DEFAULT_PASSWD_CDSE",None)
-    print('login_cdse:',login_cdse)
-      # for local test -> use the localconfig.yml/config.yml files
+    passwd = os.getenv("DEFAULT_PASSWD_CDSE", None)
+    print("login_cdse:", login_cdse)
+    # for local test -> use the localconfig.yml/config.yml files
     if login_cdse is None or passwd is None:
-        print('using cdsodatacli localconfig.yml/config.yml for login')
+        print("using cdsodatacli localconfig.yml/config.yml for login")
         default_login = conf.get("default_login", {})
         login_cdse, passwd = list(default_login.items())[0]
     logging.info("listing: %s", listing)
