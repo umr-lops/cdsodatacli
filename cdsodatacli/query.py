@@ -577,24 +577,24 @@ def fetch_one_url(url, cpt, index, cache_dir):
                         json.dump(json_data, f)
                 collected_data = process_data(json_data)
                 # collected_data = pd.DataFrame.from_dict(json_data['value'])
-                if collected_data is not None:
-                    if len(collected_data.index) > 0:
-                        # collected_data_x.append(collected_data)
-                        cpt["product_proposed_by_CDS"] += len(collected_data["Name"])
-                        collected_data["id_original_query"] = index
-                        if len(collected_data) == DEFAULT_TOP_ROWS_PER_QUERY:
-                            logging.warning(
-                                "%i products found in a single CDSE OData query (maximum is %s): make sure the timedelta_slice parameters is small enough to avoid truncated results",
-                                len(collected_data),
-                                DEFAULT_TOP_ROWS_PER_QUERY,
-                            )
-                        if pd.isna(collected_data["Name"]).any():
-                            raise Exception("Name field contains NaN")
-                        cpt["answer_append"] += 1
-                    else:
-                        cpt["nodata_answer"] += 1
-                else:
-                    cpt["empty_answer"] += 1
+    if collected_data is not None:
+        if len(collected_data.index) > 0:
+            # collected_data_x.append(collected_data)
+            cpt["product_proposed_by_CDS"] += len(collected_data["Name"])
+            collected_data["id_original_query"] = index
+            if len(collected_data) == DEFAULT_TOP_ROWS_PER_QUERY:
+                logging.warning(
+                    "%i products found in a single CDSE OData query (maximum is %s): make sure the timedelta_slice parameters is small enough to avoid truncated results",
+                    len(collected_data),
+                    DEFAULT_TOP_ROWS_PER_QUERY,
+                )
+            if pd.isna(collected_data["Name"]).any():
+                raise Exception("Name field contains NaN")
+            cpt["answer_append"] += 1
+        else:
+            cpt["nodata_answer"] += 1
+    else:
+        cpt["empty_answer"] += 1
     return cpt, collected_data
 
 
@@ -619,7 +619,7 @@ def fetch_data_from_urls_sequential(urls, cache_dir) -> pd.DataFrame:
             logging.info("mkdir cache dir: %s", cache_dir)
             os.makedirs(cache_dir)
     # with tqdm(total=len(urls)) as pbar:
-    for ii in tqdm(range(len(urls))):
+    for ii in tqdm(range(len(urls)), disable=True):
         # for url in urls:
         url = urls[ii][1]
         index = urls[ii][0]
@@ -633,6 +633,10 @@ def fetch_data_from_urls_sequential(urls, cache_dir) -> pd.DataFrame:
     processing_time = end_time - start_time
     logging.info("fetch_data_from_urls time:%1.1fsec", processing_time)
     logging.info("counter: %s", cpt)
+    if collected_data_final is not None:
+        assert (
+            "id_original_query" in collected_data_final
+        ), "id_original_query column missing in collected data"
     return collected_data_final
 
 
