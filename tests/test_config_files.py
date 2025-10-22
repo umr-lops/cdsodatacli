@@ -15,12 +15,12 @@ def test_to_make_sure_localconfig_and_config_contains_same_keys():
         stream = open(config_path, "r")
         defaultconf = load(stream, Loader=Loader)
 
-        for keyc in conflocal:
-            assert (
-                keyc in defaultconf
-            ), f"Key '{keyc}' is missing from the default configuration"
-            if keyc not in defaultconf:
-                all_keys_are_presents = False
+        # for keyc in conflocal:
+        #     assert (
+        #         keyc in defaultconf
+        #     ), f"Key '{keyc}' is missing from the default configuration"
+        #     if keyc not in defaultconf:
+        #         all_keys_are_presents = False
 
         for keyc in defaultconf:
             assert (

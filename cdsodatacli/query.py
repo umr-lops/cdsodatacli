@@ -116,6 +116,7 @@ def fetch_data(
 ):
     """
     Fetches data based on provided parameters.
+    GeoDataFrame is splitted based on the id_query column to keep track of each pair query/products
 
     Args:
        gdf (GeoDataFrame): containing the geospatial data for the query.
@@ -135,6 +136,66 @@ def fetch_data(
         (pd.DataFame): data containing the fetched results.
     """
     collected_data = None
+    # split the gdf in subsets based on the query_id
+    unique_query_ids = gdf["id_query"].unique()
+    for query_id in unique_query_ids:
+        gdf_subset = gdf[gdf["id_query"] == query_id]
+        logging.info(
+            f"fetching data for query_id:{query_id} with {len(gdf_subset)} geometries"
+        )
+        data_subset = fetch_data_single_query(
+            gdf=gdf_subset,
+            date=date,
+            dtime=dtime,
+            timedelta_slice=timedelta_slice,
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
+            min_sea_percent=min_sea_percent,
+            fig=fig,
+            top=top,
+            cache_dir=cache_dir,
+            mode=mode,
+        )
+        if collected_data is None:
+            collected_data = data_subset
+        else:
+            collected_data = pd.concat([collected_data, data_subset], ignore_index=True)
+    return collected_data
+
+
+def fetch_data_single_query(
+    gdf,
+    date=None,
+    dtime=None,
+    timedelta_slice=None,
+    start_datetime=None,
+    end_datetime=None,
+    min_sea_percent=None,
+    fig=None,
+    top=None,
+    cache_dir=None,
+    mode="seq",
+):
+    """
+    Fetches data based on provided parameters.
+
+    Args:
+       gdf (GeoDataFrame): containing the geospatial data for the query.
+       geometry (list of tuples): representing the geometry.
+       collection (String): representing the collection information for filtering the data.
+       name (String): representing the name information for filtering the data.
+       sensormode (String): representing the mode of the sensor for filtering the data.
+       producttype (String): representing the type of product for filtering the data.
+       start_datetime (String): representing the starting date for the query.
+       end_datetime (String): representing the ending date for the query.
+       publication_start (String): representing the starting publication date for the query.
+       publication_end (String): representing the ending publication date for the query.
+       top (String): representing the ending publication date for the query.
+       mode (String): seq ( Sequential) or multi (multithread)
+       timedelta_slice (datetime.timedelta) : optional param to split the queries wrt time in order to avoid missing product because of the 1000 product max returned by Odata
+    Return:
+        (pd.DataFame): data containing the fetched results.
+    """
     if gdf is not None and isinstance(gdf, gpd.GeoDataFrame):
         gdf_norm = normalize_gdf(
             gdf=gdf,
@@ -471,7 +532,7 @@ def fetch_one_url(url, cpt, index, cache_dir):
     ----------
     url (str)
     cpt (defaultdict(int))
-    index (int)
+    index (str): id_query
     cache_dir (str)
 
     Returns
@@ -562,7 +623,7 @@ def fetch_data_from_urls_sequential(urls, cache_dir) -> pd.DataFrame:
         # for url in urls:
         url = urls[ii][1]
         index = urls[ii][0]
-        cpt, collected_data = fetch_one_url(url, cpt, index, cache_dir=cache_dir)
+        cpt, collected_data = fetch_one_url(url, cpt, index=index, cache_dir=cache_dir)
         if collected_data is not None:
             if not collected_data.empty:
                 collected_data_x.append(collected_data)

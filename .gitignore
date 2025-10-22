@@ -620,3 +620,7 @@ MigrationBackup/
 .cdsodatacli/api_cache/
 
 .env
+
+.ipynb_checkpoints
+
+*.orig

@@ -1,6 +1,8 @@
 logins:
   - user1@emailadrress.fr: passwd1
   - user2@emailadrress.fr: passwd2
+default_login:
+  user1@emailadrress.fr: passwd1
 URL_identity: https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token
 URL_download: https://zipper.dataspace.copernicus.eu/odata/v1/Products(%s)/$value
 spool: "./my_spool"
