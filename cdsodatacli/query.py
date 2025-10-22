@@ -619,7 +619,7 @@ def fetch_data_from_urls_sequential(urls, cache_dir) -> pd.DataFrame:
             logging.info("mkdir cache dir: %s", cache_dir)
             os.makedirs(cache_dir)
     # with tqdm(total=len(urls)) as pbar:
-    for ii in tqdm(range(len(urls)),disable=True):
+    for ii in tqdm(range(len(urls)), disable=True):
         # for url in urls:
         url = urls[ii][1]
         index = urls[ii][0]
@@ -634,7 +634,9 @@ def fetch_data_from_urls_sequential(urls, cache_dir) -> pd.DataFrame:
     logging.info("fetch_data_from_urls time:%1.1fsec", processing_time)
     logging.info("counter: %s", cpt)
     if collected_data_final is not None:
-        assert 'id_original_query' in collected_data_final, "id_original_query column missing in collected data"
+        assert (
+            "id_original_query" in collected_data_final
+        ), "id_original_query column missing in collected data"
     return collected_data_final
 
 
