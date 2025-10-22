@@ -61,6 +61,7 @@ packages = ["cdsodatacli"]
 
 [tool.setuptools_scm]
 fallback_version = "999"
+local_scheme = "no-local-version"
 
 [tool.black]
 # https://github.com/psf/black
