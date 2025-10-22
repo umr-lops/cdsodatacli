@@ -24,6 +24,7 @@ Usage
     here are some examples of usage
 
 * :doc:`examples/basic_usage`
+* :doc:`examples/id_query_usage`
 
 
 Reference
@@ -58,6 +59,7 @@ Last documentation build: |today|
    :caption: Usage
 
    examples/basic_usage
+   examples/id_query_usage
 
 .. toctree::
    :maxdepth: 1

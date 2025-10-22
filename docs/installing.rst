@@ -17,8 +17,8 @@ conda install
 .. note::
     this is also working the same for mamba or micromamba
 
-Update xsar_slc to the latest version
-#####################################
+Update cdsodatacli to the latest version
+########################################
 
 
 To be up to date with the development team, it's recommended to update the installation using pip:
