@@ -1,0 +1,9 @@
+geopandas
+geodatasets
+numpy
+requests
+shapely
+tqdm
+pyyaml
+cartopy
+python-dotenv

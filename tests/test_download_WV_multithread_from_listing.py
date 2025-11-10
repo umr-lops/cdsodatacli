@@ -16,7 +16,7 @@ load_dotenv()
 
 # listing = './example_WV_listing.txt'
 default_listing = os.path.join(
-    os.path.dirname(os.path.dirname(cdsodatacli.__file__)),
+    os.path.dirname(cdsodatacli.__file__),
     "scripts",
     "example_WV_OCN_listing.txt",
 )

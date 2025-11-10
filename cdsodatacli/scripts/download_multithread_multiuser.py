@@ -18,7 +18,17 @@ default_listing = os.path.join(
     "tests_metiers",
     "example_WV_SLC_listing.txt",
 )
-if __name__ == "__main__":
+
+def entrypoint():
+    """
+    Entrypoint for the multi-thread multi-user download script.
+    Reads command-line arguments and initiates the download process.
+
+    Args:
+        None (uses command-line arguments)
+    Returns:
+        None
+    """
     root = logging.getLogger()
     if root.handlers:
         for handler in root.handlers:
@@ -89,3 +99,7 @@ if __name__ == "__main__":
     else:
         logging.info("empty listing to treat")
     logging.info("end of function")
+
+
+if __name__ == "__main__":
+   entrypoint()
