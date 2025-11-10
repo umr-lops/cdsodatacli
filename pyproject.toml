@@ -50,14 +50,19 @@ dev = [
 [project.scripts]
 queryCDS = "cdsodatacli.query:query_client"
 downloadFromCDS = "cdsodatacli.download:main"
+downloadMuliThreadMultiUser = 'cdsodatacli.scripts.download_multithread_multiuser:entrypoint'
 
 
 [build-system]
 requires = ["setuptools>=64.0", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-packages = ["cdsodatacli"]
+# [tool.setuptools]
+# packages = ["cdsodatacli"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cdsodatacli*"]
 
 [tool.setuptools_scm]
 fallback_version = "999"
