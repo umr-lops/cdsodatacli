@@ -19,6 +19,7 @@ default_listing = os.path.join(
     "example_WV_SLC_listing.txt",
 )
 
+
 def entrypoint():
     """
     Entrypoint for the multi-thread multi-user download script.
@@ -96,10 +97,11 @@ def entrypoint():
             account_group=logins_group,
             check_on_disk=not args.forcedownload,
         )
+        logging.debug("downloaded dataframe: %s", dfout)
     else:
         logging.info("empty listing to treat")
     logging.info("end of function")
 
 
 if __name__ == "__main__":
-   entrypoint()
+    entrypoint()
