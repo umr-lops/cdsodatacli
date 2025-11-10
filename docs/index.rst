@@ -2,8 +2,8 @@
 CDS OData Client
 ################
 
-Copernicus Data Space Python client for OData API.
-**cdsodatacli** is a  Python library to browse available Sentinel products on Copernicus Data Space platform.
+ - Copernicus Data Space Python client for OData API.
+ - **cdsodatacli** is a  Python library to browse available Sentinel products on Copernicus Data Space platform.
 
 
 Documentation
@@ -12,10 +12,18 @@ Documentation
 Overview
 ........
 
-Library mostly build on **geopandas** and **requests**
-API used to perform queries is : https://documentation.dataspace.copernicus.eu/APIs/OData.html
-Limits to take into account are described here https://documentation.dataspace.copernicus.eu/Quotas.html
+ - Library mostly build on **geopandas** and **requests**.
 
+
+ - API used to perform queries is : https://documentation.dataspace.copernicus.eu/APIs/OData.html
+
+
+ - Limits to take into account are described here https://documentation.dataspace.copernicus.eu/Quotas.html
+
+
+Installation
+............
+See the :doc:`installing` section for installation instructions.
 
 Usage
 .....
@@ -23,6 +31,8 @@ Usage
 .. note::
     here are some examples of usage
 
+
+* :doc:`usage`
 * :doc:`examples/basic_usage`
 * :doc:`examples/id_query_usage`
 
@@ -57,6 +67,8 @@ Last documentation build: |today|
    :maxdepth: 1
    :hidden:
    :caption: Usage
+
+   usage
 
    examples/basic_usage
    examples/id_query_usage

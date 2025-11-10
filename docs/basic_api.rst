@@ -1,3 +1,5 @@
+.. _basic_api:
+
 ####################
 methods descriptions
 ####################
@@ -9,8 +11,8 @@ methods descriptions
     :members:
 
 
-processing
-==========
-
 .. automodule:: cdsodatacli.query
     :members: fetch_data
+
+.. automodule:: cdsodatacli.download
+    :members: download_list_product_sequential, download_list_product
