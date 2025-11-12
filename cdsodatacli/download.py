@@ -25,7 +25,7 @@ from cdsodatacli.session import (
 )
 from cdsodatacli.query import fetch_data
 from cdsodatacli.utils import (
-    conf,
+    get_conf,
     check_safe_in_archive,
     check_safe_in_spool,
     check_safe_in_outputdir,
@@ -79,7 +79,7 @@ chunksize = 8192  # like in the CDSE example
 
 
 def CDS_Odata_download_one_product_v2(
-    session, headers, url, output_filepath, semaphore_token_file
+    session, headers, url, output_filepath, semaphore_token_file,cdsodatacli_conf_file=None
 ):
     """
      v2 is without tqdm
@@ -90,6 +90,7 @@ def CDS_Odata_download_one_product_v2(
     url (str)
     output_filepath (str): full path where to store fetch file
     semaphore_token_file (str): full path of the file storing an active access token
+    cdsodatacli_conf_file (str): path to the cdsodatacli configuration file
 
     Returns
     -------
@@ -102,6 +103,7 @@ def CDS_Odata_download_one_product_v2(
     # output_filepath_tmp = (
     #     output_filepath.replace(conf["spool"], conf["pre_spool"]) + ".tmp"
     # )
+    conf = get_conf(path_config_file=cdsodatacli_conf_file)
     output_filepath_tmp = os.path.join(
         conf["pre_spool"], os.path.basename(output_filepath) + ".tmp"
     )
@@ -148,20 +150,27 @@ def CDS_Odata_download_one_product_v2(
     return speed, status_meaning, safename_base, semaphore_token_file
 
 
-def filter_product_already_present(cpt, df, outputdir, force_download=False):
+def filter_product_already_present(cpt, df, outputdir,cdsodatacli_conf, force_download=False):
     """
+    Based on a dataframe of products to download, filter those already present locally.
+
 
     Parameters
     ----------
     cpt (collections.defaultdict(int))
     df (pd.DataFrame)
     outputdir (str)
-    force_download (bool)
+    cdsodatacli_conf (dict): configuration dictionary of the lib cdsodatacli
+    force_download (bool): True -> download all products even if already present locally [optional, default is False]
+    
 
     Returns
     -------
+        df_todownload (pd.DataFrame): dataframe of products to download
+        cpt (collections.defaultdict(int)): updated counter
 
     """
+    
     all_output_filepath = []
     all_urls_to_download = []
     index_to_download = []
@@ -169,9 +178,9 @@ def filter_product_already_present(cpt, df, outputdir, force_download=False):
         to_download = False
         if force_download:
             to_download = True
-        if check_safe_in_archive(safename=safename_product):
+        if check_safe_in_archive(safename=safename_product,conf=cdsodatacli_conf):
             cpt["archived_product"] += 1
-        elif check_safe_in_spool(safename=safename_product):
+        elif check_safe_in_spool(safename=safename_product,conf=cdsodatacli_conf):
             cpt["in_spool_product"] += 1
         elif check_safe_in_outputdir(outputdir=outputdir, safename=safename_product):
             cpt["in_outdir_product"] += 1
@@ -181,7 +190,7 @@ def filter_product_already_present(cpt, df, outputdir, force_download=False):
         if to_download:
             index_to_download.append(ii)
             id_product = df["id"].iloc[ii]
-            url_product = conf["URL_download"] % id_product
+            url_product = cdsodatacli_conf["URL_download"] % id_product
 
             logging.debug("url_product : %s", url_product)
             logging.debug(
@@ -206,6 +215,7 @@ def download_list_product_multithread_v2(
     hideProgressBar=False,
     account_group="logins",
     check_on_disk=True,
+    cdsodatacli_conf_file=None,
 ):
     """
     v2 is handling multi account round-robin and token semaphore files
@@ -217,6 +227,7 @@ def download_list_product_multithread_v2(
     hideProgressBar (bool): True -> no tqdm progress bar in stdout
     account_group (str): the name of the group of CDSE logins to be used
     check_on_disk (bool): True -> if the product is in the spool dir or in archive dir the download is skipped
+    cdsodatacli_conf_file (str): path to the cdsodatacli configuration file
 
     Returns
     -------
@@ -226,7 +237,7 @@ def download_list_product_multithread_v2(
     logging.info("check_on_disk : %s", check_on_disk)
     cpt = defaultdict(int)
     cpt["products_in_initial_listing"] = len(list_id)
-
+    conf = get_conf(path_config_file=cdsodatacli_conf_file)
     if hideProgressBar:
         os.environ["DISABLE_TQDM"] = "True"
     all_speeds = []
@@ -236,7 +247,7 @@ def download_list_product_multithread_v2(
     )
     force_download = not check_on_disk
     df2, cpt = filter_product_already_present(
-        cpt, df, outputdir, force_download=force_download
+        cpt, df, outputdir, force_download=force_download,cdsodatacli_conf=conf
     )
 
     logging.info("%s", cpt)
@@ -247,6 +258,7 @@ def download_list_product_multithread_v2(
         while_loop += 1
         subset_to_treat = df2[df2["status"] == 0]
         dfproductDownloaddable = get_sessions_download_available(
+            conf,
             subset_to_treat,
             hideProgressBar=True,
             blacklist=blacklist,
@@ -271,6 +283,7 @@ def download_list_product_multithread_v2(
                     dfproductDownloaddable["url"].iloc[jj],
                     dfproductDownloaddable["output_path"].iloc[jj],
                     dfproductDownloaddable["token_semaphore"][jj],
+                    cdsodatacli_conf_file=cdsodatacli_conf_file,
                 ): (jj)
                 for jj in range(len(dfproductDownloaddable))
             }
@@ -353,6 +366,7 @@ def download_list_product(
     specific_account,
     specific_passwd=None,
     hideProgressBar=False,
+    cdsodatacli_conf_file=None,
 ):
     """
 
@@ -364,6 +378,7 @@ def download_list_product(
     specific_account (str): CDSE account to use
     specific_passwd (str): CDSE password associated to specific_account (optional)
     hideProgressBar (bool): True -> no tqdm progress bar
+    cdsodatacli_conf_file (str): path to the cdsodatacli configuration file
 
 
     Returns
@@ -371,6 +386,7 @@ def download_list_product(
 
     """
     assert len(list_id) == len(list_safename)
+    conf = get_conf(path_config_file=cdsodatacli_conf_file)
     cpt = defaultdict(int)
     all_speeds = []
     cpt["products_in_initial_listing"] = len(list_id)
@@ -409,9 +425,9 @@ def download_list_product(
             id_product = list_id[ii]
             url_product = conf["URL_download"] % id_product
             safename_product = list_safename[ii]
-            if check_safe_in_archive(safename=safename_product):
+            if check_safe_in_archive(safename=safename_product,conf=conf):
                 cpt["archived_product"] += 1
-            elif check_safe_in_spool(safename=safename_product):
+            elif check_safe_in_spool(safename=safename_product,conf=conf):
                 cpt["in_spool_product"] += 1
             else:
                 cpt["product_absent_from_local_disks"] += 1
@@ -457,6 +473,7 @@ def download_list_product(
                     url=url_product,
                     output_filepath=output_filepath,
                     semaphore_token_file=path_semphore_token,
+                    cdsodatacli_conf_file=cdsodatacli_conf_file
                 )
                 remove_semaphore_token_file(
                     token_dir=conf["token_directory"],
@@ -562,7 +579,7 @@ def add_missing_cdse_hash_ids_in_listing(listing_path):
 
 
 def download_list_product_sequential(
-    list_id, list_safename, outputdir, hideProgressBar=False
+    list_id, list_safename, outputdir, hideProgressBar=False, cdsodatacli_conf_file=None
 ):
     """
 
@@ -573,21 +590,24 @@ def download_list_product_sequential(
     outputdir (str) path where product will be stored
     hideProgressBar (bool): True -> no tqdm progress bar
     specific_account (str): default is None [optional]
+    cdsodatacli_conf_file (str): path to the cdsodatacli configuration file [optional]
 
     Returns
     -------
 
     """
     assert len(list_id) == len(list_safename)
+    conf = get_conf(path_config_file=cdsodatacli_conf_file)
     logins_group = "logins"
     cpt = defaultdict(int)
     cpt["total_product_to_download"] = len(list_id)
     df = pd.DataFrame(
         {"safe": list_safename, "status": np.zeros(len(list_safename)), "id": list_id}
     )
-    df2, cpt = filter_product_already_present(cpt, df, outputdir)
+    df2, cpt = filter_product_already_present(cpt, df, outputdir,cdsodatacli_conf=conf)
 
     df_products_downloadable = get_sessions_download_available(
+        conf,
         df2,
         hideProgressBar=hideProgressBar,
         blacklist=None,
@@ -662,6 +682,7 @@ def download_list_product_sequential(
             url=url_product,
             output_filepath=output_filepath,
             semaphore_token_file=path_semaphore_token,
+            cdsodatacli_conf_file=cdsodatacli_conf_file
         )
         # remove the token file, there is a check in the method on its validity
         remove_semaphore_token_file(
@@ -716,7 +737,6 @@ def main():
             root.removeHandler(handler)
 
     import argparse
-    import pandas as pd
 
     parser = argparse.ArgumentParser(description="download-from-CDS")
     parser.add_argument("--verbose", action="store_true", default=False)
@@ -741,6 +761,11 @@ def main():
         required=True,
         help="directory where to store fetch files",
     )
+    parser.add_argument(
+        "--cdsodatacli_conf_file",
+        required=False,
+        default=None,
+        help="path to the cdsodatacli configuration file .yml",)
 
     args = parser.parse_args()
     fmt = "%(asctime)s %(levelname)s %(filename)s(%(lineno)d) %(message)s"
@@ -764,6 +789,7 @@ def main():
         outputdir=args.outputdir,
         hideProgressBar=args.hideProgressBar,
         specific_account=args.login,
+        cdsodatacli_conf_file=args.cdsodatacli_conf_file,
     )
     elapsed = t0 - time.time()
     logging.info("end of function in %s seconds", elapsed)

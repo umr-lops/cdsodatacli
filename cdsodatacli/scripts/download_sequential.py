@@ -41,6 +41,11 @@ if __name__ == "__main__":
         choices=[1, 2],
         help="version of the sequential download method",
     )
+    parser.add_argument(
+        "--cdsodatacli_conf_file",
+        required=False,
+        default=None,
+        help="path to the cdsodatacli configuration file .yml [optional, default is localconfig.yml then config.yml]",)
 
     args = parser.parse_args()
     fmt = "%(asctime)s %(levelname)s %(filename)s(%(lineno)d) %(message)s"
@@ -69,6 +74,7 @@ if __name__ == "__main__":
             list_safename=inputdf["safename"].values,
             outputdir=outputdir,
             hideProgressBar=False,
+            cdsodatacli_conf_file=args.cdsodatacli_conf_file,
         )
     elif args.version == 1:
         specific_account = "Mickael.accensi@ifremer.fr"
@@ -79,5 +85,6 @@ if __name__ == "__main__":
             outputdir=outputdir,
             hideProgressBar=False,
             specific_account=specific_account,
+            cdsodatacli_conf_file=args.cdsodatacli_conf_file,
         )
     logging.info("end of function")
