@@ -10,7 +10,7 @@ A query or a request on CDSE, only provides meta-data information about the prod
 .. code-block:: python
 
     queryCDS -h
-    # or
+    # example of a query
     queryCDS --collection SENTINEL-1 --startdate 20230101T00:00:00 --stopdate 20230105T10:10:10 --mode IW --product SLC --querymode seq --geometry "POINT (-5.02 48.4)"
 
 

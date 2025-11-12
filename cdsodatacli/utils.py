@@ -7,6 +7,11 @@ import datetime
 import pandas as pd
 import json
 
+local_config_pontential_path = os.path.join(
+    os.path.dirname(cdsodatacli.__file__), "localconfig.yml"
+)
+config_path = os.path.join(os.path.dirname(cdsodatacli.__file__), "config.yml")
+
 
 def get_conf(path_config_file=None) -> dict:
     """
@@ -22,10 +27,7 @@ def get_conf(path_config_file=None) -> dict:
         used_config_path = path_config_file
         assert os.path.exists(used_config_path), f"{used_config_path} does not exist"
     else:
-        local_config_pontential_path = os.path.join(
-            os.path.dirname(cdsodatacli.__file__), "localconfig.yml"
-        )
-        config_path = os.path.join(os.path.dirname(cdsodatacli.__file__), "config.yml")
+
         if os.path.exists(local_config_pontential_path):
             used_config_path = local_config_pontential_path
         else:
