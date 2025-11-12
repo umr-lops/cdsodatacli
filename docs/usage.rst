@@ -7,7 +7,7 @@ This is an example of how to use the cdsodatacli package to query and download d
 A query or a request on CDSE, only provides meta-data information about the products available, not the data itself.
 
 
-.. code-block:: python
+.. code-block:: bash
 
     queryCDS -h
     # example of a query
