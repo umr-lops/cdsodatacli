@@ -115,7 +115,7 @@ def fetch_data(
     mode="seq",
 ):
     """
-    Fetches data based on provided parameters.
+    Fetches meta-data of CDSE products based on provided parameters.
     GeoDataFrame is splitted based on the id_query column to keep track of each pair query/products
 
     Args:
