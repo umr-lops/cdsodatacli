@@ -11,13 +11,31 @@ local_config_pontential_path = os.path.join(
     os.path.dirname(cdsodatacli.__file__), "localconfig.yml"
 )
 config_path = os.path.join(os.path.dirname(cdsodatacli.__file__), "config.yml")
-if os.path.exists(local_config_pontential_path):
-    used_config_path = local_config_pontential_path
-else:
-    used_config_path = config_path
-logging.info("config path that is used: %s", used_config_path)
-stream = open(used_config_path, "r")
-conf = load(stream, Loader=Loader)
+
+
+def get_conf(path_config_file=None) -> dict:
+    """
+    Load configuration from localconfig.yml or config.yml in cdsodatacli package directory.
+
+    Args:
+        path_config_file (str, optional): Full path to the configuration YAML file. Defaults to None.
+
+    Returns:
+        dict: Configuration parameters loaded from the YAML file.
+    """
+    if path_config_file is not None:
+        used_config_path = path_config_file
+        assert os.path.exists(used_config_path), f"{used_config_path} does not exist"
+    else:
+
+        if os.path.exists(local_config_pontential_path):
+            used_config_path = local_config_pontential_path
+        else:
+            used_config_path = config_path
+    logging.info("config path that is used: %s", used_config_path)
+    stream = open(used_config_path, "r")
+    conf = load(stream, Loader=Loader)
+    return conf
 
 
 def check_safe_in_outputdir(outputdir, safename):
@@ -49,18 +67,20 @@ def check_safe_in_outputdir(outputdir, safename):
     return present_in_outdir
 
 
-def check_safe_in_spool(safename):
+def check_safe_in_spool(safename, conf):
     """
 
     Parameters
     ----------
     safename (str) basename
+    conf (dict) configuration dictionary of cdsodatacli package
 
     Returns
     -------
         present_in_spool (bool): True -> the product is already in the spool dir
 
     """
+    # conf = get_conf(path_config_file=path_config_file)
     present_in_spool = False
     for uu in ["", ".zip", "replaced"]:
         if uu == "":
@@ -80,10 +100,16 @@ def check_safe_in_spool(safename):
     return present_in_spool
 
 
-def WhichArchiveDir(safe):
+def WhichArchiveDir(safe, conf):
     """
+    Determine the archive directory path for a given safe based on its naming convention.
+
     Args:
         safe (str): safe base name
+        conf (dict) configuration dictionary of cdsodatacli package
+
+    Returns:
+        gooddir (str): full path of the archive directory where the safe should be stored
     """
     logging.debug("safe: %s", safe)
     if "S1" in safe:
@@ -91,27 +117,9 @@ def WhichArchiveDir(safe):
     elif "S2" in safe:
         firstdate = safe[11:26]
     year = firstdate[0:4]
-    # try:
-    # doy = str(
-    #     datetime.datetime.strptime(firstdate, "%Y%m%d").timetuple().tm_yday
-    # ).zfill(3)
     doy = datetime.datetime.strptime(firstdate, "%Y%m%dT%H%M%S").strftime("%j")
     sat = safe.split("_")[0]
-    if sat == "S1A":
-        satdir = "sentinel-1a"
-    elif sat == "S1B":
-        satdir = "sentinel-1b"
-    elif sat == "S1C":
-        satdir = "sentinel-1c"
-    elif sat == "S1D":
-        satdir = "sentinel-1d"
-    elif sat == "S2B":
-        satdir = "sentinel-2b"
-    elif sat == "S2A":
-        satdir = "sentinel-2a"
-    else:
-        satdir = ""
-        logging.error("%s is not a  good satellite name", sat)
+    satdir = "sentinel-" + sat[2:].lower()
     acqui = safe.split("_")[1]
     if acqui[0] == "S":
         acqui = "SM"
@@ -125,21 +133,26 @@ def WhichArchiveDir(safe):
     return gooddir
 
 
-def check_safe_in_archive(safename):
+def check_safe_in_archive(safename, conf):
     """
+
+    Check if a given safe is already present in the archive directory.
 
     Parameters
     ----------
     safename (str)
+    conf (dict) configuration dictionary of cdsodatacli package
 
     Returns
     -------
-        present_in_archive (bool): True -> the product is already in the archive dir
+        present_in_archive (bool): True -> the product is already in the archive dir. False -> not present.
 
     """
     present_in_archive = False
     for uu in ["", ".zip", "replaced"]:
-        arch_potential_file0 = os.path.join(WhichArchiveDir(safename), safename)
+        arch_potential_file0 = os.path.join(
+            WhichArchiveDir(safename, conf=conf), safename
+        )
         if uu == "":
             arch_potential_file = arch_potential_file0
         elif uu == ".zip":

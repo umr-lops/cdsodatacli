@@ -439,6 +439,20 @@ def normalize_gdf(
 
 
 def create_urls(gdf, top=None):
+    """
+
+    Method to create the list of URLs to query the OData API based on the input GeoDataFrame.
+
+    Parameters
+    ----------
+    gdf (GeoDataFrame)
+    top (int): max number of products returned by OData API [default=1000]
+
+    Returns
+    -------
+    urls (list of tuples): (index, url)
+
+    """
     start_time = time.time()
     urlapi = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter="
     urls = []
@@ -520,7 +534,19 @@ def create_urls(gdf, top=None):
     return urls
 
 
-def get_cache_filename(url, cache_dir=None):
+def get_cache_filename(url, cache_dir=None) -> str:
+    """
+
+    Parameters
+    ----------
+    url (str)
+    cache_dir (str) : directory to store cache files [optional, default=None -> no cache]
+
+    Returns
+    -------
+    cache_file (str)
+
+    """
     url_hash = hashlib.md5(url.encode("utf-8")).hexdigest()
     return os.path.join(cache_dir, url_hash + ".json")
 
@@ -747,13 +773,16 @@ def multy_to_poly(collected_data=None):
 def sea_percent(collected_data, min_sea_percent=None):
     """
 
+    method to compute the sea percentage of each product footprint and filter the products based on a minimum sea percentage threshold.
+
     Parameters
     ----------
-    collected_data pandas.DataFrame
-    min_sea_percent float [optional]
+    collected_data pandas.DataFrame: containing a 'geometry' column with product footprints
+    min_sea_percent float : minimum threshold of sea percent per footprint to keep image [optional, default=None -> no filtering]
 
     Returns
     -------
+    collected_data pandas.DataFrame: filtered based on min_sea_percent
 
     """
     start_time = time.time()

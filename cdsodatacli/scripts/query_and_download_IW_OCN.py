@@ -5,7 +5,7 @@ import cdsodatacli
 import logging
 import time
 import os
-from cdsodatacli.utils import conf
+from cdsodatacli.utils import get_conf
 
 if __name__ == "__main__":
     root = logging.getLogger()
@@ -26,6 +26,12 @@ if __name__ == "__main__":
         "--stopdate",
         default="20230202",
         help="stopdate YYYYMMDD",
+    )
+    parser.add_argument(
+        "--cdsodatacli_conf_file",
+        required=False,
+        default=None,
+        help="path to the cdsodatacli configuration file .yml [optional, default is localconfig.yml then config.yml]",
     )
 
     args = parser.parse_args()
@@ -55,7 +61,7 @@ if __name__ == "__main__":
             "Attributes": [None],
         }
     )
-
+    conf = get_conf(path_config_file=args.cdsodatacli_conf_file)
     collected_data_norm = cdsodatacli.query.fetch_data(gdf, min_sea_percent=0)
     outf = os.path.join(
         conf["test_default_output_directory"],

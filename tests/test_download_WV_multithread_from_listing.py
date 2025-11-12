@@ -9,10 +9,11 @@ import pytest
 import sys
 import cdsodatacli
 from cdsodatacli.download import download_list_product
-from cdsodatacli.utils import conf
+from cdsodatacli.utils import get_conf
 from dotenv import load_dotenv
 
 load_dotenv()
+conf = get_conf()
 
 # listing = './example_WV_listing.txt'
 default_listing = os.path.join(

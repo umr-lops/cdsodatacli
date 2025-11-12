@@ -6,7 +6,6 @@ import glob
 import pandas as pd
 import requests
 from collections import defaultdict
-from cdsodatacli.utils import conf
 from cdsodatacli.fetch_access_token import (
     get_list_of_exising_token,
     get_bearer_access_token,
@@ -15,8 +14,14 @@ from cdsodatacli.fetch_access_token import (
 MAX_SESSION_PER_ACCOUNT = 4  # each account CDSE have maximum 4 active sessions
 
 
-def get_list_active_session(login_group=None):
+def get_list_active_session(conf, login_group=None):
     """
+    Method to get the list of active session semaphore files.
+
+    Parameters
+    ----------
+    conf (dict) configuration dictionary of cdsodatacli package
+    login_group (str): e.g. logins or loginsbackfill (for instance, it depends on the localconfig.yml)
 
     Returns
     -------
@@ -40,6 +45,7 @@ def get_list_active_session(login_group=None):
 
 def get_a_free_account(counts, blacklist=None):
     """
+    Method to get a free (i.e. account for which at least one the 4 active session it not used) CDSE account for downloading.
 
     Parameters
     ----------
@@ -48,6 +54,8 @@ def get_a_free_account(counts, blacklist=None):
 
     Returns
     -------
+        candidate (str): email address of the CDSE account free to use
+        counts (collections.defaultdict(int)): updated counter of active session for each CDSE account
 
     """
     candidate = None
@@ -123,12 +131,13 @@ def remove_semaphore_session_file(session_dir, safename=None, login=None):
 
 
 def get_sessions_download_available(
-    subset_to_treat, hideProgressBar=True, blacklist=None, logins_group="logins"
+    conf, subset_to_treat, hideProgressBar=True, blacklist=None, logins_group="logins"
 ):
     """
 
     Parameters
     ----------
+    conf (dict) configuration dictionary of cdsodatacli package
     subset_to_treat (pandas.DatFrame)
     hideProgressBar (bool)
     blacklist (list): list of account not usable [default=None]
@@ -148,7 +157,7 @@ def get_sessions_download_available(
     bunch_urls_to_download = []
     outputfiles_download_coming = []
 
-    lst_sessions_active = get_list_active_session(login_group=logins_group)
+    lst_sessions_active = get_list_active_session(conf, login_group=logins_group)
     # account_free = None
     account_counter = defaultdict(int)
     for aa in conf[logins_group]:

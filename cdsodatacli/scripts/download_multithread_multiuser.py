@@ -10,7 +10,7 @@ from cdsodatacli.download import (
     test_listing_content,
     add_missing_cdse_hash_ids_in_listing,
 )
-from cdsodatacli.utils import conf
+from cdsodatacli.utils import get_conf
 
 # listing = './example_WV_listing.txt'
 default_listing = os.path.join(
@@ -62,6 +62,12 @@ def entrypoint():
         required=True,
         help="pathwhere product will be stored",
     )
+    parser.add_argument(
+        "--cdsodatacli_conf_file",
+        required=False,
+        default=None,
+        help="path to the cdsodatacli configuration file .yml [optional, default is localconfig.yml then config.yml]",
+    )
     args = parser.parse_args()
     fmt = "%(asctime)s %(levelname)s %(filename)s(%(lineno)d) %(message)s"
     if args.verbose:
@@ -78,6 +84,7 @@ def entrypoint():
     # listing = './example_WV_OCN_listing.txt'
     # outputdir = conf["test_default_output_directory"]
     # logins_group = 'loginsbackfill'
+    conf = get_conf(path_config_file=args.cdsodatacli_conf_file)
     logins_group = args.logingroup
     logging.info("logins_group : %s", len(conf[logins_group]))
     outputdir = args.outputdir
@@ -96,6 +103,7 @@ def entrypoint():
             hideProgressBar=False,
             account_group=logins_group,
             check_on_disk=not args.forcedownload,
+            cdsodatacli_conf_file=args.cdsodatacli_conf_file,
         )
         logging.debug("downloaded dataframe: %s", dfout)
     else:

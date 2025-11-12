@@ -1,6 +1,6 @@
 import subprocess
 import logging
-from cdsodatacli.utils import conf
+from cdsodatacli.utils import get_conf
 
 if __name__ == "__main__":
     root = logging.getLogger()
@@ -23,6 +23,12 @@ if __name__ == "__main__":
         default=None,
         help="password [optional, default is the one from config file]",
     )
+    parser.add_argument(
+        "--cdsodatacli_conf_file",
+        required=False,
+        default=None,
+        help="path to the cdsodatacli configuration file .yml [optional, default is localconfig.yml then config.yml]",
+    )
     args = parser.parse_args()
     fmt = "%(asctime)s %(levelname)s %(filename)s(%(lineno)d) %(message)s"
     if args.verbose:
@@ -33,6 +39,7 @@ if __name__ == "__main__":
         logging.basicConfig(
             level=logging.INFO, format=fmt, datefmt="%d/%m/%Y %H:%M:%S", force=True
         )
+    conf = get_conf(path_config_file=args.cdsodatacli_conf_file)
     if args.login:
         logins = [args.login]
     else:
