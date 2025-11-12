@@ -11,7 +11,11 @@ MAX_VALIDITY_ACCESS_TOKEN = 600  # sec (defined by CDS API)
 
 
 def get_bearer_access_token(
-    quiet=True, specific_account=None, passwd=None, account_group="logins",path_config_file=None
+    quiet=True,
+    specific_account=None,
+    passwd=None,
+    account_group="logins",
+    path_config_file=None,
 ):
     """
     OData access token (validity=600sec)
@@ -29,7 +33,7 @@ def get_bearer_access_token(
         token (str): access token
         date_generation_access_token (datetime.datetime): date of generation of the token
         login (str): CDSE account used
-        path_semphore_token (str): path of the semaphore file created to store the token    
+        path_semphore_token (str): path of the semaphore file created to store the token
 
     """
     conf = get_conf(path_config_file=path_config_file)

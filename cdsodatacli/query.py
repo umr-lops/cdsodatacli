@@ -442,16 +442,16 @@ def create_urls(gdf, top=None):
     """
 
     Method to create the list of URLs to query the OData API based on the input GeoDataFrame.
-    
+
     Parameters
     ----------
     gdf (GeoDataFrame)
-    top (int): max number of products returned by OData API [default=1000]  
+    top (int): max number of products returned by OData API [default=1000]
 
     Returns
     -------
-    urls (list of tuples): (index, url) 
-    
+    urls (list of tuples): (index, url)
+
     """
     start_time = time.time()
     urlapi = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter="
@@ -534,9 +534,9 @@ def create_urls(gdf, top=None):
     return urls
 
 
-def get_cache_filename(url, cache_dir=None)-> str:
+def get_cache_filename(url, cache_dir=None) -> str:
     """
-    
+
     Parameters
     ----------
     url (str)

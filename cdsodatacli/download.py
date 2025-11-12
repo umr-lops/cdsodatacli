@@ -79,7 +79,12 @@ chunksize = 8192  # like in the CDSE example
 
 
 def CDS_Odata_download_one_product_v2(
-    session, headers, url, output_filepath, semaphore_token_file,cdsodatacli_conf_file=None
+    session,
+    headers,
+    url,
+    output_filepath,
+    semaphore_token_file,
+    cdsodatacli_conf_file=None,
 ):
     """
      v2 is without tqdm
@@ -150,7 +155,9 @@ def CDS_Odata_download_one_product_v2(
     return speed, status_meaning, safename_base, semaphore_token_file
 
 
-def filter_product_already_present(cpt, df, outputdir,cdsodatacli_conf, force_download=False):
+def filter_product_already_present(
+    cpt, df, outputdir, cdsodatacli_conf, force_download=False
+):
     """
     Based on a dataframe of products to download, filter those already present locally.
 
@@ -162,7 +169,7 @@ def filter_product_already_present(cpt, df, outputdir,cdsodatacli_conf, force_do
     outputdir (str)
     cdsodatacli_conf (dict): configuration dictionary of the lib cdsodatacli
     force_download (bool): True -> download all products even if already present locally [optional, default is False]
-    
+
 
     Returns
     -------
@@ -170,7 +177,7 @@ def filter_product_already_present(cpt, df, outputdir,cdsodatacli_conf, force_do
         cpt (collections.defaultdict(int)): updated counter
 
     """
-    
+
     all_output_filepath = []
     all_urls_to_download = []
     index_to_download = []
@@ -178,9 +185,9 @@ def filter_product_already_present(cpt, df, outputdir,cdsodatacli_conf, force_do
         to_download = False
         if force_download:
             to_download = True
-        if check_safe_in_archive(safename=safename_product,conf=cdsodatacli_conf):
+        if check_safe_in_archive(safename=safename_product, conf=cdsodatacli_conf):
             cpt["archived_product"] += 1
-        elif check_safe_in_spool(safename=safename_product,conf=cdsodatacli_conf):
+        elif check_safe_in_spool(safename=safename_product, conf=cdsodatacli_conf):
             cpt["in_spool_product"] += 1
         elif check_safe_in_outputdir(outputdir=outputdir, safename=safename_product):
             cpt["in_outdir_product"] += 1
@@ -247,7 +254,7 @@ def download_list_product_multithread_v2(
     )
     force_download = not check_on_disk
     df2, cpt = filter_product_already_present(
-        cpt, df, outputdir, force_download=force_download,cdsodatacli_conf=conf
+        cpt, df, outputdir, force_download=force_download, cdsodatacli_conf=conf
     )
 
     logging.info("%s", cpt)
@@ -425,9 +432,9 @@ def download_list_product(
             id_product = list_id[ii]
             url_product = conf["URL_download"] % id_product
             safename_product = list_safename[ii]
-            if check_safe_in_archive(safename=safename_product,conf=conf):
+            if check_safe_in_archive(safename=safename_product, conf=conf):
                 cpt["archived_product"] += 1
-            elif check_safe_in_spool(safename=safename_product,conf=conf):
+            elif check_safe_in_spool(safename=safename_product, conf=conf):
                 cpt["in_spool_product"] += 1
             else:
                 cpt["product_absent_from_local_disks"] += 1
@@ -473,7 +480,7 @@ def download_list_product(
                     url=url_product,
                     output_filepath=output_filepath,
                     semaphore_token_file=path_semphore_token,
-                    cdsodatacli_conf_file=cdsodatacli_conf_file
+                    cdsodatacli_conf_file=cdsodatacli_conf_file,
                 )
                 remove_semaphore_token_file(
                     token_dir=conf["token_directory"],
@@ -604,7 +611,7 @@ def download_list_product_sequential(
     df = pd.DataFrame(
         {"safe": list_safename, "status": np.zeros(len(list_safename)), "id": list_id}
     )
-    df2, cpt = filter_product_already_present(cpt, df, outputdir,cdsodatacli_conf=conf)
+    df2, cpt = filter_product_already_present(cpt, df, outputdir, cdsodatacli_conf=conf)
 
     df_products_downloadable = get_sessions_download_available(
         conf,
@@ -682,7 +689,7 @@ def download_list_product_sequential(
             url=url_product,
             output_filepath=output_filepath,
             semaphore_token_file=path_semaphore_token,
-            cdsodatacli_conf_file=cdsodatacli_conf_file
+            cdsodatacli_conf_file=cdsodatacli_conf_file,
         )
         # remove the token file, there is a check in the method on its validity
         remove_semaphore_token_file(
@@ -765,7 +772,8 @@ def main():
         "--cdsodatacli_conf_file",
         required=False,
         default=None,
-        help="path to the cdsodatacli configuration file .yml",)
+        help="path to the cdsodatacli configuration file .yml",
+    )
 
     args = parser.parse_args()
     fmt = "%(asctime)s %(levelname)s %(filename)s(%(lineno)d) %(message)s"

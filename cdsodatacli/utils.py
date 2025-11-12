@@ -8,7 +8,6 @@ import pandas as pd
 import json
 
 
-
 def get_conf(path_config_file=None) -> dict:
     """
     Load configuration from localconfig.yml or config.yml in cdsodatacli package directory.
@@ -35,7 +34,6 @@ def get_conf(path_config_file=None) -> dict:
     stream = open(used_config_path, "r")
     conf = load(stream, Loader=Loader)
     return conf
-
 
 
 def check_safe_in_outputdir(outputdir, safename):
@@ -67,7 +65,7 @@ def check_safe_in_outputdir(outputdir, safename):
     return present_in_outdir
 
 
-def check_safe_in_spool(safename,conf):
+def check_safe_in_spool(safename, conf):
     """
 
     Parameters
@@ -100,7 +98,7 @@ def check_safe_in_spool(safename,conf):
     return present_in_spool
 
 
-def WhichArchiveDir(safe,conf):
+def WhichArchiveDir(safe, conf):
     """
     Determine the archive directory path for a given safe based on its naming convention.
 
@@ -119,7 +117,7 @@ def WhichArchiveDir(safe,conf):
     year = firstdate[0:4]
     doy = datetime.datetime.strptime(firstdate, "%Y%m%dT%H%M%S").strftime("%j")
     sat = safe.split("_")[0]
-    satdir = 'sentinel-' + sat[2:].lower()
+    satdir = "sentinel-" + sat[2:].lower()
     acqui = safe.split("_")[1]
     if acqui[0] == "S":
         acqui = "SM"
@@ -133,7 +131,7 @@ def WhichArchiveDir(safe,conf):
     return gooddir
 
 
-def check_safe_in_archive(safename,conf):
+def check_safe_in_archive(safename, conf):
     """
 
     Check if a given safe is already present in the archive directory.
@@ -150,7 +148,9 @@ def check_safe_in_archive(safename,conf):
     """
     present_in_archive = False
     for uu in ["", ".zip", "replaced"]:
-        arch_potential_file0 = os.path.join(WhichArchiveDir(safename,conf=conf), safename)
+        arch_potential_file0 = os.path.join(
+            WhichArchiveDir(safename, conf=conf), safename
+        )
         if uu == "":
             arch_potential_file = arch_potential_file0
         elif uu == ".zip":

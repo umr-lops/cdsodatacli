@@ -31,8 +31,9 @@ if __name__ == "__main__":
         "--cdsodatacli_conf_file",
         required=False,
         default=None,
-        help="path to the cdsodatacli configuration file .yml [optional, default is localconfig.yml then config.yml]",)
-    
+        help="path to the cdsodatacli configuration file .yml [optional, default is localconfig.yml then config.yml]",
+    )
+
     args = parser.parse_args()
     fmt = "%(asctime)s %(levelname)s %(filename)s(%(lineno)d) %(message)s"
     if args.verbose:

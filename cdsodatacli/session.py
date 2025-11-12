@@ -6,7 +6,6 @@ import glob
 import pandas as pd
 import requests
 from collections import defaultdict
-from cdsodatacli.utils import get_conf
 from cdsodatacli.fetch_access_token import (
     get_list_of_exising_token,
     get_bearer_access_token,
@@ -15,7 +14,7 @@ from cdsodatacli.fetch_access_token import (
 MAX_SESSION_PER_ACCOUNT = 4  # each account CDSE have maximum 4 active sessions
 
 
-def get_list_active_session(conf,login_group=None):
+def get_list_active_session(conf, login_group=None):
     """
     Method to get the list of active session semaphore files.
 
@@ -132,7 +131,7 @@ def remove_semaphore_session_file(session_dir, safename=None, login=None):
 
 
 def get_sessions_download_available(
-    conf,subset_to_treat, hideProgressBar=True, blacklist=None, logins_group="logins"
+    conf, subset_to_treat, hideProgressBar=True, blacklist=None, logins_group="logins"
 ):
     """
 
@@ -158,7 +157,7 @@ def get_sessions_download_available(
     bunch_urls_to_download = []
     outputfiles_download_coming = []
 
-    lst_sessions_active = get_list_active_session(conf,login_group=logins_group)
+    lst_sessions_active = get_list_active_session(conf, login_group=logins_group)
     # account_free = None
     account_counter = defaultdict(int)
     for aa in conf[logins_group]:
