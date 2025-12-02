@@ -119,7 +119,7 @@ def WhichArchiveDir(safe, conf):
     year = firstdate[0:4]
     doy = datetime.datetime.strptime(firstdate, "%Y%m%dT%H%M%S").strftime("%j")
     sat = safe.split("_")[0]
-    satdir = "sentinel-" + sat[2:].lower()
+    satdir = "sentinel-1" + sat[2:].lower()
     acqui = safe.split("_")[1]
     if acqui[0] == "S":
         acqui = "SM"
