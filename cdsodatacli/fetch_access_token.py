@@ -1,4 +1,3 @@
-from cdsodatacli.utils import get_conf
 import subprocess
 import logging
 import json
@@ -11,22 +10,22 @@ MAX_VALIDITY_ACCESS_TOKEN = 600  # sec (defined by CDS API)
 
 
 def get_bearer_access_token(
+    conf,
     quiet=True,
     specific_account=None,
     passwd=None,
     account_group="logins",
-    path_config_file=None,
 ):
     """
     OData access token (validity=600sec)
 
     Parameters
     ----------
+    conf (dict): conf CDSE coming from yaml file (defines the account and groups of account)
     quiet (bool): True -> curl in silent mode
     specific_account (str) [optional, default=None -> first available account in config file]
     passwd (str): [optional, default is to search in config files]
     account_group (str): name of the group of accounts in the config file [default='logins']
-    path_config_file (str): path to the configuration file [optional, default is None -> localconfig.yml or config.yml]
 
     Returns
     -------
@@ -36,7 +35,6 @@ def get_bearer_access_token(
         path_semphore_token (str): path of the semaphore file created to store the token
 
     """
-    conf = get_conf(path_config_file=path_config_file)
     path_semphore_token = None
     url_identity = conf["URL_identity"]
     if specific_account is None:

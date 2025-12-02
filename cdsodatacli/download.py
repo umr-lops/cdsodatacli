@@ -87,7 +87,9 @@ def CDS_Odata_download_one_product_v2(
     cdsodatacli_conf_file=None,
 ):
     """
+
      v2 is without tqdm
+
     Parameters
     ----------
     session (request Obj)
@@ -234,7 +236,7 @@ def download_list_product_multithread_v2(
     hideProgressBar (bool): True -> no tqdm progress bar in stdout
     account_group (str): the name of the group of CDSE logins to be used
     check_on_disk (bool): True -> if the product is in the spool dir or in archive dir the download is skipped
-    cdsodatacli_conf_file (str): path to the cdsodatacli configuration file
+    cdsodatacli_conf_file (str): path to the cdsodatacli configuration file [ optional, default is None -> use cdsodatacli default behavior]
 
     Returns
     -------
@@ -405,6 +407,7 @@ def download_list_product(
             login,
             path_semphore_token,
         ) = get_bearer_access_token(
+            conf=conf,
             quiet=hideProgressBar,
             specific_account=specific_account,
             passwd=specific_passwd,
@@ -454,7 +457,9 @@ def download_list_product(
                         date_generation_access_token,
                         specific_account,
                         path_semphore_token,
-                    ) = get_bearer_access_token(specific_account=specific_account)
+                    ) = get_bearer_access_token(
+                        conf=conf, specific_account=specific_account
+                    )
                     headers = {"Authorization": "Bearer %s" % access_token}
                     session.headers.update(headers)
                 else:
@@ -575,7 +580,7 @@ def add_missing_cdse_hash_ids_in_listing(listing_path):
             "id_query": np.tile(["dummy2getProducthash"], len(list_safe_a)),
         }
     )
-    sea_min_pct = 0
+    sea_min_pct = None
     if len(gdf["geometry"]) > 0:
         collected_data_norm = fetch_data(gdf, min_sea_percent=sea_min_pct)
         if collected_data_norm is not None:
@@ -663,7 +668,7 @@ def download_list_product_sequential(
                 login,
                 path_semaphore_token,
             ) = get_bearer_access_token(
-                specific_account=None, account_group=logins_group
+                conf=conf, specific_account=None, account_group=logins_group
             )
             headers = {"Authorization": "Bearer %s" % access_token}
             session.headers.update(headers)

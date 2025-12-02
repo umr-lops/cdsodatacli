@@ -189,6 +189,7 @@ def get_sessions_download_available(
                     login,
                     path_semphore_token,
                 ) = get_bearer_access_token(
+                    conf=conf,
                     quiet=hideProgressBar,
                     specific_account=account_free,
                     account_group=logins_group,
