@@ -86,7 +86,7 @@ def entrypoint():
     # logins_group = 'loginsbackfill'
     conf = get_conf(path_config_file=args.cdsodatacli_conf_file)
     logins_group = args.logingroup
-    logging.info("logins_group : %s", len(conf[logins_group]))
+    logging.info("Number of account in  %s logins_group : %s",logins_group, len(conf[logins_group]))
     outputdir = args.outputdir
     if test_listing_content(listing_path=listing):
         inputdf = pd.read_csv(listing, names=["id", "safename"], delimiter=",")
