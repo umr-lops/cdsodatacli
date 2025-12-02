@@ -457,7 +457,9 @@ def download_list_product(
                         date_generation_access_token,
                         specific_account,
                         path_semphore_token,
-                    ) = get_bearer_access_token(conf=conf,specific_account=specific_account)
+                    ) = get_bearer_access_token(
+                        conf=conf, specific_account=specific_account
+                    )
                     headers = {"Authorization": "Bearer %s" % access_token}
                     session.headers.update(headers)
                 else:
@@ -665,8 +667,8 @@ def download_list_product_sequential(
                 date_generation_access_token,
                 login,
                 path_semaphore_token,
-            ) = get_bearer_access_token(conf=conf,
-                specific_account=None, account_group=logins_group
+            ) = get_bearer_access_token(
+                conf=conf, specific_account=None, account_group=logins_group
             )
             headers = {"Authorization": "Bearer %s" % access_token}
             session.headers.update(headers)

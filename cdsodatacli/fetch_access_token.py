@@ -1,4 +1,3 @@
-from cdsodatacli.utils import get_conf
 import subprocess
 import logging
 import json
