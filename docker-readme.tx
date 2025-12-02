@@ -5,3 +5,7 @@ docker run -i -t --rm cdsodatacli:test /bin/bash
 docker run -i -t --rm cdsodatacli:test downloadFromCDS -h
 
 docker run -i -t --rm cdsodatacli:test downloadMuliThreadMultiUser -h
+
+# apptainer
+
+ apptainer build --force /tmp/cdsodatacli_20251112_apptainer.sif "docker-daemon://cdsodatacli:2025.11.12"
