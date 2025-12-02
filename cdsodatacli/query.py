@@ -167,7 +167,6 @@ def fetch_data_single_query(
     gdf,
     date=None,
     dtime=None,
-    timedelta_slice=None,
     start_datetime=None,
     end_datetime=None,
     min_sea_percent=None,
@@ -175,22 +174,21 @@ def fetch_data_single_query(
     top=None,
     cache_dir=None,
     mode="seq",
+    timedelta_slice=None,
 ):
     """
     Fetches data based on provided parameters.
 
     Args:
        gdf (GeoDataFrame): containing the geospatial data for the query.
-       geometry (list of tuples): representing the geometry.
-       collection (String): representing the collection information for filtering the data.
-       name (String): representing the name information for filtering the data.
-       sensormode (String): representing the mode of the sensor for filtering the data.
-       producttype (String): representing the type of product for filtering the data.
+       date (String): representing the date for the query.
+       dtime (String): representing the time for the query.
        start_datetime (String): representing the starting date for the query.
        end_datetime (String): representing the ending date for the query.
-       publication_start (String): representing the starting publication date for the query.
-       publication_end (String): representing the ending publication date for the query.
+       min_sea_percent (Float): minimum sea percent to filter the data [None-> no filter based on sea percent].
+       fig (Function): function to plot the data [can be None].
        top (String): representing the ending publication date for the query.
+       cache_dir (String): path to cache directory to store intermediate results
        mode (String): seq ( Sequential) or multi (multithread)
        timedelta_slice (datetime.timedelta) : optional param to split the queries wrt time in order to avoid missing product because of the 1000 product max returned by Odata
     Return:
