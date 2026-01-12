@@ -200,3 +200,48 @@ def convert_json_opensearch_query_to_listing_safe_4_dowload(json_path) -> str:
             fid.close()
     logging.info("output_txt : %s", output_txt)
     return output_txt
+
+
+def convert_json_odata_query_to_listing_safe_4_download(json_path: str) -> str:
+    """
+    Convert an OData Products JSON response into a 2-column listing (id, safename)
+
+    Parameters
+    ----------
+    json_path : str
+        Full path of the OData JSON file
+
+    Returns
+    -------
+    output_txt : str
+        Text file with 2 columns: id,safename (no header)
+    """
+    logging.info("input json file: %s", json_path)
+    output_txt = json_path.replace(".json", ".txt")
+
+    with open(json_path, "r") as f:
+        data = json.load(f)
+
+    products = data.get("value", [])
+
+    if len(products) > 0:
+        # Normalize OData "value" array
+        df = pd.json_normalize(products)
+
+        # Select and rename columns to match expected output
+        sub = df[["Id", "Name"]].rename(
+            columns={
+                "Id": "id",
+                "Name": "safename",
+            }
+        )
+
+        sub = sub.drop_duplicates()
+
+        sub.to_csv(output_txt, header=False, index=False)
+    else:
+        # Ensure empty file exists
+        open(output_txt, "a").close()
+
+    logging.info("output_txt : %s", output_txt)
+    return output_txt
