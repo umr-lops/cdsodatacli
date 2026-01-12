@@ -202,7 +202,6 @@ def convert_json_opensearch_query_to_listing_safe_4_dowload(json_path) -> str:
     return output_txt
 
 
-
 def convert_json_odata_query_to_listing_safe_4_download(json_path: str) -> str:
     """
     Convert an OData Products JSON response into a 2-column listing (id, safename)
@@ -246,4 +245,3 @@ def convert_json_odata_query_to_listing_safe_4_download(json_path: str) -> str:
 
     logging.info("output_txt : %s", output_txt)
     return output_txt
-
