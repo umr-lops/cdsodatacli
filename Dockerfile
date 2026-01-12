@@ -6,10 +6,15 @@ FROM python:3.12-slim AS base
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends\
     build-essential \
     git \
+    curl \
+    wget \
     && rm -rf /var/lib/apt/lists/*
+
+# add curl
+RUN apt install -y curl
 
 # Copy requirements file and install Python dependencies
 COPY requirements.txt .
