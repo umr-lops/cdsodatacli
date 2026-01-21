@@ -179,7 +179,8 @@ def fetch_data_single_query(
     cache_dir=None,
     mode="seq",
     timedelta_slice=None,
-    email=None, password=None
+    email=None,
+    password=None,
 ):
     """
     Fetches data based on provided parameters.
@@ -213,16 +214,22 @@ def fetch_data_single_query(
         # geopd_norm.sort_index(ascending=False)
         logging.debug(gdf_norm.keys())
         logging.info(f"Length of input after slicing in time:{len(gdf_norm)}")
-        urls_plus_headers = create_urls(gdf=gdf_norm, top=top, email=email, password=password)
+        urls_plus_headers = create_urls(
+            gdf=gdf_norm, top=top, email=email, password=password
+        )
     else:
         urls_plus_headers = {"urls": [], "headers": None}
     if mode == "seq":
-        collected_data = fetch_data_from_urls_sequential(urls_plus_headers=urls_plus_headers, cache_dir=cache_dir)
+        collected_data = fetch_data_from_urls_sequential(
+            urls_plus_headers=urls_plus_headers, cache_dir=cache_dir
+        )
     elif mode == "multi":
         maxworker = 10
         logging.info("maximum // queries : %s", maxworker)
         collected_data = fetch_data_from_urls_multithread(
-            urls_plus_headers=urls_plus_headers, cache_dir=cache_dir, max_workers=maxworker
+            urls_plus_headers=urls_plus_headers,
+            cache_dir=cache_dir,
+            max_workers=maxworker,
         )
 
     # Convert all Multipolygon to Polygon and add geometry as new column
@@ -443,8 +450,6 @@ def normalize_gdf(
     return gdf_norm
 
 
-
-
 def create_urls(gdf, top=None, email=None, password=None):
     """
     Method to create the list of URLs and authentication headers.
@@ -464,17 +469,17 @@ def create_urls(gdf, top=None, email=None, password=None):
 
     """
     start_time = time.time()
-    
+
     # --- 1. Handle Authentication ---
     headers = None
     if email and password:
         logging.info(f"[*] Authenticating for {email}...")
         headers = get_access_token(email, password)
-        logging.info(f"[*] Authentication successful.")
-    
+        logging.info("[*] Authentication successful.")
+
     urlapi = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter="
     urls = []
-    
+
     if top is None:
         # Assuming DEFAULT_TOP_ROWS_PER_QUERY is defined globally
         top = DEFAULT_TOP_ROWS_PER_QUERY
@@ -484,7 +489,7 @@ def create_urls(gdf, top=None, email=None, password=None):
         enter_index = gdf["id_original_query"].iloc[row]
 
         params = {}
-        
+
         # Geometry processing
         if "geometry" in gdf_row and not pd.isna(gdf_row["geometry"]):
             value = str(gdf_row.geometry)
@@ -492,13 +497,17 @@ def create_urls(gdf, top=None, email=None, password=None):
             # Extracting coordinates inside parentheses
             # coordinates_part = value[value.find("(") + 1 : value.rfind(")")]
             coordinates_part = value[value.find("(") + 1 : value.find(")")]
-            
+
             if geo_type == "Point":
                 # Clean spaces for URL encoding
                 coordinates_part = coordinates_part.replace(" ", "%20")
-                params["OData.CSC.Intersects"] = f"(area=geography'SRID=4326;POINT({coordinates_part})')"
+                params["OData.CSC.Intersects"] = (
+                    f"(area=geography'SRID=4326;POINT({coordinates_part})')"
+                )
             elif geo_type == "Polygon":
-                params["OData.CSC.Intersects"] = f"(area=geography'SRID=4326;POLYGON({coordinates_part}))')"
+                params["OData.CSC.Intersects"] = (
+                    f"(area=geography'SRID=4326;POLYGON({coordinates_part}))')"
+                )
 
         # OData Filter Mapping
         if "collection" in gdf_row and not pd.isna(gdf_row["collection"]):
@@ -508,10 +517,14 @@ def create_urls(gdf, top=None, email=None, password=None):
             params["contains"] = f"(Name,'{gdf_row['name']}')"
 
         if "sensormode" in gdf_row and not pd.isna(gdf_row["sensormode"]):
-            params["Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'operationalMode' and att/OData.CSC.StringAttribute/Value eq"] = f" '{gdf_row['sensormode']}')"
+            params[
+                "Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'operationalMode' and att/OData.CSC.StringAttribute/Value eq"
+            ] = f" '{gdf_row['sensormode']}')"
 
         if "producttype" in gdf_row and not pd.isna(gdf_row["producttype"]):
-            params["Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq"] = f" '{gdf_row['producttype']}')"
+            params[
+                "Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq"
+            ] = f" '{gdf_row['producttype']}')"
 
         if "start_datetime" in gdf_row and not pd.isna(gdf_row["start_datetime"]):
             start_dt = gdf_row["start_datetime"].strftime("%Y-%m-%dT%H:%M:%S.000Z")
@@ -523,9 +536,11 @@ def create_urls(gdf, top=None, email=None, password=None):
 
         if "Attributes" in gdf_row and not pd.isna(gdf_row["Attributes"]):
             attr_str = str(gdf_row["Attributes"]).replace(" ", "")
-            attr_name = attr_str.split(',')[0]
-            attr_val = attr_str.split(',')[1]
-            params["Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq"] = f" '{attr_name}' and att/OData.CSC.DoubleAttribute/Value le {attr_val})"
+            attr_name = attr_str.split(",")[0]
+            attr_val = attr_str.split(",")[1]
+            params["Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq"] = (
+                f" '{attr_name}' and att/OData.CSC.DoubleAttribute/Value le {attr_val})"
+            )
 
         # Construction of the final URL
         str_query = " and ".join([f"{key}{val}" for key, val in params.items()])
@@ -534,11 +549,10 @@ def create_urls(gdf, top=None, email=None, password=None):
 
     processing_time = time.time() - start_time
     logging.info("processing time:%1.1fs", processing_time)
-    logging.debug('example of generated URL: %s', urls[0][1] if urls else 'No URLs generated')
-    return {
-        "urls": urls,
-        "headers": headers
-    }
+    logging.debug(
+        "example of generated URL: %s", urls[0][1] if urls else "No URLs generated"
+    )
+    return {"urls": urls, "headers": headers}
 
 
 def get_cache_filename(url, cache_dir=None) -> str:
@@ -661,7 +675,9 @@ def fetch_data_from_urls_sequential(urls_plus_headers, cache_dir) -> pd.DataFram
         # for url in urls:
         url = urls[ii][1]
         index = urls[ii][0]
-        cpt, collected_data = fetch_one_url(url, cpt, index=index, cache_dir=cache_dir, headers=headers)
+        cpt, collected_data = fetch_one_url(
+            url, cpt, index=index, cache_dir=cache_dir, headers=headers
+        )
         if collected_data is not None:
             if not collected_data.empty:
                 collected_data_x.append(collected_data)
@@ -704,7 +720,9 @@ def fetch_data_from_urls_multithread(urls_plus_headers, cache_dir=None, max_work
         # url[1] is a CDS Odata query URL
         # url[0] is index of original gdf
         future_to_url = {
-            executor.submit(fetch_one_url, url[1], cpt, url[0], cache_dir, headers=headers): (
+            executor.submit(
+                fetch_one_url, url[1], cpt, url[0], cache_dir, headers=headers
+            ): (
                 url[0],
                 url[1],
             )
@@ -833,7 +851,16 @@ def sea_percent(collected_data, min_sea_percent=None):
     return collected_data
 
 
-def core_query_logged(email=None, password=None, type=None, startdate=None, enddate=None, unit=None, output=None, limit=1000):
+def core_query_logged(
+    email=None,
+    password=None,
+    type=None,
+    startdate=None,
+    enddate=None,
+    unit=None,
+    output=None,
+    limit=1000,
+):
     """
     Core function to query CDSE OData with authentication and keyed arguments.
     this method in complementary to cdsodatacli.query.fetch_data() because here we use authentication
@@ -841,7 +868,7 @@ def core_query_logged(email=None, password=None, type=None, startdate=None, endd
     It is used in the context of private data access where authentication is required during IOC periods.
     Current limitations:
          - no spatial filtering
-    
+
     Args:
         email (str): CDSE account email.
         password (str): CDSE account password.
@@ -883,11 +910,15 @@ def core_query_logged(email=None, password=None, type=None, startdate=None, endd
 
     # Using the specific StringAttribute syntax required by CDSE OData
     if enddate is None:
-        add_filter_startdate = [f"ContentDate/End ge {startdate}",]
+        add_filter_startdate = [
+            f"ContentDate/End ge {startdate}",
+        ]
         add_filter_enddate = []
     else:
         add_filter_enddate = [f"ContentDate/End le {enddate}"]
-        add_filter_startdate = [f"ContentDate/Start ge {startdate}",]
+        add_filter_startdate = [
+            f"ContentDate/Start ge {startdate}",
+        ]
     filters = [
         "Collection/Name eq 'SENTINEL-1'",
         # f"ContentDate/Start ge {startdate}",

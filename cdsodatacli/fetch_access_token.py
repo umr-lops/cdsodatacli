@@ -173,6 +173,7 @@ def remove_semaphore_token_file(token_dir, login, date_generation_access_token):
         os.remove(path_token)
         logging.debug("token semaphore file removed")
 
+
 def get_access_token(email, password):
     """Helper to retrieve OIDC token."""
     auth_url = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
@@ -182,7 +183,7 @@ def get_access_token(email, password):
         "password": password,
         "grant_type": "password",
     }
-    
+
     try:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         response = requests.post(auth_url, data=auth_data, verify=False)

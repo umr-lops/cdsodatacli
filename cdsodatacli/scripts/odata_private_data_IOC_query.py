@@ -4,7 +4,6 @@ import logging
 from cdsodatacli.query import core_query_logged
 
 
-
 def main():
     parser = argparse.ArgumentParser(
         description="Search S1C/S1D Private IOC using OData API with keyed arguments.",
@@ -47,15 +46,16 @@ def main():
         logging.basicConfig(
             level=logging.INFO, format=fmt, datefmt="%d/%m/%Y %H:%M:%S", force=True
         )
-    core_query_logged(email=args.email,
-                      password=args.password,
-                      type=args.type,
-                      startdate=args.startdate,
-                      enddate=args.enddate,
-                      unit=args.unit,
-                      output=args.output,
-                      limit=args.limit)
-    
+    core_query_logged(
+        email=args.email,
+        password=args.password,
+        type=args.type,
+        startdate=args.startdate,
+        enddate=args.enddate,
+        unit=args.unit,
+        output=args.output,
+        limit=args.limit,
+    )
 
 
 if __name__ == "__main__":
