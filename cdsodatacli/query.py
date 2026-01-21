@@ -490,7 +490,8 @@ def create_urls(gdf, top=None, email=None, password=None):
             value = str(gdf_row.geometry)
             geo_type = gdf_row.geometry.geom_type
             # Extracting coordinates inside parentheses
-            coordinates_part = value[value.find("(") + 1 : value.rfind(")")]
+            # coordinates_part = value[value.find("(") + 1 : value.rfind(")")]
+            coordinates_part = value[value.find("(") + 1 : value.find(")")]
             
             if geo_type == "Point":
                 # Clean spaces for URL encoding
@@ -743,8 +744,8 @@ def process_data(json_data):
     if "value" in json_data:
         res = pd.DataFrame.from_dict(json_data["value"])
         # get the code status of the query "@odata.count"
-        if len(res) > 0:
-            logging.debug("example of data fetched: %s", res.iloc[0].to_dict())
+        # if len(res) > 0:
+        #     logging.debug("example of data fetched: %s", res.iloc[0].to_dict())
     else:
         logging.debug("No data found.")
         pass
