@@ -22,6 +22,10 @@ import traceback
 import warnings
 from geodatasets import get_path
 import numpy as np
+import urllib3
+import sys
+from cdsodatacli.fetch_access_token import get_access_token
+
 
 DEFAULT_TOP_ROWS_PER_QUERY = 1000
 
@@ -175,6 +179,7 @@ def fetch_data_single_query(
     cache_dir=None,
     mode="seq",
     timedelta_slice=None,
+    email=None, password=None
 ):
     """
     Fetches data based on provided parameters.
@@ -191,6 +196,8 @@ def fetch_data_single_query(
        cache_dir (String): path to cache directory to store intermediate results
        mode (String): seq ( Sequential) or multi (multithread)
        timedelta_slice (datetime.timedelta) : optional param to split the queries wrt time in order to avoid missing product because of the 1000 product max returned by Odata
+       email (str): CDSE account [optional to be used for PRIVATE data that need authentication]
+       password (str): password CDSE account [optional to be used for PRIVATE data that need authentication]
     Return:
         (pd.DataFame): data containing the fetched results.
     """
@@ -206,16 +213,16 @@ def fetch_data_single_query(
         # geopd_norm.sort_index(ascending=False)
         logging.debug(gdf_norm.keys())
         logging.info(f"Length of input after slicing in time:{len(gdf_norm)}")
-        urls = create_urls(gdf=gdf_norm, top=top)
+        urls_plus_headers = create_urls(gdf=gdf_norm, top=top, email=email, password=password)
     else:
-        urls = []
+        urls_plus_headers = {"urls": [], "headers": None}
     if mode == "seq":
-        collected_data = fetch_data_from_urls_sequential(urls=urls, cache_dir=cache_dir)
+        collected_data = fetch_data_from_urls_sequential(urls_plus_headers=urls_plus_headers, cache_dir=cache_dir)
     elif mode == "multi":
         maxworker = 10
         logging.info("maximum // queries : %s", maxworker)
         collected_data = fetch_data_from_urls_multithread(
-            urls=urls, cache_dir=cache_dir, max_workers=maxworker
+            urls_plus_headers=urls_plus_headers, cache_dir=cache_dir, max_workers=maxworker
         )
 
     # Convert all Multipolygon to Polygon and add geometry as new column
@@ -436,100 +443,101 @@ def normalize_gdf(
     return gdf_norm
 
 
-def create_urls(gdf, top=None):
-    """
 
-    Method to create the list of URLs to query the OData API based on the input GeoDataFrame.
+
+def create_urls(gdf, top=None, email=None, password=None):
+    """
+    Method to create the list of URLs and authentication headers.
 
     Parameters
     ----------
-    gdf (GeoDataFrame)
-    top (int): max number of products returned by OData API [default=1000]
+        gdf : GeoDataFrame containing the query parameters
+        top : int number of max rows per query
+        email : str  CDSE account [optional]
+        password : str password CDSE account [optional]
 
     Returns
     -------
-    urls (list of tuples): (index, url)
+        dict : containing
+            'urls' : list of tuples (id_original_query, url)
+            'headers' : authentication headers (None if no email/password)
 
     """
     start_time = time.time()
+    
+    # --- 1. Handle Authentication ---
+    headers = None
+    if email and password:
+        logging.info(f"[*] Authenticating for {email}...")
+        headers = get_access_token(email, password)
+        logging.info(f"[*] Authentication successful.")
+    
     urlapi = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter="
     urls = []
+    
     if top is None:
+        # Assuming DEFAULT_TOP_ROWS_PER_QUERY is defined globally
         top = DEFAULT_TOP_ROWS_PER_QUERY
+
     for row in range(len(gdf)):
         gdf_row = gdf.iloc[row]
-        # enter_index = gdf.index[row]
         enter_index = gdf["id_original_query"].iloc[row]
 
-        # Taking all given parameters
         params = {}
-        if (
-            "geometry" in gdf_row
-            and not pd.isna(gdf_row["geometry"])
-            and gdf_row["geometry"] is not None
-        ):
+        
+        # Geometry processing
+        if "geometry" in gdf_row and not pd.isna(gdf_row["geometry"]):
             value = str(gdf_row.geometry)
             geo_type = gdf_row.geometry.geom_type
-            coordinates_part = value[value.find("(") + 1 : value.find(")")]
+            # Extracting coordinates inside parentheses
+            coordinates_part = value[value.find("(") + 1 : value.rfind(")")]
+            
             if geo_type == "Point":
-                modified_value = f"{coordinates_part}"
-                coordinates_part = modified_value.replace(" ", "%20")
-                params["OData.CSC.Intersects"] = (
-                    f"(area=geography'SRID=4326;POINT({coordinates_part})')"
-                )
+                # Clean spaces for URL encoding
+                coordinates_part = coordinates_part.replace(" ", "%20")
+                params["OData.CSC.Intersects"] = f"(area=geography'SRID=4326;POINT({coordinates_part})')"
             elif geo_type == "Polygon":
-                params["OData.CSC.Intersects"] = (
-                    f"(area=geography'SRID=4326;POLYGON({coordinates_part}))')"
-                )
+                params["OData.CSC.Intersects"] = f"(area=geography'SRID=4326;POLYGON({coordinates_part}))')"
 
+        # OData Filter Mapping
         if "collection" in gdf_row and not pd.isna(gdf_row["collection"]):
-            collection = gdf_row["collection"]
-            params["Collection/Name eq"] = f" '{collection}'"
+            params["Collection/Name eq"] = f" '{gdf_row['collection']}'"
 
         if "name" in gdf_row and not pd.isna(gdf_row["name"]):
-            name = gdf_row["name"]
-            params["contains"] = f"(Name,'{name}')"
+            params["contains"] = f"(Name,'{gdf_row['name']}')"
 
         if "sensormode" in gdf_row and not pd.isna(gdf_row["sensormode"]):
-            sensormode = gdf_row["sensormode"]
-            params[
-                "Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'operationalMode' and att/OData.CSC.StringAttribute/Value eq"
-            ] = f" '{sensormode}')"
+            params["Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'operationalMode' and att/OData.CSC.StringAttribute/Value eq"] = f" '{gdf_row['sensormode']}')"
 
         if "producttype" in gdf_row and not pd.isna(gdf_row["producttype"]):
-            producttype = gdf_row["producttype"]
-            params[
-                "Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq"
-            ] = f" '{producttype}')"
+            params["Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq"] = f" '{gdf_row['producttype']}')"
 
         if "start_datetime" in gdf_row and not pd.isna(gdf_row["start_datetime"]):
-            start_datetime = gdf_row["start_datetime"].strftime(
-                "%Y-%m-%dT%H:%M:%S.000Z"
-            )
-            params["ContentDate/Start gt"] = f" {start_datetime}"
+            start_dt = gdf_row["start_datetime"].strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            params["ContentDate/Start gt"] = f" {start_dt}"
 
         if "end_datetime" in gdf_row and not pd.isna(gdf_row["end_datetime"]):
-            end_datetime = gdf_row["end_datetime"].strftime("%Y-%m-%dT%H:%M:%S.000Z")
-            params["ContentDate/Start lt"] = f" {end_datetime}"
+            end_dt = gdf_row["end_datetime"].strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            params["ContentDate/Start lt"] = f" {end_dt}"
 
         if "Attributes" in gdf_row and not pd.isna(gdf_row["Attributes"]):
-            Attributes = str(gdf_row["Attributes"]).replace(" ", "")
-            Attributes_name = Attributes[0 : Attributes.find(",")]
-            Attributes_value = Attributes[Attributes.find(",") + 1 :]
-            params["Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq"] = (
-                f" '{Attributes_name}' and att/OData.CSC.DoubleAttribute/Value le {Attributes_value})"
-            )
+            attr_str = str(gdf_row["Attributes"]).replace(" ", "")
+            attr_name = attr_str.split(',')[0]
+            attr_val = attr_str.split(',')[1]
+            params["Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq"] = f" '{attr_name}' and att/OData.CSC.DoubleAttribute/Value le {attr_val})"
 
-        str_query = " and ".join([f"{key}{value}" for key, value in params.items()])
-
-        str_query = str_query + "&$top=" + str(top)
-        url = urlapi + str_query + "&$expand=Attributes"
+        # Construction of the final URL
+        str_query = " and ".join([f"{key}{val}" for key, val in params.items()])
+        url = f"{urlapi}{str_query}&$top={top}&$expand=Attributes"
         urls.append((enter_index, url))
-    end_time = time.time()
-    processing_time = end_time - start_time
-    logging.info("create_urls() processing time:%1.1fs", processing_time)
-    logging.debug("example of URL created: %s", urls[0])
-    return urls
+
+    processing_time = time.time() - start_time
+    logging.info("processing time:%1.1fs", processing_time)
+    logging.debug('example of generated URL: %s', urls[0][1] if urls else 'No URLs generated')
+    return {
+        "urls": urls,
+        "headers": headers
+    }
 
 
 def get_cache_filename(url, cache_dir=None) -> str:
@@ -549,15 +557,16 @@ def get_cache_filename(url, cache_dir=None) -> str:
     return os.path.join(cache_dir, url_hash + ".json")
 
 
-def fetch_one_url(url, cpt, index, cache_dir):
+def fetch_one_url(url, cpt, index, cache_dir, headers=None):
     """
 
     Parameters
     ----------
-    url (str)
-    cpt (defaultdict(int))
-    index (str): id_query
-    cache_dir (str)
+    url (str): CDS OData query URL
+    cpt (defaultdict(int)): counters
+    index (str): id_query of the original gdf
+    cache_dir (str): directory to store cache files [optional, default=None -> no cache]
+    headers (dict): authentication headers (None if no email/password) [optional, default=None]
 
     Returns
     -------
@@ -581,7 +590,7 @@ def fetch_one_url(url, cpt, index, cache_dir):
         logging.debug("no cache file -> go for query CDS")
         cpt["urls_tested"] += 1
         try:
-            json_data = requests.get(url).json()
+            json_data = requests.get(url, headers=headers).json()
             cpt["urls_OK"] += 1
         except KeyboardInterrupt:
             raise ("keyboard interrupt")
@@ -622,18 +631,22 @@ def fetch_one_url(url, cpt, index, cache_dir):
     return cpt, collected_data
 
 
-def fetch_data_from_urls_sequential(urls, cache_dir) -> pd.DataFrame:
+def fetch_data_from_urls_sequential(urls_plus_headers, cache_dir) -> pd.DataFrame:
     """
 
     Parameters
     ----------
-    urls (list): list of url to query CDS
+    urls_plus_headers (dict): containing
+        'urls' : list of tuples (id_original_query, url)
+        'headers' : authentication headers (None if no email/password)
+    cache_dir (str)
 
     Returns
     -------
 
     """
-
+    urls = urls_plus_headers["urls"]
+    headers = urls_plus_headers["headers"]
     cpt = defaultdict(int)
     start_time = time.time()
     collected_data_x = []
@@ -647,7 +660,7 @@ def fetch_data_from_urls_sequential(urls, cache_dir) -> pd.DataFrame:
         # for url in urls:
         url = urls[ii][1]
         index = urls[ii][0]
-        cpt, collected_data = fetch_one_url(url, cpt, index=index, cache_dir=cache_dir)
+        cpt, collected_data = fetch_one_url(url, cpt, index=index, cache_dir=cache_dir, headers=headers)
         if collected_data is not None:
             if not collected_data.empty:
                 collected_data_x.append(collected_data)
@@ -664,21 +677,25 @@ def fetch_data_from_urls_sequential(urls, cache_dir) -> pd.DataFrame:
     return collected_data_final
 
 
-def fetch_data_from_urls_multithread(urls, cache_dir=None, max_workers=50):
+def fetch_data_from_urls_multithread(urls_plus_headers, cache_dir=None, max_workers=50):
     """
 
     Parameters
     ----------
-    urls (list)
-    cache_dir (str)
-    max_workers (int)
+    urls_plus_headers (dict): containing
+        'urls' : list of tuples (id_original_query, url)
+        'headers' : authentication headers (None if no email/password)
+    cache_dir (str): directory to store cache files [optional, default=None -> no cache]
+    max_workers (int): maximum number of parallel threads [optional, default=50]
 
     Returns
     -------
-
+    collected_data (pandas.GeoDataframe): containing the fetched results.
     """
     collected_data = pd.DataFrame()
     cpt = defaultdict(int)
+    urls = urls_plus_headers["urls"]
+    headers = urls_plus_headers["headers"]
     with (
         ThreadPoolExecutor(max_workers=max_workers) as executor,
         tqdm(total=len(urls)) as pbar,
@@ -686,7 +703,7 @@ def fetch_data_from_urls_multithread(urls, cache_dir=None, max_workers=50):
         # url[1] is a CDS Odata query URL
         # url[0] is index of original gdf
         future_to_url = {
-            executor.submit(fetch_one_url, url[1], cpt, url[0], cache_dir): (
+            executor.submit(fetch_one_url, url[1], cpt, url[0], cache_dir, headers=headers): (
                 url[0],
                 url[1],
             )
@@ -725,8 +742,11 @@ def process_data(json_data):
     res = None
     if "value" in json_data:
         res = pd.DataFrame.from_dict(json_data["value"])
+        # get the code status of the query "@odata.count"
+        if len(res) > 0:
+            logging.debug("example of data fetched: %s", res.iloc[0].to_dict())
     else:
-        print("No data found.")
+        logging.debug("No data found.")
         pass
     return res
 
@@ -810,3 +830,108 @@ def sea_percent(collected_data, min_sea_percent=None):
     processing_time = end_time - start_time
     logging.info(f"sea_percent processing time:{processing_time}s")
     return collected_data
+
+
+def core_query_logged(email=None, password=None, type=None, startdate=None, enddate=None, unit=None, output=None, limit=1000):
+    """
+    Core function to query CDSE OData with authentication and keyed arguments.
+    this method in complementary to cdsodatacli.query.fetch_data() because here we use authentication
+    and we have keyed arguments instead of a gdf input.
+    It is used in the context of private data access where authentication is required during IOC periods.
+    Current limitations:
+         - no spatial filtering
+    
+    Args:
+        email (str): CDSE account email.
+        password (str): CDSE account password.
+        type (str): Product type (e.g. WV_SLC__1S_PRIVATE).
+        startdate (str): Start date (e.g. 2025-01-01T00:00:00).
+        enddate (str): End date (e.g. 2025-01-31T23:59:59).
+        unit (str): Satellite Unit Identifier (C or D).
+        output (str): Output JSON file path.
+        limit (int): Max records to return.
+    Returns:
+        None
+
+
+    """
+
+    # --- 1. Authentication ---
+    auth_url = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+    auth_data = {
+        "client_id": "cdse-public",
+        "username": email,
+        "password": password,
+        "grant_type": "password",
+    }
+
+    logging.info(f"[*] Authenticating for {email}...")
+    try:
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        response = requests.post(auth_url, data=auth_data, verify=False)
+        response.raise_for_status()
+        access_token = response.json().get("access_token")
+    except Exception as e:
+        logging.error(f"[-] Auth Error: {e}")
+        if "response" in locals():
+            logging.error(f"Details: {response.text}")
+        sys.exit(1)
+
+    # --- 2. OData Query Construction ---
+    odata_url = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products"
+
+    # Using the specific StringAttribute syntax required by CDSE OData
+    if enddate is None:
+        add_filter_startdate = [f"ContentDate/End ge {startdate}",]
+        add_filter_enddate = []
+    else:
+        add_filter_enddate = [f"ContentDate/End le {enddate}"]
+        add_filter_startdate = [f"ContentDate/Start ge {startdate}",]
+    filters = [
+        "Collection/Name eq 'SENTINEL-1'",
+        # f"ContentDate/Start ge {startdate}",
+        # f"ContentDate/End le {enddate}",
+        f"Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq '{type}')",
+        f"Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'platformSerialIdentifier' and att/OData.CSC.StringAttribute/Value eq '{unit}')",
+    ]
+    filters += add_filter_enddate
+    filters += add_filter_startdate
+
+    odata_filter = " and ".join(filters)
+
+    params = {
+        "$filter": odata_filter,
+        "$orderby": "ContentDate/Start asc",
+        "$top": limit,
+        "$count": "true",
+    }
+
+    headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
+
+    logging.info("[*] Querying CDSE OData...")
+    logging.debug(f"URL: {odata_url}")
+    logging.debug(f"Params: {params}")
+    # logging.debug(f"Headers: {headers}")
+    try:
+        # Requests automatically handles URL encoding of spaces, quotes, and symbols
+        search_res = requests.get(
+            odata_url, params=params, headers=headers, verify=False
+        )
+        search_res.raise_for_status()
+        data = search_res.json()
+
+        # --- 3. Save Results ---
+        with open(output, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
+        count = len(data.get("value", []))
+        logging.info(f"[+] Success! {count} products found.")
+        logging.info(f"[+] Results saved to: {output}")
+
+    except Exception as e:
+        logging.error(f"[-] Search Error: {e}")
+        if "search_res" in locals():
+            logging.error(f"Response: {search_res.text}")
+        sys.exit(1)
+
+    logging.info("finish")

@@ -5,6 +5,9 @@ import datetime
 import os
 import glob
 import random
+import urllib3
+import requests
+import sys
 
 MAX_VALIDITY_ACCESS_TOKEN = 600  # sec (defined by CDS API)
 
@@ -169,3 +172,25 @@ def remove_semaphore_token_file(token_dir, login, date_generation_access_token):
     ):
         os.remove(path_token)
         logging.debug("token semaphore file removed")
+
+def get_access_token(email, password):
+    """Helper to retrieve OIDC token."""
+    auth_url = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+    auth_data = {
+        "client_id": "cdse-public",
+        "username": email,
+        "password": password,
+        "grant_type": "password",
+    }
+    
+    try:
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        response = requests.post(auth_url, data=auth_data, verify=False)
+        response.raise_for_status()
+        token = response.json().get("access_token")
+        logging.debug(f"Obtained ACCESS_TOKEN for {email}")
+        logging.debug(f"Token: {token[0:10]}...{token[-10:]}")
+        return {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    except Exception as e:
+        logging.error(f"[-] Auth Error: {e}")
+        sys.exit(1)
