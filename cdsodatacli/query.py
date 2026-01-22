@@ -51,9 +51,17 @@ def query_client():
         help="SENTINEL-1 or SENTINEL-2 ...",
     )
     parser.add_argument("--startdate", required=True, help=" YYYYMMDDTHH:MM:SS")
-    parser.add_argument("--stopdate", required=True, help=" YYYYMMDDTHH:MM:SS")
+    parser.add_argument(
+        "--stopdate",
+        required=False,
+        help=" YYYYMMDDTHH:MM:SS [optional, default=now]",
+        default=datetime.datetime.utcnow().strftime("%Y%m%dT%H:%M:%S"),
+    )
     parser.add_argument("--mode", choices=["EW", "IW", "WV", "SM"])
-    parser.add_argument("--product", help="product type, could be GRD, SLC, RAW or  OCN or more specifically IW_GRDH_1S_PRIVATE")
+    parser.add_argument(
+        "--product",
+        help="product type, could be GRD, SLC, RAW or  OCN or more specifically IW_GRDH_1S_PRIVATE",
+    )
     parser.add_argument("--querymode", choices=["seq", "multi"])
     parser.add_argument(
         "--geometry",
@@ -62,8 +70,28 @@ def query_client():
         help=" [optional, default=None -> global query] example: POINT (-5.02 48.4) or  POLYGON ((-12 35, 15 35, 15 58, -12 58, -12 35))",
     )
     parser.add_argument("--id_query", required=False, default=None)
-    parser.add_argument("--email", required=False, default=None, help="CDSE account [optional]")
-    parser.add_argument("--password", required=False, default=None, help="CDSE password [optional]")
+    parser.add_argument(
+        "--email", required=False, default=None, help="CDSE account [optional]"
+    )
+    parser.add_argument(
+        "--password", required=False, default=None, help="CDSE password [optional]"
+    )
+    parser.add_argument(
+        "--top",
+        required=False,
+        default=None,
+        help="max rows per query [optional, default=None -> 1000 (max allowed by OData)]",
+    )
+    parser.add_argument(
+        "--output-safe-listing",
+        help="output txt file containing the SAFE listing resulting from the query",
+    )
+    parser.add_argument(
+        "--safename-pattern",
+        help="pattern to filter SAFE names (e.g. S1A_IW_GRDH_1SDH_ or S1A or T160214) [optinal, default: None -> no filtering]",
+        default=None,
+    )
+
     args = parser.parse_args()
     fmt = "%(asctime)s %(levelname)s %(filename)s(%(lineno)d) %(message)s"
     if args.verbose:
@@ -83,7 +111,7 @@ def query_client():
             "end_datetime": [sto],
             "geometry": [wkt.loads(args.geometry)],
             "collection": [args.collection],
-            "name": [None],
+            "name": [args.safename_pattern],
             "sensormode": [args.mode],
             "producttype": [args.product],
             "Attributes": [None],
@@ -99,14 +127,44 @@ def query_client():
         end_datetime=None,
         min_sea_percent=None,
         fig=None,
-        top=None,
+        top=args.top,
         cache_dir=None,
         mode=args.querymode,
         email=args.email,
         password=args.password,
     )
     logging.info("time to query : %1.1f sec", time.time() - t0)
+    if result_query is not None and result_query.empty is False:
+        logging.info("number of product found: %s", len(result_query))
+        if args.output_safe_listing is not None:
+            os.makedirs(
+                os.path.dirname(args.output_safe_listing), 0o0755, exist_ok=True
+            )
+            result_query["Name"].to_csv(
+                args.output_safe_listing, index=False, header=False
+            )
+            logging.info("SAFE listing saved to : %s", args.output_safe_listing)
+            os.chmod(args.output_safe_listing, 0o0644)
+    else:
+        if args.output_safe_listing is not None:
+            os.makedirs(
+                os.path.dirname(args.output_safe_listing), 0o0755, exist_ok=True
+            )
+            logging.info(
+                "no product found -> empty listing saved on disk: %s",
+                args.output_safe_listing,
+            )
+            touch(args.output_safe_listing)
+            os.chmod(args.output_safe_listing, 0o0644)
     return result_query
+
+
+def touch(fname, times=None):
+    fhandle = open(fname, "w")
+    try:
+        os.utime(fname, times)
+    finally:
+        fhandle.close()
 
 
 def fetch_data(
@@ -244,7 +302,7 @@ def fetch_data_single_query(
 
     # Convert all Multipolygon to Polygon and add geometry as new column
     # if 'Footprint' in collected_data:
-    if collected_data is not None:
+    if collected_data is not None and collected_data.empty is False:
         # Remove duplicates
         data_dedup = remove_duplicates(safes_ori=collected_data)
         logging.info(
