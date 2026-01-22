@@ -469,10 +469,22 @@ def normalize_gdf(
     )
     # if there is no geometry, set it to world polygon
     if "geometry" not in norm_gdf:
-        norm_gdf["geometry"] = [None]
+        norm_gdf["geometry"] = len(norm_gdf) * [worlpolygon]
     norm_gdf["geometry"].fillna(
         value=worlpolygon, inplace=True
     )  # to replace None by NaN
+    # since pandas==3.0.0 fillna does not replace None.
+    for ggi, gg in enumerate(norm_gdf["geometry"]):
+        if not isinstance(
+            gg,
+            (
+                shapely.geometry.Polygon,
+                shapely.geometry.MultiPolygon,
+                shapely.geometry.Point,
+            ),
+        ):
+            norm_gdf.at[ggi, "geometry"] = worlpolygon
+
     # convert naives dates to utc
     for date_col in norm_gdf.select_dtypes(include=["datetime64"]).columns:
         try:
@@ -485,6 +497,9 @@ def normalize_gdf(
 
     # check valid input geometry
     if not all(norm_gdf.is_valid):
+        # get details about invalid geometries
+        invalid_indices = norm_gdf.index[~norm_gdf.is_valid].tolist()
+        logging.error(f"Invalid geometries at indices: {invalid_indices}")
         raise ValueError("Invalid geometries found. Check them with gdf.is_valid")
 
     # if date in norm_gdf:
