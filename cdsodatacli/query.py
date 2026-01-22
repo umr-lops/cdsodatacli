@@ -10,7 +10,6 @@ from shapely import wkt
 import geopandas as gpd
 import shapely
 from shapely.ops import unary_union
-import pytz
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
@@ -422,6 +421,7 @@ def normalize_gdf(
     Return:
         (GeoDataFrame): normalized gdf and sliced in time if timedelta_slice is not None
     """
+    gdf_norm_sliced = None
     # add the input index as id_original_query if id_query is None
     gdf["id_original_query"] = np.where(
         gdf["id_query"].isnull(), gdf.index, gdf["id_query"]
@@ -445,12 +445,13 @@ def normalize_gdf(
                 % list(gdf.index[gdf.index.duplicated(keep=False)].unique())
             )
         if len(gdf) == 0:
-            return []
+            logging.error("gdf is empty")
+            return gdf_norm_sliced
         norm_gdf = gdf.copy()
         norm_gdf.set_geometry("geometry", inplace=True)
     else:
         logging.error("gdf is None")
-        return None
+        return gdf_norm_sliced
         # norm_gdf = gpd.GeoDataFrame(
         #     {
         #         "start_datetime": start_datetime,
@@ -467,6 +468,8 @@ def normalize_gdf(
         "POLYGON((-180 -90,180 -90,180 90,-180 90,-180 -90))"
     )
     # if there is no geometry, set it to world polygon
+    if "geometry" not in norm_gdf:
+        norm_gdf["geometry"] = [None]
     norm_gdf["geometry"].fillna(
         value=worlpolygon, inplace=True
     )  # to replace None by NaN
@@ -499,7 +502,7 @@ def normalize_gdf(
 
     end_time = time.time()
     processing_time = end_time - start_time
-    logging.info(f"normalize_gdf processing time:{processing_time}s")
+    logging.info(f"processing time to normalize the GeoDataFrame :{processing_time}s")
     gdf_norm_sliced = apply_slicing_time_to_gdf(
         gdf=norm_gdf, timedelta_slice=timedelta_slice
     )
