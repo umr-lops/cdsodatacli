@@ -7,7 +7,6 @@ import glob
 import random
 import urllib3
 import requests
-import sys
 
 MAX_VALIDITY_ACCESS_TOKEN = 600  # sec (defined by CDS API)
 
@@ -184,14 +183,18 @@ def get_access_token(email, password):
         "grant_type": "password",
     }
 
-    try:
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        response = requests.post(auth_url, data=auth_data, verify=False)
-        response.raise_for_status()
-        token = response.json().get("access_token")
-        logging.debug(f"Obtained ACCESS_TOKEN for {email}")
-        logging.debug(f"Token: {token[0:10]}...{token[-10:]}")
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    # response = requests.post(auth_url, data=auth_data, verify=False)
+    response = requests.post(auth_url, data=auth_data, verify=False, timeout=10)
+    response.raise_for_status()
+    token = response.json().get("access_token")
+    logging.debug(f"Obtained ACCESS_TOKEN for {email}")
+    # check that token was obtained
+    if not token:
+        raise ValueError("No access token found in the response.")
+    else:
+        if len(token) > 20:
+            logging.debug("Token: %s...%s", token[:10], token[-10:])
+        else:
+            logging.debug("Token: %s", token)
         return {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-    except Exception as e:
-        logging.error(f"[-] Auth Error: {e}")
-        sys.exit(1)
