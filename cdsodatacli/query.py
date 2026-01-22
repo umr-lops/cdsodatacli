@@ -27,6 +27,11 @@ from cdsodatacli.fetch_access_token import get_access_token
 DEFAULT_TOP_ROWS_PER_QUERY = 1000
 
 
+def time_based_hash(length=7):
+    now_ms = str(int(time.time() * 1000))  # milliseconds
+    return hashlib.sha256(now_ms.encode()).hexdigest()[:length]
+
+
 def query_client():
     """
 
@@ -45,28 +50,48 @@ def query_client():
         "--collection",
         required=False,
         default="SENTINEL-1",
-        help="SENTINEL-1 or SENTINEL-2 ...",
+        help="SENTINEL-1 or SENTINEL-2 ... [optional, default=SENTINEL-1]",
     )
-    parser.add_argument("--startdate", required=True, help=" YYYYMMDDTHH:MM:SS")
+    parser.add_argument(
+        "--startdate",
+        required=True,
+        help=" start date of sensor acquisition YYYYMMDDTHH:MM:SS",
+    )
     parser.add_argument(
         "--stopdate",
         required=False,
-        help=" YYYYMMDDTHH:MM:SS [optional, default=now]",
+        help=" stop date of sensor acquisition YYYYMMDDTHH:MM:SS [optional, default=now]",
         default=datetime.datetime.utcnow().strftime("%Y%m%dT%H:%M:%S"),
     )
-    parser.add_argument("--mode", choices=["EW", "IW", "WV", "SM"])
+    parser.add_argument(
+        "--mode",
+        choices=["EW", "IW", "WV", "SM"],
+        help="sensor mode, could be EW, IW, WV or SM [optional]",
+        default=None,
+    )
     parser.add_argument(
         "--product",
-        help="product type, could be GRD, SLC, RAW or  OCN or more specifically IW_GRDH_1S_PRIVATE",
+        default=None,
+        help="product type, could be GRD, SLC, RAW or  OCN or more specifically IW_GRDH_1S_PRIVATE [optional default=None -> no filtering]",
     )
-    parser.add_argument("--querymode", choices=["seq", "multi"])
+    parser.add_argument(
+        "--querymode",
+        choices=["seq", "multi"],
+        help="query mode: sequential or multithreaded [optional, default=seq]",
+        default="seq",
+    )
     parser.add_argument(
         "--geometry",
         required=False,
         default=None,
         help=" [optional, default=None -> global query] example: POINT (-5.02 48.4) or  POLYGON ((-12 35, 15 35, 15 58, -12 58, -12 35))",
     )
-    parser.add_argument("--id_query", required=False, default=None)
+    parser.add_argument(
+        "--id_query",
+        required=False,
+        default=None,
+        help="unique identifier of the query to track it in the output results [optional, default is hash]",
+    )
     parser.add_argument(
         "--email", required=False, default=None, help="CDSE account [optional]"
     )
@@ -81,12 +106,25 @@ def query_client():
     )
     parser.add_argument(
         "--output-safe-listing",
-        help="output txt file containing the SAFE listing resulting from the query",
+        help="output txt file containing the SAFE listing resulting from the query [optional]",
+        required=False,
+        default=None,
     )
     parser.add_argument(
         "--safename-pattern",
         help="pattern to filter SAFE names (e.g. S1A_IW_GRDH_1SDH_ or S1A or T160214) [optinal, default: None -> no filtering]",
         default=None,
+    )
+    parser.add_argument(
+        "--cache-dir",
+        help="path to cache directory to store and re-use previous queries [optional]",
+        default=None,
+    )
+    parser.add_argument(
+        "--minimum-sea-percent",
+        type=float,
+        default=None,
+        help="minimum sea percent to filter out products based on their sea percent coverage [optional, default=None -> no filtering]",
     )
 
     args = parser.parse_args()
@@ -102,6 +140,7 @@ def query_client():
     t0 = time.time()
     sta = datetime.datetime.strptime(args.startdate, "%Y%m%dT%H:%M:%S")
     sto = datetime.datetime.strptime(args.stopdate, "%Y%m%dT%H:%M:%S")
+    id_query = time_based_hash() if args.id_query is None else args.id_query
     gdf = gpd.GeoDataFrame(
         {
             "start_datetime": [sta],
@@ -112,21 +151,16 @@ def query_client():
             "sensormode": [args.mode],
             "producttype": [args.product],
             "Attributes": [None],
-            "id_query": [args.id_query],
+            "id_query": [id_query],
         }
     )
     result_query = fetch_data(
         gdf,
-        date=None,
-        dtime=None,
         timedelta_slice=datetime.timedelta(days=14),
-        start_datetime=None,
-        end_datetime=None,
         min_sea_percent=None,
-        fig=None,
         top=args.top,
-        cache_dir=None,
-        mode=args.querymode,
+        cache_dir=args.cache_dir,
+        querymode=args.querymode,
         email=args.email,
         password=args.password,
     )
