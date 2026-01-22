@@ -355,10 +355,11 @@ def apply_slicing_time_to_gdf(gdf, timedelta_slice=None):
             (gdf["end_datetime"] - gdf["start_datetime"]) > timedelta_slice
         ]
         # TO make sure that date does not contain future date
-        if maxdate > datetime.datetime.utcnow().replace(tzinfo=pytz.UTC):
-            maxdate = datetime.datetime.utcnow().replace(
-                tzinfo=pytz.UTC
-            ) + datetime.timedelta(days=1)
+        if maxdate > datetime.datetime.now(datetime.UTC):
+            maxdate = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=1)
+            # maxdate = datetime.datetime.utcnow().replace(
+            #     tzinfo=pytz.UTC
+            # ) + datetime.timedelta(days=1)
 
         if (mindate == mindate) and (maxdate == maxdate):  # non nan
             gdf_slices = []
