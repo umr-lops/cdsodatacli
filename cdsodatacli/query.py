@@ -464,14 +464,14 @@ def normalize_gdf(
         # )
         # # no slicing
         # timedelta_slice = None
-    worlpolygon = shapely.wkt.loads(
+    worldpolygon = shapely.wkt.loads(
         "POLYGON((-180 -90,180 -90,180 90,-180 90,-180 -90))"
     )
     # if there is no geometry, set it to world polygon
     if "geometry" not in norm_gdf:
-        norm_gdf["geometry"] = len(norm_gdf) * [worlpolygon]
-    norm_gdf["geometry"].fillna(
-        value=worlpolygon, inplace=True
+        norm_gdf["geometry"] = len(norm_gdf) * [worldpolygon]
+    norm_gdf["geometry"] = norm_gdf["geometry"].fillna(
+        value=worldpolygon, inplace=True
     )  # to replace None by NaN
     # since pandas==3.0.0 fillna does not replace None.
     for ggi, gg in enumerate(norm_gdf["geometry"]):
@@ -483,7 +483,7 @@ def normalize_gdf(
                 shapely.geometry.Point,
             ),
         ):
-            norm_gdf.at[ggi, "geometry"] = worlpolygon
+            norm_gdf.at[ggi, "geometry"] = worldpolygon
 
     # convert naives dates to utc
     for date_col in norm_gdf.select_dtypes(include=["datetime64"]).columns:
