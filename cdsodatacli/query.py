@@ -6,9 +6,6 @@ import hashlib
 import requests
 import pandas as pd
 import argparse
-from shapely.geometry import (
-    Polygon,
-)
 from shapely import wkt
 import geopandas as gpd
 import shapely
@@ -169,16 +166,11 @@ def touch(fname, times=None):
 
 def fetch_data(
     gdf,
-    date=None,
-    dtime=None,
     timedelta_slice=None,
-    start_datetime=None,
-    end_datetime=None,
     min_sea_percent=None,
-    fig=None,
     top=None,
     cache_dir=None,
-    mode="seq",
+    querymode="seq",
     email=None,
     password=None,
 ):
@@ -188,18 +180,22 @@ def fetch_data(
 
     Args:
         gdf (GeoDataFrame): containing the geospatial data for the query.
-        geometry (list of tuples): representing the geometry.
-        collection (String): representing the collection information for filtering the data.
-        name (String): representing the name information for filtering the data.
-        sensormode (String): representing the mode of the sensor for filtering the data.
-        producttype (String): representing the type of product for filtering the data.
-        start_datetime (String): representing the starting date for the query.
-        end_datetime (String): representing the ending date for the query.
-        publication_start (String): representing the starting publication date for the query.
-        publication_end (String): representing the ending publication date for the query.
-        top (String): representing the ending publication date for the query.
-        mode (String): seq ( Sequential) or multi (multithread)
+            list of the mandatory columns:
+                - 'start_datetime' : datetime representing the starting date for the query.
+                - 'end_datetime' : datetime representing the ending date for the query.
+                - 'id_query' : unique identifier of the query (to split the gdf in subsets)
+            list of the optional columns:
+                - 'name' : pattern of the SAFE name to filter the query
+                - 'collection' : e.g. SENTINEL-1, SENTINEL-2, ...
+                - 'sensormode' : e.g. EW, IW, WV, ...
+                - 'producttype' : e.g. GRD, SLC, RAW, OCN, ...
+                - 'geometry' : shapely geometry (Polygon, MultiPolygon, Point, ..) representing the area of interest for the query.
+                - 'Attributes' : additional attributes to filter the query
         timedelta_slice (datetime.timedelta) : optional param to split the queries wrt time in order to avoid missing product because of the 1000 product max returned by Odata
+        min_sea_percent (Float): minimum sea percent within product footprint to filter out the data that are below the thresold [None-> no filter based on sea percent].
+        top (String): representing the ending publication date for the query.
+        cache_dir (String): path to cache directory to store/re-use intermediate query results
+        querymode (String): how the queries are send/received to Odata, possibles choices: 'seq' (Sequential) or 'multi' (multithread)
         email (str): CDSE account [optional to be used for PRIVATE data that need authentication]
         password (str): password CDSE account [optional to be used for PRIVATE data that need authentication]
     Return:
@@ -215,16 +211,11 @@ def fetch_data(
         )
         data_subset = fetch_data_single_query(
             gdf=gdf_subset,
-            date=date,
-            dtime=dtime,
             timedelta_slice=timedelta_slice,
-            start_datetime=start_datetime,
-            end_datetime=end_datetime,
             min_sea_percent=min_sea_percent,
-            fig=fig,
             top=top,
             cache_dir=cache_dir,
-            mode=mode,
+            querymode=querymode,
             email=email,
             password=password,
         )
@@ -237,15 +228,10 @@ def fetch_data(
 
 def fetch_data_single_query(
     gdf,
-    date=None,
-    dtime=None,
-    start_datetime=None,
-    end_datetime=None,
     min_sea_percent=None,
-    fig=None,
     top=None,
     cache_dir=None,
-    mode="seq",
+    querymode="seq",
     timedelta_slice=None,
     email=None,
     password=None,
@@ -254,16 +240,11 @@ def fetch_data_single_query(
     Fetches data based on provided parameters.
 
     Args:
-       gdf (GeoDataFrame): containing the geospatial data for the query.
-       date (String): representing the date for the query.
-       dtime (String): representing the time for the query.
-       start_datetime (String): representing the starting date for the query.
-       end_datetime (String): representing the ending date for the query.
+       gdf (GeoDataFrame): containing the geospatial data for the query, it must contain 'start_datetime', 'end_datetime' 'id_query' columns.
        min_sea_percent (Float): minimum sea percent to filter the data [None-> no filter based on sea percent].
-       fig (Function): function to plot the data [can be None].
        top (String): representing the ending publication date for the query.
        cache_dir (String): path to cache directory to store intermediate results
-       mode (String): seq ( Sequential) or multi (multithread)
+       querymode (String): how the queries are send/received to Odata, possibles choices: 'seq' (Sequential) or 'multi' (multithread)
        timedelta_slice (datetime.timedelta) : optional param to split the queries wrt time in order to avoid missing product because of the 1000 product max returned by Odata
        email (str): CDSE account [optional to be used for PRIVATE data that need authentication]
        password (str): password CDSE account [optional to be used for PRIVATE data that need authentication]
@@ -273,10 +254,10 @@ def fetch_data_single_query(
     if gdf is not None and isinstance(gdf, gpd.GeoDataFrame):
         gdf_norm = normalize_gdf(
             gdf=gdf,
-            start_datetime=start_datetime,
-            end_datetime=end_datetime,
-            date=date,
-            dtime=dtime,
+            # start_datetime=start_datetime,
+            # end_datetime=end_datetime,
+            # date=date,
+            # dtime=dtime,
             timedelta_slice=timedelta_slice,
         )
         # geopd_norm.sort_index(ascending=False)
@@ -287,11 +268,11 @@ def fetch_data_single_query(
         )
     else:
         urls_plus_headers = {"urls": [], "headers": None}
-    if mode == "seq":
+    if querymode == "seq":
         collected_data = fetch_data_from_urls_sequential(
             urls_plus_headers=urls_plus_headers, cache_dir=cache_dir
         )
-    elif mode == "multi":
+    elif querymode == "multi":
         maxworker = 10
         logging.info("maximum // queries : %s", maxworker)
         collected_data = fetch_data_from_urls_multithread(
@@ -312,8 +293,6 @@ def fetch_data_single_query(
         logging.info(
             "number of product after removing multipolygon: %s", len(full_data["Name"])
         )
-        if fig is not None:
-            fig(collected_data=full_data)
         if min_sea_percent is not None:
             full_data = sea_percent(
                 collected_data=full_data, min_sea_percent=min_sea_percent
@@ -327,66 +306,86 @@ def fetch_data_single_query(
     return full_data
 
 
-def gdf_create(
-    start_datetime=None,
-    end_datetime=None,
-    name=None,
-    collection=None,
-    sensormode=None,
-    producttype=None,
-    geometry=None,
-    publication_start=None,
-    publication_end=None,
-):
-    data_in = {
-        "start_datetime": [None],
-        "end_datetime": [None],
-        "name": [None],
-        "collection": [None],
-        "sensormode": [None],
-        "producttype": [None],
-        "geometry": [None],
-        "publication_start": [None],
-        "publication_end": [None],
-    }
+def apply_slicing_time_to_gdf(gdf, timedelta_slice=None):
+    """
+    step apply normalization of the gdf to slice it in time based on the timedelta_slice param
+    """
+    gdf_slices = gdf
 
-    gdf = gpd.GeoDataFrame(data_in)
+    # slice
+    if timedelta_slice is not None:
+        mindate = gdf["start_datetime"].min()
+        maxdate = gdf["end_datetime"].max()
+        # those index will need to be time expanded
+        idx_to_expand = gdf.index[
+            (gdf["end_datetime"] - gdf["start_datetime"]) > timedelta_slice
+        ]
+        # TO make sure that date does not contain future date
+        if maxdate > datetime.datetime.utcnow().replace(tzinfo=pytz.UTC):
+            maxdate = datetime.datetime.utcnow().replace(
+                tzinfo=pytz.UTC
+            ) + datetime.timedelta(days=1)
 
-    if geometry is not None:
-        gdf["geometry"] = shapely.wkt.loads(geometry)
-    if collection is not None:
-        gdf["collection"] = collection
-    if name is not None:
-        gdf["name"] = name
-    if sensormode is not None:
-        gdf["sensormode"] = sensormode
-    if producttype is not None:
-        gdf["producttype"] = producttype
-    if start_datetime is not None:
-        gdf["start_datetime"] = datetime.datetime.strptime(
-            start_datetime, "%Y-%m-%d %H:%M:%S"
-        )
-    if end_datetime is not None:
-        gdf["end_datetime"] = datetime.datetime.strptime(
-            end_datetime, "%Y-%m-%d %H:%M:%S"
-        )
-    if publication_start is not None:
-        gdf["publication_start"] = publication_start
-    if publication_end is not None:
-        gdf["publication_end"] = publication_end
-    return gdf
+        if (mindate == mindate) and (maxdate == maxdate):  # non nan
+            gdf_slices = []
+            slice_begin = mindate
+            slice_end = slice_begin
+            islice = 0
+            while slice_end < maxdate:
+                islice += 1
+                slice_end = slice_begin + timedelta_slice
+                # this is time grouping
+                gdf_slice = gdf[
+                    (gdf["start_datetime"] >= slice_begin)
+                    & (gdf["end_datetime"] <= slice_end)
+                ]
+                # check if some slices needs to be expanded
+                # index of gdf_slice that where not grouped
+                # not_grouped_index = pd.Index(set(idx_to_expand) - set(gdf_slice.index))
+                for to_expand in idx_to_expand:
+                    # missings index in gdf_slice.
+                    # check if there is time overlap.
+                    latest_start = max(gdf.loc[to_expand].start_datetime, slice_begin)
+                    earliest_end = min(gdf.loc[to_expand].end_datetime, slice_end)
+                    overlap = earliest_end - latest_start
+                    if overlap >= datetime.timedelta(0):
+                        gdf_slice = pd.concat(
+                            [gdf_slice, gpd.GeoDataFrame(gdf.loc[to_expand]).T]
+                        )
+                        gdf_slice.loc[to_expand, "start_datetime"] = latest_start
+                        gdf_slice.loc[to_expand, "end_datetime"] = earliest_end
+                if not gdf_slice.empty:
+                    gdf_slices.append(gdf_slice)
+                slice_begin = slice_end
+    gdf_norm = gpd.GeoDataFrame(
+        pd.concat(gdf_slices, ignore_index=False), crs=gdf_slices[0].crs
+    )
+    return gdf_norm
 
 
 def normalize_gdf(
     gdf,
-    start_datetime=None,
-    end_datetime=None,
-    date=None,
-    dtime=None,
     timedelta_slice=None,
 ):
-    """return a normalized gdf list
+    """
+    return a normalized gdf list
     start/stop date name will be 'start_datetime' and 'end_datetime'
+
+    Args:
+        gdf (GeoDataFrame): containing the geospatial data for the query.
+            list of the mandatory columns:
+                - 'start_datetime' or 'startdate' : datetime representing the starting date for the query.
+                - 'end_datetime' or 'stopdate' : datetime representing the ending date for the query.
+                - 'id_query' : unique identifier of the query (to split the gdf in subsets)
+            list of the optional columns:
+                - 'name' or 'Name': pattern of the SAFE name to filter the query
+                - 'collection' : e.g. SENTINEL-1, SENTINEL-2, ...
+                - 'sensormode' : e.g. EW, IW, WV, ...
+                - 'producttype' : e.g. GRD, SLC, RAW, OCN, ...
+                - 'geometry' : shapely geometry (Polygon, MultiPolygon, Point, ..) representing the area of interest for the query.
+                - 'Attributes' : additional attributes to filter the query
+    Return:
+        (GeoDataFrame): normalized gdf and sliced in time if timedelta_slice is not None
     """
     # add the input index as id_original_query if id_query is None
     gdf["id_original_query"] = np.where(
@@ -415,21 +414,24 @@ def normalize_gdf(
         norm_gdf = gdf.copy()
         norm_gdf.set_geometry("geometry", inplace=True)
     else:
-        norm_gdf = gpd.GeoDataFrame(
-            {
-                "start_datetime": start_datetime,
-                "end_datetime": end_datetime,
-                "geometry": Polygon(),
-            },
-            geometry="geometry",
-            index=[0],
-            crs="EPSG:4326",
-        )
-        # no slicing
-        timedelta_slice = None
+        logging.error("gdf is None")
+        return None
+        # norm_gdf = gpd.GeoDataFrame(
+        #     {
+        #         "start_datetime": start_datetime,
+        #         "end_datetime": end_datetime,
+        #         "geometry": Polygon(),
+        #     },
+        #     geometry="geometry",
+        #     index=[0],
+        #     crs="EPSG:4326",
+        # )
+        # # no slicing
+        # timedelta_slice = None
     worlpolygon = shapely.wkt.loads(
         "POLYGON((-180 -90,180 -90,180 90,-180 90,-180 -90))"
     )
+    # if there is no geometry, set it to world polygon
     norm_gdf["geometry"].fillna(
         value=worlpolygon, inplace=True
     )  # to replace None by NaN
@@ -447,75 +449,26 @@ def normalize_gdf(
     if not all(norm_gdf.is_valid):
         raise ValueError("Invalid geometries found. Check them with gdf.is_valid")
 
-    if date in norm_gdf:
-        if (start_datetime not in norm_gdf) and (end_datetime not in norm_gdf):
-            norm_gdf["start_datetime"] = norm_gdf[date] - dtime
-            norm_gdf["end_datetime"] = norm_gdf[date] + dtime
-        else:
-            raise ValueError("date keyword conflict with startdate/stopdate")
+    # if date in norm_gdf:
+    #     if (start_datetime not in norm_gdf) and (end_datetime not in norm_gdf):
+    #         norm_gdf["start_datetime"] = norm_gdf[date] - dtime
+    #         norm_gdf["end_datetime"] = norm_gdf[date] + dtime
+    #     else:
+    #         raise ValueError("date keyword conflict with startdate/stopdate")
 
-    if (start_datetime in norm_gdf) and (start_datetime != "start_datetime"):
-        norm_gdf["start_datetime"] = norm_gdf[start_datetime]
+    # if (start_datetime in norm_gdf) and (start_datetime != "start_datetime"):
+    #     norm_gdf["start_datetime"] = norm_gdf[start_datetime]
 
-    if (end_datetime in norm_gdf) and (end_datetime != "end_datetime"):
-        norm_gdf["end_datetime"] = norm_gdf[end_datetime]
+    # if (end_datetime in norm_gdf) and (end_datetime != "end_datetime"):
+    #     norm_gdf["end_datetime"] = norm_gdf[end_datetime]
 
-    gdf_slices = norm_gdf
-
-    # slice
-    if timedelta_slice is not None:
-        mindate = norm_gdf["start_datetime"].min()
-        maxdate = norm_gdf["end_datetime"].max()
-        # those index will need to be time expanded
-        idx_to_expand = norm_gdf.index[
-            (norm_gdf["end_datetime"] - norm_gdf["start_datetime"]) > timedelta_slice
-        ]
-        # TO make sure that date does not contain future date
-        if maxdate > datetime.datetime.utcnow().replace(tzinfo=pytz.UTC):
-            maxdate = datetime.datetime.utcnow().replace(
-                tzinfo=pytz.UTC
-            ) + datetime.timedelta(days=1)
-
-        if (mindate == mindate) and (maxdate == maxdate):  # non nan
-            gdf_slices = []
-            slice_begin = mindate
-            slice_end = slice_begin
-            islice = 0
-            while slice_end < maxdate:
-                islice += 1
-                slice_end = slice_begin + timedelta_slice
-                # this is time grouping
-                gdf_slice = norm_gdf[
-                    (norm_gdf["start_datetime"] >= slice_begin)
-                    & (norm_gdf["end_datetime"] <= slice_end)
-                ]
-                # check if some slices needs to be expanded
-                # index of gdf_slice that where not grouped
-                # not_grouped_index = pd.Index(set(idx_to_expand) - set(gdf_slice.index))
-                for to_expand in idx_to_expand:
-                    # missings index in gdf_slice.
-                    # check if there is time overlap.
-                    latest_start = max(
-                        norm_gdf.loc[to_expand].start_datetime, slice_begin
-                    )
-                    earliest_end = min(norm_gdf.loc[to_expand].end_datetime, slice_end)
-                    overlap = earliest_end - latest_start
-                    if overlap >= datetime.timedelta(0):
-                        gdf_slice = pd.concat(
-                            [gdf_slice, gpd.GeoDataFrame(norm_gdf.loc[to_expand]).T]
-                        )
-                        gdf_slice.loc[to_expand, "start_datetime"] = latest_start
-                        gdf_slice.loc[to_expand, "end_datetime"] = earliest_end
-                if not gdf_slice.empty:
-                    gdf_slices.append(gdf_slice)
-                slice_begin = slice_end
-    gdf_norm = gpd.GeoDataFrame(
-        pd.concat(gdf_slices, ignore_index=False), crs=gdf_slices[0].crs
-    )
     end_time = time.time()
     processing_time = end_time - start_time
     logging.info(f"normalize_gdf processing time:{processing_time}s")
-    return gdf_norm
+    gdf_norm_sliced = apply_slicing_time_to_gdf(
+        gdf=norm_gdf, timedelta_slice=timedelta_slice
+    )
+    return gdf_norm_sliced
 
 
 def create_urls(gdf, top=None, email=None, password=None):
