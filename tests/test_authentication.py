@@ -15,6 +15,7 @@ def has_live_creds():
     default_login = conf.get("default_login", {})
     return bool(default_login)
 
+
 # # test with live credentials: removed because CI is failing and it is not a good practice to have live tests in unit tests
 # @pytest.mark.skipif(not has_live_creds(), reason="No CDS credentials available for live auth test")
 # def test_get_access_token_using_urllib3_and_requests():
@@ -32,8 +33,6 @@ def has_live_creds():
 #     assert headers["Accept"] == "application/json"
 
 
-
-
 # mock a 401 Unauthorized response
 def test_get_access_token_raises_on_401(monkeypatch):
     # make requests.post raise an HTTPError or return 401 response
@@ -46,11 +45,13 @@ def test_get_access_token_raises_on_401(monkeypatch):
     with pytest.raises(requests.exceptions.HTTPError):
         get_access_token("baduser@example.com", "badpassword")
 
+
 # mock a successful response
 def test_get_access_token_success(monkeypatch):
     class DummyRespOK:
         def raise_for_status(self):  # no-op
             return None
+
         def json(self):
             return {"access_token": "TESTTOKEN1234567890"}
 
