@@ -42,7 +42,7 @@ def query_client():
         for handler in root.handlers:
             root.removeHandler(handler)
 
-    parser = argparse.ArgumentParser(description="query-CDSE-OData")
+    parser = argparse.ArgumentParser(description="MetaData query to CDSE-OData API")
     parser.add_argument("--verbose", action="store_true", default=False)
     parser.add_argument(
         "--collection",
@@ -53,7 +53,7 @@ def query_client():
     parser.add_argument("--startdate", required=True, help=" YYYYMMDDTHH:MM:SS")
     parser.add_argument("--stopdate", required=True, help=" YYYYMMDDTHH:MM:SS")
     parser.add_argument("--mode", choices=["EW", "IW", "WV", "SM"])
-    parser.add_argument("--product", choices=["GRD", "SLC", "RAW", "OCN"])
+    parser.add_argument("--product", help="product type, could be GRD, SLC, RAW or  OCN or more specifically IW_GRDH_1S_PRIVATE")
     parser.add_argument("--querymode", choices=["seq", "multi"])
     parser.add_argument(
         "--geometry",
@@ -62,6 +62,8 @@ def query_client():
         help=" [optional, default=None -> global query] example: POINT (-5.02 48.4) or  POLYGON ((-12 35, 15 35, 15 58, -12 58, -12 35))",
     )
     parser.add_argument("--id_query", required=False, default=None)
+    parser.add_argument("--email", required=False, default=None, help="CDSE account [optional]")
+    parser.add_argument("--password", required=False, default=None, help="CDSE password [optional]")
     args = parser.parse_args()
     fmt = "%(asctime)s %(levelname)s %(filename)s(%(lineno)d) %(message)s"
     if args.verbose:
@@ -100,6 +102,8 @@ def query_client():
         top=None,
         cache_dir=None,
         mode=args.querymode,
+        email=args.email,
+        password=args.password,
     )
     logging.info("time to query : %1.1f sec", time.time() - t0)
     return result_query
@@ -117,25 +121,29 @@ def fetch_data(
     top=None,
     cache_dir=None,
     mode="seq",
+    email=None,
+    password=None,
 ):
     """
     Fetches meta-data of CDSE products based on provided parameters.
     GeoDataFrame is splitted based on the id_query column to keep track of each pair query/products
 
     Args:
-       gdf (GeoDataFrame): containing the geospatial data for the query.
-       geometry (list of tuples): representing the geometry.
-       collection (String): representing the collection information for filtering the data.
-       name (String): representing the name information for filtering the data.
-       sensormode (String): representing the mode of the sensor for filtering the data.
-       producttype (String): representing the type of product for filtering the data.
-       start_datetime (String): representing the starting date for the query.
-       end_datetime (String): representing the ending date for the query.
-       publication_start (String): representing the starting publication date for the query.
-       publication_end (String): representing the ending publication date for the query.
-       top (String): representing the ending publication date for the query.
-       mode (String): seq ( Sequential) or multi (multithread)
-       timedelta_slice (datetime.timedelta) : optional param to split the queries wrt time in order to avoid missing product because of the 1000 product max returned by Odata
+        gdf (GeoDataFrame): containing the geospatial data for the query.
+        geometry (list of tuples): representing the geometry.
+        collection (String): representing the collection information for filtering the data.
+        name (String): representing the name information for filtering the data.
+        sensormode (String): representing the mode of the sensor for filtering the data.
+        producttype (String): representing the type of product for filtering the data.
+        start_datetime (String): representing the starting date for the query.
+        end_datetime (String): representing the ending date for the query.
+        publication_start (String): representing the starting publication date for the query.
+        publication_end (String): representing the ending publication date for the query.
+        top (String): representing the ending publication date for the query.
+        mode (String): seq ( Sequential) or multi (multithread)
+        timedelta_slice (datetime.timedelta) : optional param to split the queries wrt time in order to avoid missing product because of the 1000 product max returned by Odata
+        email (str): CDSE account [optional to be used for PRIVATE data that need authentication]
+        password (str): password CDSE account [optional to be used for PRIVATE data that need authentication]
     Return:
         (pd.DataFame): data containing the fetched results.
     """
@@ -159,6 +167,8 @@ def fetch_data(
             top=top,
             cache_dir=cache_dir,
             mode=mode,
+            email=email,
+            password=password,
         )
         if collected_data is None:
             collected_data = data_subset
