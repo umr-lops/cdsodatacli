@@ -29,6 +29,7 @@ dependencies = [
   'pyyaml',
   'cartopy',
   "python-dotenv",
+  "pytz",
 ]
 
 
