@@ -6,14 +6,10 @@ import hashlib
 import requests
 import pandas as pd
 import argparse
-from shapely.geometry import (
-    Polygon,
-)
 from shapely import wkt
 import geopandas as gpd
 import shapely
 from shapely.ops import unary_union
-import pytz
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
@@ -22,8 +18,17 @@ import traceback
 import warnings
 from geodatasets import get_path
 import numpy as np
+import urllib3
+import sys
+from cdsodatacli.fetch_access_token import get_access_token
+
 
 DEFAULT_TOP_ROWS_PER_QUERY = 1000
+
+
+def time_based_hash(length=7):
+    now_ms = str(int(time.time() * 1000))  # milliseconds
+    return hashlib.sha256(now_ms.encode()).hexdigest()[:length]
 
 
 def query_client():
@@ -38,26 +43,89 @@ def query_client():
         for handler in root.handlers:
             root.removeHandler(handler)
 
-    parser = argparse.ArgumentParser(description="query-CDSE-OData")
+    parser = argparse.ArgumentParser(description="MetaData query to CDSE-OData API")
     parser.add_argument("--verbose", action="store_true", default=False)
     parser.add_argument(
         "--collection",
         required=False,
         default="SENTINEL-1",
-        help="SENTINEL-1 or SENTINEL-2 ...",
+        help="SENTINEL-1 or SENTINEL-2 ... [optional, default=SENTINEL-1]",
     )
-    parser.add_argument("--startdate", required=True, help=" YYYYMMDDTHH:MM:SS")
-    parser.add_argument("--stopdate", required=True, help=" YYYYMMDDTHH:MM:SS")
-    parser.add_argument("--mode", choices=["EW", "IW", "WV", "SM"])
-    parser.add_argument("--product", choices=["GRD", "SLC", "RAW", "OCN"])
-    parser.add_argument("--querymode", choices=["seq", "multi"])
+    parser.add_argument(
+        "--startdate",
+        required=True,
+        help=" start date of sensor acquisition YYYYMMDDTHH:MM:SS",
+    )
+    parser.add_argument(
+        "--stopdate",
+        required=False,
+        help=" stop date of sensor acquisition YYYYMMDDTHH:MM:SS [optional, default=now]",
+        default=datetime.datetime.utcnow().strftime("%Y%m%dT%H:%M:%S"),
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["EW", "IW", "WV", "SM"],
+        help="sensor mode, could be EW, IW, WV or SM [optional]",
+        default=None,
+    )
+    parser.add_argument(
+        "--product",
+        default=None,
+        help="product type, could be GRD, SLC, RAW or  OCN or more specifically IW_GRDH_1S_PRIVATE [optional default=None -> no filtering]",
+    )
+    parser.add_argument(
+        "--querymode",
+        choices=["seq", "multi"],
+        help="query mode: sequential or multithreaded [optional, default=seq]",
+        default="seq",
+    )
     parser.add_argument(
         "--geometry",
         required=False,
         default=None,
         help=" [optional, default=None -> global query] example: POINT (-5.02 48.4) or  POLYGON ((-12 35, 15 35, 15 58, -12 58, -12 35))",
     )
-    parser.add_argument("--id_query", required=False, default=None)
+    parser.add_argument(
+        "--id_query",
+        required=False,
+        default=None,
+        help="unique identifier of the query to track it in the output results [optional, default is hash]",
+    )
+    parser.add_argument(
+        "--email", required=False, default=None, help="CDSE account [optional]"
+    )
+    parser.add_argument(
+        "--password", required=False, default=None, help="CDSE password [optional]"
+    )
+    parser.add_argument(
+        "--top",
+        required=False,
+        default=None,
+        help="max rows per query [optional, default=None -> 1000 (max allowed by OData)]",
+    )
+    parser.add_argument(
+        "--output-safe-listing",
+        help="output txt file containing the SAFE listing resulting from the query [optional]",
+        required=False,
+        default=None,
+    )
+    parser.add_argument(
+        "--safename-pattern",
+        help="pattern to filter SAFE names (e.g. S1A_IW_GRDH_1SDH_ or S1A or T160214) [optinal, default: None -> no filtering]",
+        default=None,
+    )
+    parser.add_argument(
+        "--cache-dir",
+        help="path to cache directory to store and re-use previous queries [optional]",
+        default=None,
+    )
+    parser.add_argument(
+        "--minimum-sea-percent",
+        type=float,
+        default=None,
+        help="minimum sea percent to filter out products based on their sea percent coverage [optional, default=None -> no filtering]",
+    )
+
     args = parser.parse_args()
     fmt = "%(asctime)s %(levelname)s %(filename)s(%(lineno)d) %(message)s"
     if args.verbose:
@@ -71,67 +139,98 @@ def query_client():
     t0 = time.time()
     sta = datetime.datetime.strptime(args.startdate, "%Y%m%dT%H:%M:%S")
     sto = datetime.datetime.strptime(args.stopdate, "%Y%m%dT%H:%M:%S")
+    id_query = time_based_hash() if args.id_query is None else args.id_query
     gdf = gpd.GeoDataFrame(
         {
             "start_datetime": [sta],
             "end_datetime": [sto],
             "geometry": [wkt.loads(args.geometry)],
             "collection": [args.collection],
-            "name": [None],
+            "name": [args.safename_pattern],
             "sensormode": [args.mode],
             "producttype": [args.product],
             "Attributes": [None],
-            "id_query": [args.id_query],
+            "id_query": [id_query],
         }
     )
     result_query = fetch_data(
         gdf,
-        date=None,
-        dtime=None,
         timedelta_slice=datetime.timedelta(days=14),
-        start_datetime=None,
-        end_datetime=None,
         min_sea_percent=None,
-        fig=None,
-        top=None,
-        cache_dir=None,
-        mode=args.querymode,
+        top=args.top,
+        cache_dir=args.cache_dir,
+        querymode=args.querymode,
+        email=args.email,
+        password=args.password,
     )
     logging.info("time to query : %1.1f sec", time.time() - t0)
+    if result_query is not None and result_query.empty is False:
+        logging.info("number of product found: %s", len(result_query))
+        if args.output_safe_listing is not None:
+            os.makedirs(
+                os.path.dirname(args.output_safe_listing), 0o0755, exist_ok=True
+            )
+            result_query["Name"].to_csv(
+                args.output_safe_listing, index=False, header=False
+            )
+            logging.info("SAFE listing saved to : %s", args.output_safe_listing)
+            os.chmod(args.output_safe_listing, 0o0644)
+    else:
+        if args.output_safe_listing is not None:
+            os.makedirs(
+                os.path.dirname(args.output_safe_listing), 0o0755, exist_ok=True
+            )
+            logging.info(
+                "no product found -> empty listing saved on disk: %s",
+                args.output_safe_listing,
+            )
+            touch(args.output_safe_listing)
+            os.chmod(args.output_safe_listing, 0o0644)
     return result_query
+
+
+def touch(fname, times=None):
+    fhandle = open(fname, "w")
+    try:
+        os.utime(fname, times)
+    finally:
+        fhandle.close()
 
 
 def fetch_data(
     gdf,
-    date=None,
-    dtime=None,
     timedelta_slice=None,
-    start_datetime=None,
-    end_datetime=None,
     min_sea_percent=None,
-    fig=None,
     top=None,
     cache_dir=None,
-    mode="seq",
+    querymode="seq",
+    email=None,
+    password=None,
 ):
     """
     Fetches meta-data of CDSE products based on provided parameters.
     GeoDataFrame is splitted based on the id_query column to keep track of each pair query/products
 
     Args:
-       gdf (GeoDataFrame): containing the geospatial data for the query.
-       geometry (list of tuples): representing the geometry.
-       collection (String): representing the collection information for filtering the data.
-       name (String): representing the name information for filtering the data.
-       sensormode (String): representing the mode of the sensor for filtering the data.
-       producttype (String): representing the type of product for filtering the data.
-       start_datetime (String): representing the starting date for the query.
-       end_datetime (String): representing the ending date for the query.
-       publication_start (String): representing the starting publication date for the query.
-       publication_end (String): representing the ending publication date for the query.
-       top (String): representing the ending publication date for the query.
-       mode (String): seq ( Sequential) or multi (multithread)
-       timedelta_slice (datetime.timedelta) : optional param to split the queries wrt time in order to avoid missing product because of the 1000 product max returned by Odata
+        gdf (GeoDataFrame): containing the geospatial data for the query.
+            list of the mandatory columns:
+                - 'start_datetime' : datetime representing the starting date for the query.
+                - 'end_datetime' : datetime representing the ending date for the query.
+                - 'id_query' : unique identifier of the query (to split the gdf in subsets)
+            list of the optional columns:
+                - 'name' : pattern of the SAFE name to filter the query
+                - 'collection' : e.g. SENTINEL-1, SENTINEL-2, ...
+                - 'sensormode' : e.g. EW, IW, WV, ...
+                - 'producttype' : e.g. GRD, SLC, RAW, OCN, ...
+                - 'geometry' : shapely geometry (Polygon, MultiPolygon, Point, ..) representing the area of interest for the query.
+                - 'Attributes' : additional attributes to filter the query
+        timedelta_slice (datetime.timedelta) : optional param to split the queries wrt time in order to avoid missing product because of the 1000 product max returned by Odata
+        min_sea_percent (Float): minimum sea percent within product footprint to filter out the data that are below the thresold [None-> no filter based on sea percent].
+        top (String): representing the ending publication date for the query.
+        cache_dir (String): path to cache directory to store/re-use intermediate query results
+        querymode (String): how the queries are send/received to Odata, possibles choices: 'seq' (Sequential) or 'multi' (multithread)
+        email (str): CDSE account [optional to be used for PRIVATE data that need authentication]
+        password (str): password CDSE account [optional to be used for PRIVATE data that need authentication]
     Return:
         (pd.DataFame): data containing the fetched results.
     """
@@ -145,16 +244,13 @@ def fetch_data(
         )
         data_subset = fetch_data_single_query(
             gdf=gdf_subset,
-            date=date,
-            dtime=dtime,
             timedelta_slice=timedelta_slice,
-            start_datetime=start_datetime,
-            end_datetime=end_datetime,
             min_sea_percent=min_sea_percent,
-            fig=fig,
             top=top,
             cache_dir=cache_dir,
-            mode=mode,
+            querymode=querymode,
+            email=email,
+            password=password,
         )
         if collected_data is None:
             collected_data = data_subset
@@ -165,62 +261,62 @@ def fetch_data(
 
 def fetch_data_single_query(
     gdf,
-    date=None,
-    dtime=None,
-    start_datetime=None,
-    end_datetime=None,
     min_sea_percent=None,
-    fig=None,
     top=None,
     cache_dir=None,
-    mode="seq",
+    querymode="seq",
     timedelta_slice=None,
+    email=None,
+    password=None,
 ):
     """
     Fetches data based on provided parameters.
 
     Args:
-       gdf (GeoDataFrame): containing the geospatial data for the query.
-       date (String): representing the date for the query.
-       dtime (String): representing the time for the query.
-       start_datetime (String): representing the starting date for the query.
-       end_datetime (String): representing the ending date for the query.
+       gdf (GeoDataFrame): containing the geospatial data for the query, it must contain 'start_datetime', 'end_datetime' 'id_query' columns.
        min_sea_percent (Float): minimum sea percent to filter the data [None-> no filter based on sea percent].
-       fig (Function): function to plot the data [can be None].
        top (String): representing the ending publication date for the query.
        cache_dir (String): path to cache directory to store intermediate results
-       mode (String): seq ( Sequential) or multi (multithread)
+       querymode (String): how the queries are send/received to Odata, possibles choices: 'seq' (Sequential) or 'multi' (multithread)
        timedelta_slice (datetime.timedelta) : optional param to split the queries wrt time in order to avoid missing product because of the 1000 product max returned by Odata
+       email (str): CDSE account [optional to be used for PRIVATE data that need authentication]
+       password (str): password CDSE account [optional to be used for PRIVATE data that need authentication]
     Return:
         (pd.DataFame): data containing the fetched results.
     """
     if gdf is not None and isinstance(gdf, gpd.GeoDataFrame):
         gdf_norm = normalize_gdf(
             gdf=gdf,
-            start_datetime=start_datetime,
-            end_datetime=end_datetime,
-            date=date,
-            dtime=dtime,
+            # start_datetime=start_datetime,
+            # end_datetime=end_datetime,
+            # date=date,
+            # dtime=dtime,
             timedelta_slice=timedelta_slice,
         )
         # geopd_norm.sort_index(ascending=False)
         logging.debug(gdf_norm.keys())
         logging.info(f"Length of input after slicing in time:{len(gdf_norm)}")
-        urls = create_urls(gdf=gdf_norm, top=top)
+        urls_plus_headers = create_urls(
+            gdf=gdf_norm, top=top, email=email, password=password
+        )
     else:
-        urls = []
-    if mode == "seq":
-        collected_data = fetch_data_from_urls_sequential(urls=urls, cache_dir=cache_dir)
-    elif mode == "multi":
+        urls_plus_headers = {"urls": [], "headers": None}
+    if querymode == "seq":
+        collected_data = fetch_data_from_urls_sequential(
+            urls_plus_headers=urls_plus_headers, cache_dir=cache_dir
+        )
+    elif querymode == "multi":
         maxworker = 10
         logging.info("maximum // queries : %s", maxworker)
         collected_data = fetch_data_from_urls_multithread(
-            urls=urls, cache_dir=cache_dir, max_workers=maxworker
+            urls_plus_headers=urls_plus_headers,
+            cache_dir=cache_dir,
+            max_workers=maxworker,
         )
 
     # Convert all Multipolygon to Polygon and add geometry as new column
     # if 'Footprint' in collected_data:
-    if collected_data is not None:
+    if collected_data is not None and collected_data.empty is False:
         # Remove duplicates
         data_dedup = remove_duplicates(safes_ori=collected_data)
         logging.info(
@@ -230,8 +326,6 @@ def fetch_data_single_query(
         logging.info(
             "number of product after removing multipolygon: %s", len(full_data["Name"])
         )
-        if fig is not None:
-            fig(collected_data=full_data)
         if min_sea_percent is not None:
             full_data = sea_percent(
                 collected_data=full_data, min_sea_percent=min_sea_percent
@@ -245,67 +339,90 @@ def fetch_data_single_query(
     return full_data
 
 
-def gdf_create(
-    start_datetime=None,
-    end_datetime=None,
-    name=None,
-    collection=None,
-    sensormode=None,
-    producttype=None,
-    geometry=None,
-    publication_start=None,
-    publication_end=None,
-):
-    data_in = {
-        "start_datetime": [None],
-        "end_datetime": [None],
-        "name": [None],
-        "collection": [None],
-        "sensormode": [None],
-        "producttype": [None],
-        "geometry": [None],
-        "publication_start": [None],
-        "publication_end": [None],
-    }
+def apply_slicing_time_to_gdf(gdf, timedelta_slice=None):
+    """
+    step apply normalization of the gdf to slice it in time based on the timedelta_slice param
+    """
+    gdf_slices = gdf
 
-    gdf = gpd.GeoDataFrame(data_in)
+    # slice
+    if timedelta_slice is not None:
+        mindate = gdf["start_datetime"].min()
+        maxdate = gdf["end_datetime"].max()
+        # those index will need to be time expanded
+        idx_to_expand = gdf.index[
+            (gdf["end_datetime"] - gdf["start_datetime"]) > timedelta_slice
+        ]
+        # TO make sure that date does not contain future date
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
+        if maxdate > now_utc:
+            maxdate = now_utc + datetime.timedelta(days=1)
+            # maxdate = datetime.datetime.utcnow().replace(
+            #     tzinfo=pytz.UTC
+            # ) + datetime.timedelta(days=1)
 
-    if geometry is not None:
-        gdf["geometry"] = shapely.wkt.loads(geometry)
-    if collection is not None:
-        gdf["collection"] = collection
-    if name is not None:
-        gdf["name"] = name
-    if sensormode is not None:
-        gdf["sensormode"] = sensormode
-    if producttype is not None:
-        gdf["producttype"] = producttype
-    if start_datetime is not None:
-        gdf["start_datetime"] = datetime.datetime.strptime(
-            start_datetime, "%Y-%m-%d %H:%M:%S"
-        )
-    if end_datetime is not None:
-        gdf["end_datetime"] = datetime.datetime.strptime(
-            end_datetime, "%Y-%m-%d %H:%M:%S"
-        )
-    if publication_start is not None:
-        gdf["publication_start"] = publication_start
-    if publication_end is not None:
-        gdf["publication_end"] = publication_end
-    return gdf
+        if (mindate == mindate) and (maxdate == maxdate):  # non nan
+            gdf_slices = []
+            slice_begin = mindate
+            slice_end = slice_begin
+            islice = 0
+            while slice_end < maxdate:
+                islice += 1
+                slice_end = slice_begin + timedelta_slice
+                # this is time grouping
+                gdf_slice = gdf[
+                    (gdf["start_datetime"] >= slice_begin)
+                    & (gdf["end_datetime"] <= slice_end)
+                ]
+                # check if some slices needs to be expanded
+                # index of gdf_slice that where not grouped
+                # not_grouped_index = pd.Index(set(idx_to_expand) - set(gdf_slice.index))
+                for to_expand in idx_to_expand:
+                    # missings index in gdf_slice.
+                    # check if there is time overlap.
+                    latest_start = max(gdf.loc[to_expand].start_datetime, slice_begin)
+                    earliest_end = min(gdf.loc[to_expand].end_datetime, slice_end)
+                    overlap = earliest_end - latest_start
+                    if overlap >= datetime.timedelta(0):
+                        gdf_slice = pd.concat(
+                            [gdf_slice, gpd.GeoDataFrame(gdf.loc[to_expand]).T]
+                        )
+                        gdf_slice.loc[to_expand, "start_datetime"] = latest_start
+                        gdf_slice.loc[to_expand, "end_datetime"] = earliest_end
+                if not gdf_slice.empty:
+                    gdf_slices.append(gdf_slice)
+                slice_begin = slice_end
+    gdf_norm = gpd.GeoDataFrame(
+        pd.concat(gdf_slices, ignore_index=False), crs=gdf_slices[0].crs
+    )
+    return gdf_norm
 
 
 def normalize_gdf(
     gdf,
-    start_datetime=None,
-    end_datetime=None,
-    date=None,
-    dtime=None,
     timedelta_slice=None,
 ):
-    """return a normalized gdf list
-    start/stop date name will be 'start_datetime' and 'end_datetime'
     """
+    return a normalized gdf list
+    start/stop date name will be 'start_datetime' and 'end_datetime'
+
+    Args:
+        gdf (GeoDataFrame): containing the geospatial data for the query.
+            list of the mandatory columns:
+                - 'start_datetime' or 'startdate' : datetime representing the starting date for the query.
+                - 'end_datetime' or 'stopdate' : datetime representing the ending date for the query.
+                - 'id_query' : unique identifier of the query (to split the gdf in subsets)
+            list of the optional columns:
+                - 'name' or 'Name': pattern of the SAFE name to filter the query
+                - 'collection' : e.g. SENTINEL-1, SENTINEL-2, ...
+                - 'sensormode' : e.g. EW, IW, WV, ...
+                - 'producttype' : e.g. GRD, SLC, RAW, OCN, ...
+                - 'geometry' : shapely geometry (Polygon, MultiPolygon, Point, ..) representing the area of interest for the query.
+                - 'Attributes' : additional attributes to filter the query
+    Return:
+        (GeoDataFrame): normalized gdf and sliced in time if timedelta_slice is not None
+    """
+    gdf_norm_sliced = None
     # add the input index as id_original_query if id_query is None
     gdf["id_original_query"] = np.where(
         gdf["id_query"].isnull(), gdf.index, gdf["id_query"]
@@ -329,28 +446,46 @@ def normalize_gdf(
                 % list(gdf.index[gdf.index.duplicated(keep=False)].unique())
             )
         if len(gdf) == 0:
-            return []
+            logging.error("gdf is empty")
+            return gdf_norm_sliced
         norm_gdf = gdf.copy()
         norm_gdf.set_geometry("geometry", inplace=True)
     else:
-        norm_gdf = gpd.GeoDataFrame(
-            {
-                "start_datetime": start_datetime,
-                "end_datetime": end_datetime,
-                "geometry": Polygon(),
-            },
-            geometry="geometry",
-            index=[0],
-            crs="EPSG:4326",
-        )
-        # no slicing
-        timedelta_slice = None
-    worlpolygon = shapely.wkt.loads(
+        logging.error("gdf is None")
+        return gdf_norm_sliced
+        # norm_gdf = gpd.GeoDataFrame(
+        #     {
+        #         "start_datetime": start_datetime,
+        #         "end_datetime": end_datetime,
+        #         "geometry": Polygon(),
+        #     },
+        #     geometry="geometry",
+        #     index=[0],
+        #     crs="EPSG:4326",
+        # )
+        # # no slicing
+        # timedelta_slice = None
+    worldpolygon = shapely.wkt.loads(
         "POLYGON((-180 -90,180 -90,180 90,-180 90,-180 -90))"
     )
-    norm_gdf["geometry"].fillna(
-        value=worlpolygon, inplace=True
+    # if there is no geometry, set it to world polygon
+    if "geometry" not in norm_gdf:
+        norm_gdf["geometry"] = len(norm_gdf) * [worldpolygon]
+    norm_gdf["geometry"] = norm_gdf["geometry"].fillna(
+        value=worldpolygon, inplace=True
     )  # to replace None by NaN
+    # since pandas==3.0.0 fillna does not replace None.
+    for ggi, gg in enumerate(norm_gdf["geometry"]):
+        if not isinstance(
+            gg,
+            (
+                shapely.geometry.Polygon,
+                shapely.geometry.MultiPolygon,
+                shapely.geometry.Point,
+            ),
+        ):
+            norm_gdf.at[ggi, "geometry"] = worldpolygon
+
     # convert naives dates to utc
     for date_col in norm_gdf.select_dtypes(include=["datetime64"]).columns:
         try:
@@ -363,117 +498,84 @@ def normalize_gdf(
 
     # check valid input geometry
     if not all(norm_gdf.is_valid):
+        # get details about invalid geometries
+        invalid_indices = norm_gdf.index[~norm_gdf.is_valid].tolist()
+        logging.error(f"Invalid geometries at indices: {invalid_indices}")
         raise ValueError("Invalid geometries found. Check them with gdf.is_valid")
 
-    if date in norm_gdf:
-        if (start_datetime not in norm_gdf) and (end_datetime not in norm_gdf):
-            norm_gdf["start_datetime"] = norm_gdf[date] - dtime
-            norm_gdf["end_datetime"] = norm_gdf[date] + dtime
-        else:
-            raise ValueError("date keyword conflict with startdate/stopdate")
+    # if date in norm_gdf:
+    #     if (start_datetime not in norm_gdf) and (end_datetime not in norm_gdf):
+    #         norm_gdf["start_datetime"] = norm_gdf[date] - dtime
+    #         norm_gdf["end_datetime"] = norm_gdf[date] + dtime
+    #     else:
+    #         raise ValueError("date keyword conflict with startdate/stopdate")
 
-    if (start_datetime in norm_gdf) and (start_datetime != "start_datetime"):
-        norm_gdf["start_datetime"] = norm_gdf[start_datetime]
+    # if (start_datetime in norm_gdf) and (start_datetime != "start_datetime"):
+    #     norm_gdf["start_datetime"] = norm_gdf[start_datetime]
 
-    if (end_datetime in norm_gdf) and (end_datetime != "end_datetime"):
-        norm_gdf["end_datetime"] = norm_gdf[end_datetime]
+    # if (end_datetime in norm_gdf) and (end_datetime != "end_datetime"):
+    #     norm_gdf["end_datetime"] = norm_gdf[end_datetime]
 
-    gdf_slices = norm_gdf
-
-    # slice
-    if timedelta_slice is not None:
-        mindate = norm_gdf["start_datetime"].min()
-        maxdate = norm_gdf["end_datetime"].max()
-        # those index will need to be time expanded
-        idx_to_expand = norm_gdf.index[
-            (norm_gdf["end_datetime"] - norm_gdf["start_datetime"]) > timedelta_slice
-        ]
-        # TO make sure that date does not contain future date
-        if maxdate > datetime.datetime.utcnow().replace(tzinfo=pytz.UTC):
-            maxdate = datetime.datetime.utcnow().replace(
-                tzinfo=pytz.UTC
-            ) + datetime.timedelta(days=1)
-
-        if (mindate == mindate) and (maxdate == maxdate):  # non nan
-            gdf_slices = []
-            slice_begin = mindate
-            slice_end = slice_begin
-            islice = 0
-            while slice_end < maxdate:
-                islice += 1
-                slice_end = slice_begin + timedelta_slice
-                # this is time grouping
-                gdf_slice = norm_gdf[
-                    (norm_gdf["start_datetime"] >= slice_begin)
-                    & (norm_gdf["end_datetime"] <= slice_end)
-                ]
-                # check if some slices needs to be expanded
-                # index of gdf_slice that where not grouped
-                # not_grouped_index = pd.Index(set(idx_to_expand) - set(gdf_slice.index))
-                for to_expand in idx_to_expand:
-                    # missings index in gdf_slice.
-                    # check if there is time overlap.
-                    latest_start = max(
-                        norm_gdf.loc[to_expand].start_datetime, slice_begin
-                    )
-                    earliest_end = min(norm_gdf.loc[to_expand].end_datetime, slice_end)
-                    overlap = earliest_end - latest_start
-                    if overlap >= datetime.timedelta(0):
-                        gdf_slice = pd.concat(
-                            [gdf_slice, gpd.GeoDataFrame(norm_gdf.loc[to_expand]).T]
-                        )
-                        gdf_slice.loc[to_expand, "start_datetime"] = latest_start
-                        gdf_slice.loc[to_expand, "end_datetime"] = earliest_end
-                if not gdf_slice.empty:
-                    gdf_slices.append(gdf_slice)
-                slice_begin = slice_end
-    gdf_norm = gpd.GeoDataFrame(
-        pd.concat(gdf_slices, ignore_index=False), crs=gdf_slices[0].crs
-    )
     end_time = time.time()
     processing_time = end_time - start_time
-    logging.info(f"normalize_gdf processing time:{processing_time}s")
-    return gdf_norm
+    logging.info(f"processing time to normalize the GeoDataFrame :{processing_time}s")
+    gdf_norm_sliced = apply_slicing_time_to_gdf(
+        gdf=norm_gdf, timedelta_slice=timedelta_slice
+    )
+    return gdf_norm_sliced
 
 
-def create_urls(gdf, top=None):
+def create_urls(gdf, top=None, email=None, password=None):
     """
-
-    Method to create the list of URLs to query the OData API based on the input GeoDataFrame.
+    Method to create the list of URLs and authentication headers.
 
     Parameters
     ----------
-    gdf (GeoDataFrame)
-    top (int): max number of products returned by OData API [default=1000]
+        gdf : GeoDataFrame containing the query parameters
+        top : int number of max rows per query
+        email : str  CDSE account [optional]
+        password : str password CDSE account [optional]
 
     Returns
     -------
-    urls (list of tuples): (index, url)
+        dict : containing
+            'urls' : list of tuples (id_original_query, url)
+            'headers' : authentication headers (None if no email/password)
 
     """
     start_time = time.time()
+
+    # --- 1. Handle Authentication ---
+    headers = None
+    if email and password:
+        logging.info(f"[*] Authenticating for {email}...")
+        headers = get_access_token(email, password)
+        logging.info("[*] Authentication successful.")
+
     urlapi = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter="
     urls = []
+
     if top is None:
+        # Assuming DEFAULT_TOP_ROWS_PER_QUERY is defined globally
         top = DEFAULT_TOP_ROWS_PER_QUERY
+
     for row in range(len(gdf)):
         gdf_row = gdf.iloc[row]
-        # enter_index = gdf.index[row]
         enter_index = gdf["id_original_query"].iloc[row]
 
-        # Taking all given parameters
         params = {}
-        if (
-            "geometry" in gdf_row
-            and not pd.isna(gdf_row["geometry"])
-            and gdf_row["geometry"] is not None
-        ):
+
+        # Geometry processing
+        if "geometry" in gdf_row and not pd.isna(gdf_row["geometry"]):
             value = str(gdf_row.geometry)
             geo_type = gdf_row.geometry.geom_type
+            # Extracting coordinates inside parentheses
+            # coordinates_part = value[value.find("(") + 1 : value.rfind(")")]
             coordinates_part = value[value.find("(") + 1 : value.find(")")]
+
             if geo_type == "Point":
-                modified_value = f"{coordinates_part}"
-                coordinates_part = modified_value.replace(" ", "%20")
+                # Clean spaces for URL encoding
+                coordinates_part = coordinates_part.replace(" ", "%20")
                 params["OData.CSC.Intersects"] = (
                     f"(area=geography'SRID=4326;POINT({coordinates_part})')"
                 )
@@ -482,54 +584,50 @@ def create_urls(gdf, top=None):
                     f"(area=geography'SRID=4326;POLYGON({coordinates_part}))')"
                 )
 
+        # OData Filter Mapping
         if "collection" in gdf_row and not pd.isna(gdf_row["collection"]):
-            collection = gdf_row["collection"]
-            params["Collection/Name eq"] = f" '{collection}'"
+            params["Collection/Name eq"] = f" '{gdf_row['collection']}'"
 
         if "name" in gdf_row and not pd.isna(gdf_row["name"]):
-            name = gdf_row["name"]
-            params["contains"] = f"(Name,'{name}')"
+            params["contains"] = f"(Name,'{gdf_row['name']}')"
 
         if "sensormode" in gdf_row and not pd.isna(gdf_row["sensormode"]):
-            sensormode = gdf_row["sensormode"]
             params[
                 "Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'operationalMode' and att/OData.CSC.StringAttribute/Value eq"
-            ] = f" '{sensormode}')"
+            ] = f" '{gdf_row['sensormode']}')"
 
         if "producttype" in gdf_row and not pd.isna(gdf_row["producttype"]):
-            producttype = gdf_row["producttype"]
             params[
                 "Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq"
-            ] = f" '{producttype}')"
+            ] = f" '{gdf_row['producttype']}')"
 
         if "start_datetime" in gdf_row and not pd.isna(gdf_row["start_datetime"]):
-            start_datetime = gdf_row["start_datetime"].strftime(
-                "%Y-%m-%dT%H:%M:%S.000Z"
-            )
-            params["ContentDate/Start gt"] = f" {start_datetime}"
+            start_dt = gdf_row["start_datetime"].strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            params["ContentDate/Start gt"] = f" {start_dt}"
 
         if "end_datetime" in gdf_row and not pd.isna(gdf_row["end_datetime"]):
-            end_datetime = gdf_row["end_datetime"].strftime("%Y-%m-%dT%H:%M:%S.000Z")
-            params["ContentDate/Start lt"] = f" {end_datetime}"
+            end_dt = gdf_row["end_datetime"].strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            params["ContentDate/Start lt"] = f" {end_dt}"
 
         if "Attributes" in gdf_row and not pd.isna(gdf_row["Attributes"]):
-            Attributes = str(gdf_row["Attributes"]).replace(" ", "")
-            Attributes_name = Attributes[0 : Attributes.find(",")]
-            Attributes_value = Attributes[Attributes.find(",") + 1 :]
+            attr_str = str(gdf_row["Attributes"]).replace(" ", "")
+            attr_name = attr_str.split(",")[0]
+            attr_val = attr_str.split(",")[1]
             params["Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq"] = (
-                f" '{Attributes_name}' and att/OData.CSC.DoubleAttribute/Value le {Attributes_value})"
+                f" '{attr_name}' and att/OData.CSC.DoubleAttribute/Value le {attr_val})"
             )
 
-        str_query = " and ".join([f"{key}{value}" for key, value in params.items()])
-
-        str_query = str_query + "&$top=" + str(top)
-        url = urlapi + str_query + "&$expand=Attributes"
+        # Construction of the final URL
+        str_query = " and ".join([f"{key}{val}" for key, val in params.items()])
+        url = f"{urlapi}{str_query}&$top={top}&$expand=Attributes"
         urls.append((enter_index, url))
-    end_time = time.time()
-    processing_time = end_time - start_time
-    logging.info("create_urls() processing time:%1.1fs", processing_time)
-    logging.debug("example of URL created: %s", urls[0])
-    return urls
+
+    processing_time = time.time() - start_time
+    logging.info("processing time:%1.1fs", processing_time)
+    logging.debug(
+        "example of generated URL: %s", urls[0][1] if urls else "No URLs generated"
+    )
+    return {"urls": urls, "headers": headers}
 
 
 def get_cache_filename(url, cache_dir=None) -> str:
@@ -549,15 +647,16 @@ def get_cache_filename(url, cache_dir=None) -> str:
     return os.path.join(cache_dir, url_hash + ".json")
 
 
-def fetch_one_url(url, cpt, index, cache_dir):
+def fetch_one_url(url, cpt, index, cache_dir, headers=None):
     """
 
     Parameters
     ----------
-    url (str)
-    cpt (defaultdict(int))
-    index (str): id_query
-    cache_dir (str)
+    url (str): CDS OData query URL
+    cpt (defaultdict(int)): counters
+    index (str): id_query of the original gdf
+    cache_dir (str): directory to store cache files [optional, default=None -> no cache]
+    headers (dict): authentication headers (None if no email/password) [optional, default=None]
 
     Returns
     -------
@@ -581,7 +680,7 @@ def fetch_one_url(url, cpt, index, cache_dir):
         logging.debug("no cache file -> go for query CDS")
         cpt["urls_tested"] += 1
         try:
-            json_data = requests.get(url).json()
+            json_data = requests.get(url, headers=headers).json()
             cpt["urls_OK"] += 1
         except KeyboardInterrupt:
             raise ("keyboard interrupt")
@@ -622,18 +721,22 @@ def fetch_one_url(url, cpt, index, cache_dir):
     return cpt, collected_data
 
 
-def fetch_data_from_urls_sequential(urls, cache_dir) -> pd.DataFrame:
+def fetch_data_from_urls_sequential(urls_plus_headers, cache_dir) -> pd.DataFrame:
     """
 
     Parameters
     ----------
-    urls (list): list of url to query CDS
+    urls_plus_headers (dict): containing
+        'urls' : list of tuples (id_original_query, url)
+        'headers' : authentication headers (None if no email/password)
+    cache_dir (str)
 
     Returns
     -------
 
     """
-
+    urls = urls_plus_headers["urls"]
+    headers = urls_plus_headers["headers"]
     cpt = defaultdict(int)
     start_time = time.time()
     collected_data_x = []
@@ -647,7 +750,9 @@ def fetch_data_from_urls_sequential(urls, cache_dir) -> pd.DataFrame:
         # for url in urls:
         url = urls[ii][1]
         index = urls[ii][0]
-        cpt, collected_data = fetch_one_url(url, cpt, index=index, cache_dir=cache_dir)
+        cpt, collected_data = fetch_one_url(
+            url, cpt, index=index, cache_dir=cache_dir, headers=headers
+        )
         if collected_data is not None:
             if not collected_data.empty:
                 collected_data_x.append(collected_data)
@@ -664,21 +769,25 @@ def fetch_data_from_urls_sequential(urls, cache_dir) -> pd.DataFrame:
     return collected_data_final
 
 
-def fetch_data_from_urls_multithread(urls, cache_dir=None, max_workers=50):
+def fetch_data_from_urls_multithread(urls_plus_headers, cache_dir=None, max_workers=50):
     """
 
     Parameters
     ----------
-    urls (list)
-    cache_dir (str)
-    max_workers (int)
+    urls_plus_headers (dict): containing
+        'urls' : list of tuples (id_original_query, url)
+        'headers' : authentication headers (None if no email/password)
+    cache_dir (str): directory to store cache files [optional, default=None -> no cache]
+    max_workers (int): maximum number of parallel threads [optional, default=50]
 
     Returns
     -------
-
+    collected_data (pandas.GeoDataframe): containing the fetched results.
     """
     collected_data = pd.DataFrame()
     cpt = defaultdict(int)
+    urls = urls_plus_headers["urls"]
+    headers = urls_plus_headers["headers"]
     with (
         ThreadPoolExecutor(max_workers=max_workers) as executor,
         tqdm(total=len(urls)) as pbar,
@@ -686,7 +795,9 @@ def fetch_data_from_urls_multithread(urls, cache_dir=None, max_workers=50):
         # url[1] is a CDS Odata query URL
         # url[0] is index of original gdf
         future_to_url = {
-            executor.submit(fetch_one_url, url[1], cpt, url[0], cache_dir): (
+            executor.submit(
+                fetch_one_url, url[1], cpt, url[0], cache_dir, headers=headers
+            ): (
                 url[0],
                 url[1],
             )
@@ -725,8 +836,11 @@ def process_data(json_data):
     res = None
     if "value" in json_data:
         res = pd.DataFrame.from_dict(json_data["value"])
+        # get the code status of the query "@odata.count"
+        # if len(res) > 0:
+        #     logging.debug("example of data fetched: %s", res.iloc[0].to_dict())
     else:
-        print("No data found.")
+        logging.debug("No data found.")
         pass
     return res
 
@@ -810,3 +924,121 @@ def sea_percent(collected_data, min_sea_percent=None):
     processing_time = end_time - start_time
     logging.info(f"sea_percent processing time:{processing_time}s")
     return collected_data
+
+
+def core_query_logged(
+    email=None,
+    password=None,
+    type=None,
+    startdate=None,
+    enddate=None,
+    unit=None,
+    output=None,
+    limit=1000,
+):
+    """
+    Core function to query CDSE OData with authentication and keyed arguments.
+    this method in complementary to cdsodatacli.query.fetch_data() because here we use authentication
+    and we have keyed arguments instead of a gdf input.
+    It is used in the context of private data access where authentication is required during IOC periods.
+    Current limitations:
+         - no spatial filtering
+
+    Args:
+        email (str): CDSE account email.
+        password (str): CDSE account password.
+        type (str): Product type (e.g. WV_SLC__1S_PRIVATE).
+        startdate (str): Start date (e.g. 2025-01-01T00:00:00).
+        enddate (str): End date (e.g. 2025-01-31T23:59:59).
+        unit (str): Satellite Unit Identifier (C or D).
+        output (str): Output JSON file path.
+        limit (int): Max records to return.
+    Returns:
+        None
+
+
+    """
+
+    # --- 1. Authentication ---
+    auth_url = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+    auth_data = {
+        "client_id": "cdse-public",
+        "username": email,
+        "password": password,
+        "grant_type": "password",
+    }
+
+    logging.info(f"[*] Authenticating for {email}...")
+    try:
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        response = requests.post(auth_url, data=auth_data, verify=False)
+        response.raise_for_status()
+        access_token = response.json().get("access_token")
+    except Exception as e:
+        logging.error(f"[-] Auth Error: {e}")
+        if "response" in locals():
+            logging.error(f"Details: {response.text}")
+        sys.exit(1)
+
+    # --- 2. OData Query Construction ---
+    odata_url = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products"
+
+    # Using the specific StringAttribute syntax required by CDSE OData
+    if enddate is None:
+        add_filter_startdate = [
+            f"ContentDate/End ge {startdate}",
+        ]
+        add_filter_enddate = []
+    else:
+        add_filter_enddate = [f"ContentDate/End le {enddate}"]
+        add_filter_startdate = [
+            f"ContentDate/Start ge {startdate}",
+        ]
+    filters = [
+        "Collection/Name eq 'SENTINEL-1'",
+        # f"ContentDate/Start ge {startdate}",
+        # f"ContentDate/End le {enddate}",
+        f"Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq '{type}')",
+        f"Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'platformSerialIdentifier' and att/OData.CSC.StringAttribute/Value eq '{unit}')",
+    ]
+    filters += add_filter_enddate
+    filters += add_filter_startdate
+
+    odata_filter = " and ".join(filters)
+
+    params = {
+        "$filter": odata_filter,
+        "$orderby": "ContentDate/Start asc",
+        "$top": limit,
+        "$count": "true",
+    }
+
+    headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
+
+    logging.info("[*] Querying CDSE OData...")
+    logging.debug(f"URL: {odata_url}")
+    logging.debug(f"Params: {params}")
+    # logging.debug(f"Headers: {headers}")
+    try:
+        # Requests automatically handles URL encoding of spaces, quotes, and symbols
+        search_res = requests.get(
+            odata_url, params=params, headers=headers, verify=False
+        )
+        search_res.raise_for_status()
+        data = search_res.json()
+
+        # --- 3. Save Results ---
+        with open(output, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
+        count = len(data.get("value", []))
+        logging.info(f"[+] Success! {count} products found.")
+        logging.info(f"[+] Results saved to: {output}")
+
+    except Exception as e:
+        logging.error(f"[-] Search Error: {e}")
+        if "search_res" in locals():
+            logging.error(f"Response: {search_res.text}")
+        sys.exit(1)
+
+    logging.info("finish")
