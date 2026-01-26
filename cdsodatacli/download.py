@@ -181,6 +181,8 @@ def filter_product_already_present(
     """
     if "id" not in df.columns:
         id_present = False
+    else:
+        id_present = True
 
     all_output_filepath = []
     all_urls_to_download = []
