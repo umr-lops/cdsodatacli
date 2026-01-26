@@ -179,7 +179,7 @@ def filter_product_already_present(
         cpt (collections.defaultdict(int)): updated counter
 
     """
-    if 'id' not in df.columns:
+    if "id" not in df.columns:
         id_present = False
 
     all_output_filepath = []
@@ -214,7 +214,7 @@ def filter_product_already_present(
 
             output_filepath = os.path.join(outputdir, safename_product + ".zip")
             all_output_filepath.append(output_filepath)
-            
+
     df_todownload = df.iloc[index_to_download]
     if id_present:
         df_todownload["urls"] = all_urls_to_download

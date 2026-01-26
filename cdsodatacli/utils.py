@@ -86,9 +86,13 @@ def check_safe_in_spool(safename, conf):
         logging.debug("checking spool_type: %s", spool_type)
         for uu in ["", ".zip", "replaced"]:
             if uu == "":
-                spool_potential_file = os.path.join(conf["spools"][spool_type], safename)
+                spool_potential_file = os.path.join(
+                    conf["spools"][spool_type], safename
+                )
             elif uu == ".zip":
-                spool_potential_file = os.path.join(conf["spools"][spool_type], safename + ".zip")
+                spool_potential_file = os.path.join(
+                    conf["spools"][spool_type], safename + ".zip"
+                )
             elif uu == "replaced":
                 spool_potential_file = os.path.join(
                     conf["spools"][spool_type], safename.replace(".SAFE", ".zip")
@@ -160,7 +164,8 @@ def check_safe_in_archive(safename, conf):
     for archive_type in conf["archives"]:
         for uu in ["", ".zip", "replaced"]:
             arch_potential_file0 = os.path.join(
-                WhichArchiveDir(safename, conf=conf, archive_type=archive_type), safename
+                WhichArchiveDir(safename, conf=conf, archive_type=archive_type),
+                safename,
             )
             if uu == "":
                 arch_potential_file = arch_potential_file0
@@ -175,7 +180,7 @@ def check_safe_in_archive(safename, conf):
                 break
         logging.debug("present_in_archive : %s", present_in_archive)
         if present_in_archive:
-            
+
             logging.debug("the product is stored in : %s", arch_potential_file)
             break
     return present_in_archive
