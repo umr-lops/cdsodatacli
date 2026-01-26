@@ -179,6 +179,8 @@ def filter_product_already_present(
         cpt (collections.defaultdict(int)): updated counter
 
     """
+    if "id" not in df.columns:
+        id_present = False
 
     all_output_filepath = []
     all_urls_to_download = []
@@ -198,21 +200,24 @@ def filter_product_already_present(
             cpt["product_absent_from_local_disks"] += 1
         if to_download:
             index_to_download.append(ii)
-            id_product = df["id"].iloc[ii]
-            url_product = cdsodatacli_conf["URL_download"] % id_product
+            if id_present:
+                id_product = df["id"].iloc[ii]
+                url_product = cdsodatacli_conf["URL_download"] % id_product
 
-            logging.debug("url_product : %s", url_product)
-            logging.debug(
-                "id_product : %s safename_product : %s",
-                id_product,
-                safename_product,
-            )
+                logging.debug("url_product : %s", url_product)
+                logging.debug(
+                    "id_product : %s safename_product : %s",
+                    id_product,
+                    safename_product,
+                )
+                all_urls_to_download.append(url_product)
 
             output_filepath = os.path.join(outputdir, safename_product + ".zip")
             all_output_filepath.append(output_filepath)
-            all_urls_to_download.append(url_product)
+
     df_todownload = df.iloc[index_to_download]
-    df_todownload["urls"] = all_urls_to_download
+    if id_present:
+        df_todownload["urls"] = all_urls_to_download
     df_todownload["outputpath"] = all_output_filepath
     return df_todownload, cpt
 
