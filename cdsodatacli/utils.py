@@ -82,31 +82,39 @@ def check_safe_in_spool(safename, conf):
     """
     # conf = get_conf(path_config_file=path_config_file)
     present_in_spool = False
-    for uu in ["", ".zip", "replaced"]:
-        if uu == "":
-            spool_potential_file = os.path.join(conf["spool"], safename)
-        elif uu == ".zip":
-            spool_potential_file = os.path.join(conf["spool"], safename + ".zip")
-        elif uu == "replaced":
-            spool_potential_file = os.path.join(
-                conf["spool"], safename.replace(".SAFE", ".zip")
+    for spool_type in conf["spools"]:
+        logging.debug("checking spool_type: %s", spool_type)
+        for uu in ["", ".zip", "replaced"]:
+            if uu == "":
+                spool_potential_file = os.path.join(conf["spools"][spool_type], safename)
+            elif uu == ".zip":
+                spool_potential_file = os.path.join(conf["spools"][spool_type], safename + ".zip")
+            elif uu == "replaced":
+                spool_potential_file = os.path.join(
+                    conf["spools"][spool_type], safename.replace(".SAFE", ".zip")
+                )
+            else:
+                raise NotImplementedError
+            if os.path.exists(spool_potential_file):
+                present_in_spool = True
+                break
+        if present_in_spool:
+            logging.debug(
+                "the product is stored in spool dir: %s", spool_potential_file
             )
-        else:
-            raise NotImplementedError
-        if os.path.exists(spool_potential_file):
-            present_in_spool = True
             break
     logging.debug("present_in_spool : %s", present_in_spool)
     return present_in_spool
 
 
-def WhichArchiveDir(safe, conf):
+def WhichArchiveDir(safe, conf, archive_type):
     """
     Determine the archive directory path for a given safe based on its naming convention.
 
     Args:
         safe (str): safe base name
         conf (dict) configuration dictionary of cdsodatacli package
+        archive_type (str): type of archive directory to use from conf (e.g., 'datawork', 'scale')
 
     Returns:
         gooddir (str): full path of the archive directory where the safe should be stored
@@ -128,7 +136,7 @@ def WhichArchiveDir(safe, conf):
     subname = safe[6:14]
     litlerep = sat + "_" + acqui + subname
     gooddir = os.path.join(
-        conf["archive"], satdir, subproddir, acqui, litlerep, year, doy
+        conf["archives"][archive_type], satdir, subproddir, acqui, litlerep, year, doy
     )
     return gooddir
 
@@ -136,7 +144,7 @@ def WhichArchiveDir(safe, conf):
 def check_safe_in_archive(safename, conf):
     """
 
-    Check if a given safe is already present in the archive directory.
+    Check if a given safe is already present in the different archive directories.
 
     Parameters
     ----------
@@ -149,24 +157,27 @@ def check_safe_in_archive(safename, conf):
 
     """
     present_in_archive = False
-    for uu in ["", ".zip", "replaced"]:
-        arch_potential_file0 = os.path.join(
-            WhichArchiveDir(safename, conf=conf), safename
-        )
-        if uu == "":
-            arch_potential_file = arch_potential_file0
-        elif uu == ".zip":
-            arch_potential_file = arch_potential_file0 + ".zip"
-        elif uu == "replaced":
-            arch_potential_file = arch_potential_file0.replace(".SAFE", ".zip")
-        else:
-            raise NotImplementedError
-        if os.path.exists(arch_potential_file):
-            present_in_archive = True
+    for archive_type in conf["archives"]:
+        for uu in ["", ".zip", "replaced"]:
+            arch_potential_file0 = os.path.join(
+                WhichArchiveDir(safename, conf=conf, archive_type=archive_type), safename
+            )
+            if uu == "":
+                arch_potential_file = arch_potential_file0
+            elif uu == ".zip":
+                arch_potential_file = arch_potential_file0 + ".zip"
+            elif uu == "replaced":
+                arch_potential_file = arch_potential_file0.replace(".SAFE", ".zip")
+            else:
+                raise NotImplementedError
+            if os.path.exists(arch_potential_file):
+                present_in_archive = True
+                break
+        logging.debug("present_in_archive : %s", present_in_archive)
+        if present_in_archive:
+            
+            logging.debug("the product is stored in : %s", arch_potential_file)
             break
-    logging.debug("present_in_archive : %s", present_in_archive)
-    if present_in_archive:
-        logging.debug("the product is stored in : %s", arch_potential_file)
     return present_in_archive
 
 
