@@ -7,7 +7,7 @@ import pandas as pd
 import requests
 from collections import defaultdict
 from cdsodatacli.fetch_access_token import (
-    get_list_of_exising_token,
+    get_list_of_existing_token_semaphore_file,
     get_bearer_access_token,
 )
 
@@ -177,7 +177,7 @@ def get_sessions_download_available(
             logging.debug("no more account available for now.")
             break  # no more account free
         else:
-            lst_usable_tokens = get_list_of_exising_token(
+            lst_usable_tokens = get_list_of_existing_token_semaphore_file(
                 token_dir=conf["token_directory"], account=account_free
             )
             if (

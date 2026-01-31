@@ -9,7 +9,7 @@ import urllib3
 import requests
 
 MAX_VALIDITY_ACCESS_TOKEN = 600  # sec (defined by CDS API)
-
+DATE_FORMAT_YMDTHMS = "%Y%m%dt%H%M%S"
 
 def get_bearer_access_token(
     conf,
@@ -33,11 +33,11 @@ def get_bearer_access_token(
     -------
         token (str): access token
         date_generation_access_token (datetime.datetime): date of generation of the token
-        login (str): CDSE account used
-        path_semphore_token (str): path of the semaphore file created to store the token
+        login (str): CDSE account actually used (or the one defined as input or randomly chosen in a group of accounts)
+        path_access_token_file (str): path of the access token semaphore file created to store the token
 
     """
-    path_semphore_token = None
+    path_access_token_file = None
     url_identity = conf["URL_identity"]
     if specific_account is None:
         all_accounts = list(conf[account_group].keys())
@@ -78,19 +78,21 @@ def get_bearer_access_token(
         token = None
     else:
         token = data["access_token"]
-        path_semphore_token = write_token_semphore_file(
+        path_access_token_file = write_token_semaphore_file(
             login=login,
             date_generation_access_token=date_generation_access_token,
             token_dir=conf["token_directory"],
             access_token=token,
         )
-    return token, date_generation_access_token, login, path_semphore_token
+    return token, date_generation_access_token, login, path_access_token_file
 
 
-def write_token_semphore_file(
+def write_token_semaphore_file(
     login, date_generation_access_token, token_dir, access_token
 ):
     """
+    When a we get an access token for a given CDSE account, we can use it for 600 seconds
+    then we need to store it on disk with the date of creation of the token
 
     Parameters
     ----------
@@ -103,19 +105,22 @@ def write_token_semphore_file(
     -------
 
     """
-    path_semphore_token = os.path.join(
+    path_acces_token_file = os.path.join(
         token_dir,
         "CDSE_access_token_%s_%s.txt"
-        % (login, date_generation_access_token.strftime("%Y%m%dt%H%M%S")),
+        % (login, date_generation_access_token.strftime(DATE_FORMAT_YMDTHMS)),
     )
-    fid = open(path_semphore_token, "w")
+    fid = open(path_acces_token_file, "w")
     fid.write(access_token)
     fid.close()
-    return path_semphore_token
+    return path_acces_token_file
 
 
-def get_list_of_exising_token(token_dir, account=None):
+def get_list_of_existing_token_semaphore_file(token_dir, account=None):
     """
+    a bearer access token can be re-used (no need to have one token per download)
+    present method lists all the access token that can be used
+      for a specific account or in general
 
     Parameters
 
@@ -135,7 +140,7 @@ def get_list_of_exising_token(token_dir, account=None):
     lst_token = []
     for ll in lst_token0:
         date_generation_access_token = datetime.datetime.strptime(
-            os.path.basename(ll).split("_")[4].replace(".txt", ""), "%Y%m%dt%H%M%S"
+            os.path.basename(ll).split("_")[4].replace(".txt", ""), DATE_FORMAT_YMDTHMS
         )
         if (
             datetime.datetime.today() - date_generation_access_token
@@ -161,7 +166,7 @@ def remove_semaphore_token_file(token_dir, login, date_generation_access_token):
     path_token = os.path.join(
         token_dir,
         "CDSE_access_token_%s_%s.txt"
-        % (login, date_generation_access_token.strftime("%Y%m%dt%H%M%S")),
+        % (login, date_generation_access_token.strftime(DATE_FORMAT_YMDTHMS)),
     )
     exists = os.path.exists(path_token)
     if (
@@ -174,7 +179,9 @@ def remove_semaphore_token_file(token_dir, login, date_generation_access_token):
 
 
 def get_access_token(email, password):
-    """Helper to retrieve OIDC token."""
+    """Helper to retrieve OIDC token.
+    one can generate as many access token as wanted per CDSE account
+    """
     auth_url = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
     auth_data = {
         "client_id": "cdse-public",
