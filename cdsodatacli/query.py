@@ -206,6 +206,7 @@ def fetch_data(
     querymode="seq",
     email=None,
     password=None,
+    display_tqdm=False,
 ):
     """
     Fetches meta-data of CDSE products based on provided parameters.
@@ -231,13 +232,20 @@ def fetch_data(
         querymode (String): how the queries are send/received to Odata, possibles choices: 'seq' (Sequential) or 'multi' (multithread)
         email (str): CDSE account [optional to be used for PRIVATE data that need authentication]
         password (str): password CDSE account [optional to be used for PRIVATE data that need authentication]
+        display_tqdm (bool): True -> tqdm progress bar for each queries [optional, default=False]
+
     Return:
         (pd.DataFame): data containing the fetched results.
     """
     collected_data = None
     # split the gdf in subsets based on the query_id
     unique_query_ids = gdf["id_query"].unique()
-    for query_id in unique_query_ids:
+    pbar = tqdm(range(len(unique_query_ids)),disable=not display_tqdm,
+                desc='individual CDSE queries')
+    # for query_id in unique_query_ids:
+    
+    for qi in pbar:
+        query_id = unique_query_ids[qi]
         gdf_subset = gdf[gdf["id_query"] == query_id]
         logging.info(
             f"fetching data for query_id:{query_id} with {len(gdf_subset)} geometries"
@@ -354,9 +362,8 @@ def apply_slicing_time_to_gdf(gdf, timedelta_slice=None):
             (gdf["end_datetime"] - gdf["start_datetime"]) > timedelta_slice
         ]
         # TO make sure that date does not contain future date
-        now_utc = datetime.datetime.now(datetime.timezone.utc)
-        if maxdate > now_utc:
-            maxdate = now_utc + datetime.timedelta(days=1)
+        if maxdate > datetime.datetime.now(datetime.UTC):
+            maxdate = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=1)
             # maxdate = datetime.datetime.utcnow().replace(
             #     tzinfo=pytz.UTC
             # ) + datetime.timedelta(days=1)
@@ -471,7 +478,7 @@ def normalize_gdf(
     # if there is no geometry, set it to world polygon
     if "geometry" not in norm_gdf:
         norm_gdf["geometry"] = len(norm_gdf) * [worldpolygon]
-    norm_gdf["geometry"] = norm_gdf["geometry"].fillna(
+    norm_gdf["geometry"].fillna(
         value=worldpolygon, inplace=True
     )  # to replace None by NaN
     # since pandas==3.0.0 fillna does not replace None.
@@ -925,120 +932,120 @@ def sea_percent(collected_data, min_sea_percent=None):
     logging.info(f"sea_percent processing time:{processing_time}s")
     return collected_data
 
+# method now useless but working. kept for reference.
+# def core_query_logged(
+#     email=None,
+#     password=None,
+#     type=None,
+#     startdate=None,
+#     enddate=None,
+#     unit=None,
+#     output=None,
+#     limit=1000,
+# ):
+#     """
+#     Core function to query CDSE OData with authentication and keyed arguments.
+#     this method in complementary to cdsodatacli.query.fetch_data() because here we use authentication
+#     and we have keyed arguments instead of a gdf input.
+#     It is used in the context of private data access where authentication is required during IOC periods.
+#     Current limitations:
+#          - no spatial filtering
 
-def core_query_logged(
-    email=None,
-    password=None,
-    type=None,
-    startdate=None,
-    enddate=None,
-    unit=None,
-    output=None,
-    limit=1000,
-):
-    """
-    Core function to query CDSE OData with authentication and keyed arguments.
-    this method in complementary to cdsodatacli.query.fetch_data() because here we use authentication
-    and we have keyed arguments instead of a gdf input.
-    It is used in the context of private data access where authentication is required during IOC periods.
-    Current limitations:
-         - no spatial filtering
-
-    Args:
-        email (str): CDSE account email.
-        password (str): CDSE account password.
-        type (str): Product type (e.g. WV_SLC__1S_PRIVATE).
-        startdate (str): Start date (e.g. 2025-01-01T00:00:00).
-        enddate (str): End date (e.g. 2025-01-31T23:59:59).
-        unit (str): Satellite Unit Identifier (C or D).
-        output (str): Output JSON file path.
-        limit (int): Max records to return.
-    Returns:
-        None
+#     Args:
+#         email (str): CDSE account email.
+#         password (str): CDSE account password.
+#         type (str): Product type (e.g. WV_SLC__1S_PRIVATE).
+#         startdate (str): Start date (e.g. 2025-01-01T00:00:00).
+#         enddate (str): End date (e.g. 2025-01-31T23:59:59).
+#         unit (str): Satellite Unit Identifier (C or D).
+#         output (str): Output JSON file path.
+#         limit (int): Max records to return.
+#     Returns:
+#         None
 
 
-    """
+#     """
 
-    # --- 1. Authentication ---
-    auth_url = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
-    auth_data = {
-        "client_id": "cdse-public",
-        "username": email,
-        "password": password,
-        "grant_type": "password",
-    }
+#     # --- 1. Authentication ---
+#     auth_url = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+#     auth_data = {
+#         "client_id": "cdse-public",
+#         "username": email,
+#         "password": password,
+#         "grant_type": "password",
+#     }
 
-    logging.info(f"[*] Authenticating for {email}...")
-    try:
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        response = requests.post(auth_url, data=auth_data, verify=False)
-        response.raise_for_status()
-        access_token = response.json().get("access_token")
-    except Exception as e:
-        logging.error(f"[-] Auth Error: {e}")
-        if "response" in locals():
-            logging.error(f"Details: {response.text}")
-        sys.exit(1)
+#     logging.info(f"[*] Authenticating for {email}...")
+#     try:
+#         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+#         response = requests.post(auth_url, data=auth_data, verify=False)
+#         response.raise_for_status()
+#         access_token = response.json().get("access_token")
+#     except Exception as e:
+#         logging.error(f"[-] Auth Error: {e}")
+#         if "response" in locals():
+#             logging.error(f"Details: {response.text}")
+#         sys.exit(1)
 
-    # --- 2. OData Query Construction ---
-    odata_url = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products"
+#     # --- 2. OData Query Construction ---
+#     odata_url = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products"
 
-    # Using the specific StringAttribute syntax required by CDSE OData
-    if enddate is None:
-        add_filter_startdate = [
-            f"ContentDate/End ge {startdate}",
-        ]
-        add_filter_enddate = []
-    else:
-        add_filter_enddate = [f"ContentDate/End le {enddate}"]
-        add_filter_startdate = [
-            f"ContentDate/Start ge {startdate}",
-        ]
-    filters = [
-        "Collection/Name eq 'SENTINEL-1'",
-        # f"ContentDate/Start ge {startdate}",
-        # f"ContentDate/End le {enddate}",
-        f"Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq '{type}')",
-        f"Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'platformSerialIdentifier' and att/OData.CSC.StringAttribute/Value eq '{unit}')",
-    ]
-    filters += add_filter_enddate
-    filters += add_filter_startdate
+#     # Using the specific StringAttribute syntax required by CDSE OData
+#     if enddate is None:
+#         add_filter_startdate = [
+#             f"ContentDate/End ge {startdate}",
+#         ]
+#         add_filter_enddate = []
+#     else:
+#         add_filter_enddate = [f"ContentDate/End le {enddate}"]
+#         add_filter_startdate = [
+#             f"ContentDate/Start ge {startdate}",
+#         ]
+#     filters = [
+#         "Collection/Name eq 'SENTINEL-1'",
+#         # f"ContentDate/Start ge {startdate}",
+#         # f"ContentDate/End le {enddate}",
+#         f"Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'productType' and att/OData.CSC.StringAttribute/Value eq '{type}')",
+#         f"Attributes/OData.CSC.StringAttribute/any(att:att/Name eq 'platformSerialIdentifier' and att/OData.CSC.StringAttribute/Value eq '{unit}')",
+#     ]
+#     filters += add_filter_enddate
+#     filters += add_filter_startdate
 
-    odata_filter = " and ".join(filters)
+#     odata_filter = " and ".join(filters)
 
-    params = {
-        "$filter": odata_filter,
-        "$orderby": "ContentDate/Start asc",
-        "$top": limit,
-        "$count": "true",
-    }
+#     params = {
+#         "$filter": odata_filter,
+#         "$orderby": "ContentDate/Start asc",
+#         "$top": limit,
+#         "$count": "true",
+#     }
 
-    headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
+#     headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
 
-    logging.info("[*] Querying CDSE OData...")
-    logging.debug(f"URL: {odata_url}")
-    logging.debug(f"Params: {params}")
-    # logging.debug(f"Headers: {headers}")
-    try:
-        # Requests automatically handles URL encoding of spaces, quotes, and symbols
-        search_res = requests.get(
-            odata_url, params=params, headers=headers, verify=False
-        )
-        search_res.raise_for_status()
-        data = search_res.json()
+#     logging.info("[*] Querying CDSE OData...")
+#     logging.debug(f"URL: {odata_url}")
+#     logging.debug(f"Params: {params}")
+#     # logging.debug(f"Headers: {headers}")
+#     try:
+#         # Requests automatically handles URL encoding of spaces, quotes, and symbols
+#         search_res = requests.get(
+#             odata_url, params=params, headers=headers, verify=False
+#         )
+#         search_res.raise_for_status()
+#         data = search_res.json()
 
-        # --- 3. Save Results ---
-        with open(output, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+#         # --- 3. Save Results ---
+#         with open(output, "w", encoding="utf-8") as f:
+#             json.dump(data, f, indent=2)
 
-        count = len(data.get("value", []))
-        logging.info(f"[+] Success! {count} products found.")
-        logging.info(f"[+] Results saved to: {output}")
+#         count = len(data.get("value", []))
+#         logging.info(f"[+] Success! {count} products found.")
+#         logging.info(f"[+] Results saved to: {output}")
 
-    except Exception as e:
-        logging.error(f"[-] Search Error: {e}")
-        if "search_res" in locals():
-            logging.error(f"Response: {search_res.text}")
-        sys.exit(1)
+#     except Exception as e:
+#         logging.error(f"[-] Search Error: {e}")
+#         if "search_res" in locals():
+#             logging.error(f"Response: {search_res.text}")
+#         sys.exit(1)
 
-    logging.info("finish")
+#     logging.info("finish")
