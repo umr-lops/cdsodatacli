@@ -18,13 +18,13 @@ import traceback
 import warnings
 from geodatasets import get_path
 import numpy as np
-import urllib3
-import sys
 from cdsodatacli.fetch_access_token import get_access_token
 
 
 DEFAULT_TOP_ROWS_PER_QUERY = 1000
-
+WORLDPOLYGON = shapely.wkt.loads(
+        "POLYGON((-180 -90,180 -90,180 90,-180 90,-180 -90))"
+    )
 
 def time_based_hash(length=7):
     now_ms = str(int(time.time() * 1000))  # milliseconds
@@ -472,14 +472,12 @@ def normalize_gdf(
         # )
         # # no slicing
         # timedelta_slice = None
-    worldpolygon = shapely.wkt.loads(
-        "POLYGON((-180 -90,180 -90,180 90,-180 90,-180 -90))"
-    )
+
     # if there is no geometry, set it to world polygon
     if "geometry" not in norm_gdf:
-        norm_gdf["geometry"] = len(norm_gdf) * [worldpolygon]
+        norm_gdf["geometry"] = len(norm_gdf) * [WORLDPOLYGON]
     norm_gdf["geometry"].fillna(
-        value=worldpolygon, inplace=True
+        value=WORLDPOLYGON, inplace=True
     )  # to replace None by NaN
     # since pandas==3.0.0 fillna does not replace None.
     for ggi, gg in enumerate(norm_gdf["geometry"]):
@@ -491,7 +489,7 @@ def normalize_gdf(
                 shapely.geometry.Point,
             ),
         ):
-            norm_gdf.at[ggi, "geometry"] = worldpolygon
+            norm_gdf.at[ggi, "geometry"] = WORLDPOLYGON
 
     # convert naives dates to utc
     for date_col in norm_gdf.select_dtypes(include=["datetime64"]).columns:

@@ -7,6 +7,7 @@ import datetime
 import time
 import os
 import random
+import secrets
 import pandas as pd
 import geopandas as gpd
 from requests.exceptions import ChunkedEncodingError
@@ -23,7 +24,7 @@ from cdsodatacli.session import (
     get_sessions_download_available,
     MAX_SESSION_PER_ACCOUNT,
 )
-from cdsodatacli.query import fetch_data
+from cdsodatacli.query import fetch_data,WORLDPOLYGON
 from cdsodatacli.utils import (
     get_conf,
     check_safe_in_archive,
@@ -565,6 +566,8 @@ def add_missing_cdse_hash_ids_in_listing(listing_path,display_tqdm=False):
     df_raw = df_raw[df_raw["safenames"].str.contains(".SAFE")]
     list_safe_a = df_raw["safenames"].values
     delta = datetime.timedelta(seconds=1)
+    # We generate 8 bytes (16 chars) and slice off the last one to get 15.
+    hash_list = [secrets.token_hex(8)[:15] for _ in range(len(list_safe_a))]
     gdf = gpd.GeoDataFrame(
         {
             # "start_datetime" : [ None  ],
@@ -579,13 +582,14 @@ def add_missing_cdse_hash_ids_in_listing(listing_path,display_tqdm=False):
             #     datetime.datetime.strptime(jj.split("_")[6], "%Y%m%dT%H%M%S") + delta
             #     for jj in list_safe_a
             # ],
-            "geometry": np.tile([None], len(list_safe_a)),
+            "geometry": np.tile([WORLDPOLYGON], len(list_safe_a)),
             "collection": np.tile(["SENTINEL-1"], len(list_safe_a)),
             "name": list_safe_a,
             "sensormode": [ExplodeSAFE(jj).mode for jj in list_safe_a],
             "producttype": [ExplodeSAFE(jj).product[0:3] for jj in list_safe_a],
             "Attributes": np.tile([None], len(list_safe_a)),
-            "id_query": np.tile(["dummy2getProducthash"], len(list_safe_a)),
+            #"id_query": np.tile(["dummy2getProducthash"], len(list_safe_a)),
+            "id_query": hash_list,
         }
     )
     sea_min_pct = None
