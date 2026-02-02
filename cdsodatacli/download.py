@@ -548,12 +548,13 @@ def test_listing_content(listing_path):
     return listing_OK
 
 
-def add_missing_cdse_hash_ids_in_listing(listing_path):
+def add_missing_cdse_hash_ids_in_listing(listing_path,display_tqdm=False):
     """
 
     Parameters
     ----------
     listing_path (str):
+    display_tqdm (bool): True -> tqdm progress bar for each queries [optional, default=False]
 
     Returns
     -------
@@ -589,7 +590,8 @@ def add_missing_cdse_hash_ids_in_listing(listing_path):
     )
     sea_min_pct = None
     if len(gdf["geometry"]) > 0:
-        collected_data_norm = fetch_data(gdf, min_sea_percent=sea_min_pct)
+        collected_data_norm = fetch_data(gdf, min_sea_percent=sea_min_pct,
+                                          display_tqdm=display_tqdm)
         if collected_data_norm is not None:
             res = collected_data_norm[["Id", "Name"]]
             res.rename(columns={"Name": "safename"}, inplace=True)
