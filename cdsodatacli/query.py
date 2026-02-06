@@ -243,14 +243,14 @@ def fetch_data(
     pbar = tqdm(range(len(unique_query_ids)),disable=not display_tqdm,
                 desc='individual CDSE queries')
     # for query_id in unique_query_ids:
-    
+    cpt = defaultdict(int)
     for qi in pbar:
         query_id = unique_query_ids[qi]
         gdf_subset = gdf[gdf["id_query"] == query_id]
         logging.info(
             f"fetching data for query_id:{query_id} with {len(gdf_subset)} geometries"
         )
-        data_subset = fetch_data_single_query(
+        data_subset,cpt = fetch_data_single_query(
             gdf=gdf_subset,
             timedelta_slice=timedelta_slice,
             min_sea_percent=min_sea_percent,
@@ -259,7 +259,9 @@ def fetch_data(
             querymode=querymode,
             email=email,
             password=password,
+            cpt=cpt
         )
+        pbar.set_description('queries: %s'%cpt)
         if collected_data is None:
             collected_data = data_subset
         else:
@@ -276,6 +278,7 @@ def fetch_data_single_query(
     timedelta_slice=None,
     email=None,
     password=None,
+    cpt=None
 ):
     """
     Fetches data based on provided parameters.
@@ -289,9 +292,12 @@ def fetch_data_single_query(
        timedelta_slice (datetime.timedelta) : optional param to split the queries wrt time in order to avoid missing product because of the 1000 product max returned by Odata
        email (str): CDSE account [optional to be used for PRIVATE data that need authentication]
        password (str): password CDSE account [optional to be used for PRIVATE data that need authentication]
+       cpt (collections.defaultdict): counters
     Return:
         (pd.DataFame): data containing the fetched results.
     """
+    if cpt is None:
+        cpt = defaultdict(int)
     if gdf is not None and isinstance(gdf, gpd.GeoDataFrame):
         gdf_norm = normalize_gdf(
             gdf=gdf,
@@ -310,16 +316,18 @@ def fetch_data_single_query(
     else:
         urls_plus_headers = {"urls": [], "headers": None}
     if querymode == "seq":
-        collected_data = fetch_data_from_urls_sequential(
-            urls_plus_headers=urls_plus_headers, cache_dir=cache_dir
+        collected_data,cpt = fetch_data_from_urls_sequential(
+            urls_plus_headers=urls_plus_headers, cache_dir=cache_dir,
+            cpt=cpt
         )
     elif querymode == "multi":
         maxworker = 10
         logging.info("maximum // queries : %s", maxworker)
-        collected_data = fetch_data_from_urls_multithread(
+        collected_data,cpt = fetch_data_from_urls_multithread(
             urls_plus_headers=urls_plus_headers,
             cache_dir=cache_dir,
             max_workers=maxworker,
+            cpt=cpt
         )
 
     # Convert all Multipolygon to Polygon and add geometry as new column
@@ -344,7 +352,7 @@ def fetch_data_single_query(
     else:
         full_data = collected_data
 
-    return full_data
+    return full_data,cpt
 
 
 def apply_slicing_time_to_gdf(gdf, timedelta_slice=None):
@@ -655,6 +663,8 @@ def get_cache_filename(url, cache_dir=None) -> str:
 def fetch_one_url(url, cpt, index, cache_dir, headers=None):
     """
 
+    do a request on CDSE OData API to get meta-data on products
+
     Parameters
     ----------
     url (str): CDS OData query URL
@@ -669,6 +679,7 @@ def fetch_one_url(url, cpt, index, cache_dir, headers=None):
     collected_data (pandas.GeoDataframe)
 
     """
+    timeout = 10 # seconds
     json_data = None
     collected_data = None
     if cache_dir is not None:
@@ -685,8 +696,11 @@ def fetch_one_url(url, cpt, index, cache_dir, headers=None):
         logging.debug("no cache file -> go for query CDS")
         cpt["urls_tested"] += 1
         try:
-            json_data = requests.get(url, headers=headers).json()
+            json_data = requests.get(url, headers=headers,
+                timeout=timeout).json()
             cpt["urls_OK"] += 1
+        except requests.exceptions.ReadTimeout:
+            cpt['urls_timeout'] += 1
         except KeyboardInterrupt:
             raise ("keyboard interrupt")
         except ValueError:
@@ -726,7 +740,7 @@ def fetch_one_url(url, cpt, index, cache_dir, headers=None):
     return cpt, collected_data
 
 
-def fetch_data_from_urls_sequential(urls_plus_headers, cache_dir) -> pd.DataFrame:
+def fetch_data_from_urls_sequential(urls_plus_headers, cache_dir, cpt=None) -> pd.DataFrame:
     """
 
     Parameters
@@ -735,6 +749,7 @@ def fetch_data_from_urls_sequential(urls_plus_headers, cache_dir) -> pd.DataFram
         'urls' : list of tuples (id_original_query, url)
         'headers' : authentication headers (None if no email/password)
     cache_dir (str)
+    cpt (collections.defaultdict): counters
 
     Returns
     -------
@@ -742,7 +757,8 @@ def fetch_data_from_urls_sequential(urls_plus_headers, cache_dir) -> pd.DataFram
     """
     urls = urls_plus_headers["urls"]
     headers = urls_plus_headers["headers"]
-    cpt = defaultdict(int)
+    if cpt is None:
+        cpt = defaultdict(int)
     start_time = time.time()
     collected_data_x = []
     collected_data_final = None
@@ -771,10 +787,10 @@ def fetch_data_from_urls_sequential(urls_plus_headers, cache_dir) -> pd.DataFram
         assert (
             "id_original_query" in collected_data_final
         ), "id_original_query column missing in collected data"
-    return collected_data_final
+    return collected_data_final, cpt
 
 
-def fetch_data_from_urls_multithread(urls_plus_headers, cache_dir=None, max_workers=50):
+def fetch_data_from_urls_multithread(urls_plus_headers, cache_dir=None, max_workers=50, cpt=None):
     """
 
     Parameters
@@ -784,13 +800,15 @@ def fetch_data_from_urls_multithread(urls_plus_headers, cache_dir=None, max_work
         'headers' : authentication headers (None if no email/password)
     cache_dir (str): directory to store cache files [optional, default=None -> no cache]
     max_workers (int): maximum number of parallel threads [optional, default=50]
+    cpt (collections.defaultdict): counters
 
     Returns
     -------
     collected_data (pandas.GeoDataframe): containing the fetched results.
     """
     collected_data = pd.DataFrame()
-    cpt = defaultdict(int)
+    if cpt is None:
+        cpt = defaultdict(int)
     urls = urls_plus_headers["urls"]
     headers = urls_plus_headers["headers"]
     with (
@@ -815,7 +833,7 @@ def fetch_data_from_urls_multithread(urls_plus_headers, cache_dir=None, max_work
                     collected_data = pd.concat([collected_data, df])
             pbar.update(1)
     logging.info("counter: %s", cpt)
-    return collected_data
+    return collected_data, cpt
 
 
 # def fetch_url(url):

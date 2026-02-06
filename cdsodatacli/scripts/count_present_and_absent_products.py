@@ -7,13 +7,13 @@ from cdsodatacli.utils import get_conf
 
 def entrypoint(outputdir, cdsodatacli_conf_file, list_safename):
     cpt = defaultdict(int)
-    cpt["products_in_initial_listing"] = len(list_safename)
     conf = get_conf(path_config_file=cdsodatacli_conf_file)
     # df = pd.DataFrame(
     #     {"safe": list_safename, "status": np.zeros(len(list_safename))}
     # )
     df = pd.read_csv(list_safename, header=None, names=["safe"])
     logging.debug("Initial DataFrame:\n%s", df)
+    cpt["products_in_initial_listing"] = len(df)
     f2, cpt = filter_product_already_present(
         cpt, df, outputdir, force_download=False, cdsodatacli_conf=conf
     )
