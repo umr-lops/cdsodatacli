@@ -22,9 +22,8 @@ from cdsodatacli.fetch_access_token import get_access_token
 
 
 DEFAULT_TOP_ROWS_PER_QUERY = 1000
-WORLDPOLYGON = shapely.wkt.loads(
-        "POLYGON((-180 -90,180 -90,180 90,-180 90,-180 -90))"
-    )
+WORLDPOLYGON = shapely.wkt.loads("POLYGON((-180 -90,180 -90,180 90,-180 90,-180 -90))")
+
 
 def time_based_hash(length=7):
     now_ms = str(int(time.time() * 1000))  # milliseconds
@@ -240,8 +239,11 @@ def fetch_data(
     collected_data = None
     # split the gdf in subsets based on the query_id
     unique_query_ids = gdf["id_query"].unique()
-    pbar = tqdm(range(len(unique_query_ids)),disable=not display_tqdm,
-                desc='individual CDSE queries')
+    pbar = tqdm(
+        range(len(unique_query_ids)),
+        disable=not display_tqdm,
+        desc="individual CDSE queries",
+    )
     # for query_id in unique_query_ids:
     cpt = defaultdict(int)
     for qi in pbar:
@@ -250,7 +252,7 @@ def fetch_data(
         logging.info(
             f"fetching data for query_id:{query_id} with {len(gdf_subset)} geometries"
         )
-        data_subset,cpt = fetch_data_single_query(
+        data_subset, cpt = fetch_data_single_query(
             gdf=gdf_subset,
             timedelta_slice=timedelta_slice,
             min_sea_percent=min_sea_percent,
@@ -259,9 +261,9 @@ def fetch_data(
             querymode=querymode,
             email=email,
             password=password,
-            cpt=cpt
+            cpt=cpt,
         )
-        pbar.set_description('queries: %s'%cpt)
+        pbar.set_description("queries: %s" % cpt)
         if collected_data is None:
             collected_data = data_subset
         else:
@@ -278,7 +280,7 @@ def fetch_data_single_query(
     timedelta_slice=None,
     email=None,
     password=None,
-    cpt=None
+    cpt=None,
 ):
     """
     Fetches data based on provided parameters.
@@ -316,18 +318,17 @@ def fetch_data_single_query(
     else:
         urls_plus_headers = {"urls": [], "headers": None}
     if querymode == "seq":
-        collected_data,cpt = fetch_data_from_urls_sequential(
-            urls_plus_headers=urls_plus_headers, cache_dir=cache_dir,
-            cpt=cpt
+        collected_data, cpt = fetch_data_from_urls_sequential(
+            urls_plus_headers=urls_plus_headers, cache_dir=cache_dir, cpt=cpt
         )
     elif querymode == "multi":
         maxworker = 10
         logging.info("maximum // queries : %s", maxworker)
-        collected_data,cpt = fetch_data_from_urls_multithread(
+        collected_data, cpt = fetch_data_from_urls_multithread(
             urls_plus_headers=urls_plus_headers,
             cache_dir=cache_dir,
             max_workers=maxworker,
-            cpt=cpt
+            cpt=cpt,
         )
 
     # Convert all Multipolygon to Polygon and add geometry as new column
@@ -352,7 +353,7 @@ def fetch_data_single_query(
     else:
         full_data = collected_data
 
-    return full_data,cpt
+    return full_data, cpt
 
 
 def apply_slicing_time_to_gdf(gdf, timedelta_slice=None):
@@ -679,7 +680,7 @@ def fetch_one_url(url, cpt, index, cache_dir, headers=None):
     collected_data (pandas.GeoDataframe)
 
     """
-    timeout = 10 # seconds
+    timeout = 10  # seconds
     json_data = None
     collected_data = None
     if cache_dir is not None:
@@ -696,11 +697,10 @@ def fetch_one_url(url, cpt, index, cache_dir, headers=None):
         logging.debug("no cache file -> go for query CDS")
         cpt["urls_tested"] += 1
         try:
-            json_data = requests.get(url, headers=headers,
-                timeout=timeout).json()
+            json_data = requests.get(url, headers=headers, timeout=timeout).json()
             cpt["urls_OK"] += 1
         except requests.exceptions.ReadTimeout:
-            cpt['urls_timeout'] += 1
+            cpt["urls_timeout"] += 1
         except KeyboardInterrupt:
             raise ("keyboard interrupt")
         except ValueError:
@@ -740,7 +740,9 @@ def fetch_one_url(url, cpt, index, cache_dir, headers=None):
     return cpt, collected_data
 
 
-def fetch_data_from_urls_sequential(urls_plus_headers, cache_dir, cpt=None) -> pd.DataFrame:
+def fetch_data_from_urls_sequential(
+    urls_plus_headers, cache_dir, cpt=None
+) -> pd.DataFrame:
     """
 
     Parameters
@@ -790,7 +792,9 @@ def fetch_data_from_urls_sequential(urls_plus_headers, cache_dir, cpt=None) -> p
     return collected_data_final, cpt
 
 
-def fetch_data_from_urls_multithread(urls_plus_headers, cache_dir=None, max_workers=50, cpt=None):
+def fetch_data_from_urls_multithread(
+    urls_plus_headers, cache_dir=None, max_workers=50, cpt=None
+):
     """
 
     Parameters
@@ -947,6 +951,7 @@ def sea_percent(collected_data, min_sea_percent=None):
     processing_time = end_time - start_time
     logging.info(f"sea_percent processing time:{processing_time}s")
     return collected_data
+
 
 # method now useless but working. kept for reference.
 # def core_query_logged(

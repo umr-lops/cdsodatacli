@@ -24,7 +24,7 @@ from cdsodatacli.session import (
     get_sessions_download_available,
     MAX_SESSION_PER_ACCOUNT,
 )
-from cdsodatacli.query import fetch_data,WORLDPOLYGON
+from cdsodatacli.query import fetch_data, WORLDPOLYGON
 from cdsodatacli.utils import (
     get_conf,
     check_safe_in_archive,
@@ -188,7 +188,9 @@ def filter_product_already_present(
     all_output_filepath = []
     all_urls_to_download = []
     index_to_download = []
-    for ii, safename_product in enumerate(df["safe"]):
+    for ii in tqdm(range(len(df["safe"]))):
+        # for ii, safename_product in enumerate(df["safe"]):
+        safename_product = df["safe"].iloc[ii]
         to_download = False
         if force_download:
             to_download = True
@@ -549,7 +551,7 @@ def test_listing_content(listing_path):
     return listing_OK
 
 
-def add_missing_cdse_hash_ids_in_listing(listing_path,display_tqdm=False):
+def add_missing_cdse_hash_ids_in_listing(listing_path, display_tqdm=False):
     """
 
     Parameters
@@ -588,14 +590,15 @@ def add_missing_cdse_hash_ids_in_listing(listing_path,display_tqdm=False):
             "sensormode": [ExplodeSAFE(jj).mode for jj in list_safe_a],
             "producttype": [ExplodeSAFE(jj).product[0:3] for jj in list_safe_a],
             "Attributes": np.tile([None], len(list_safe_a)),
-            #"id_query": np.tile(["dummy2getProducthash"], len(list_safe_a)),
+            # "id_query": np.tile(["dummy2getProducthash"], len(list_safe_a)),
             "id_query": hash_list,
         }
     )
     sea_min_pct = None
     if len(gdf["geometry"]) > 0:
-        collected_data_norm = fetch_data(gdf, min_sea_percent=sea_min_pct,
-                                          display_tqdm=display_tqdm)
+        collected_data_norm = fetch_data(
+            gdf, min_sea_percent=sea_min_pct, display_tqdm=display_tqdm
+        )
         if collected_data_norm is not None:
             res = collected_data_norm[["Id", "Name"]]
             res.rename(columns={"Name": "safename"}, inplace=True)
