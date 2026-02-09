@@ -7,6 +7,7 @@ import datetime
 import time
 import os
 import random
+import secrets
 import pandas as pd
 import geopandas as gpd
 from requests.exceptions import ChunkedEncodingError
@@ -23,7 +24,7 @@ from cdsodatacli.session import (
     get_sessions_download_available,
     MAX_SESSION_PER_ACCOUNT,
 )
-from cdsodatacli.query import fetch_data
+from cdsodatacli.query import fetch_data, WORLDPOLYGON
 from cdsodatacli.utils import (
     get_conf,
     check_safe_in_archive,
@@ -187,7 +188,9 @@ def filter_product_already_present(
     all_output_filepath = []
     all_urls_to_download = []
     index_to_download = []
-    for ii, safename_product in enumerate(df["safe"]):
+    for ii in tqdm(range(len(df["safe"]))):
+        # for ii, safename_product in enumerate(df["safe"]):
+        safename_product = df["safe"].iloc[ii]
         to_download = False
         if force_download:
             to_download = True
@@ -548,12 +551,13 @@ def test_listing_content(listing_path):
     return listing_OK
 
 
-def add_missing_cdse_hash_ids_in_listing(listing_path):
+def add_missing_cdse_hash_ids_in_listing(listing_path, display_tqdm=False):
     """
 
     Parameters
     ----------
     listing_path (str):
+    display_tqdm (bool): True -> tqdm progress bar for each queries [optional, default=False]
 
     Returns
     -------
@@ -564,6 +568,8 @@ def add_missing_cdse_hash_ids_in_listing(listing_path):
     df_raw = df_raw[df_raw["safenames"].str.contains(".SAFE")]
     list_safe_a = df_raw["safenames"].values
     delta = datetime.timedelta(seconds=1)
+    # We generate 8 bytes (16 chars) and slice off the last one to get 15.
+    hash_list = [secrets.token_hex(8)[:15] for _ in range(len(list_safe_a))]
     gdf = gpd.GeoDataFrame(
         {
             # "start_datetime" : [ None  ],
@@ -578,18 +584,21 @@ def add_missing_cdse_hash_ids_in_listing(listing_path):
             #     datetime.datetime.strptime(jj.split("_")[6], "%Y%m%dT%H%M%S") + delta
             #     for jj in list_safe_a
             # ],
-            "geometry": np.tile([None], len(list_safe_a)),
+            "geometry": np.tile([WORLDPOLYGON], len(list_safe_a)),
             "collection": np.tile(["SENTINEL-1"], len(list_safe_a)),
             "name": list_safe_a,
             "sensormode": [ExplodeSAFE(jj).mode for jj in list_safe_a],
             "producttype": [ExplodeSAFE(jj).product[0:3] for jj in list_safe_a],
             "Attributes": np.tile([None], len(list_safe_a)),
-            "id_query": np.tile(["dummy2getProducthash"], len(list_safe_a)),
+            # "id_query": np.tile(["dummy2getProducthash"], len(list_safe_a)),
+            "id_query": hash_list,
         }
     )
     sea_min_pct = None
     if len(gdf["geometry"]) > 0:
-        collected_data_norm = fetch_data(gdf, min_sea_percent=sea_min_pct)
+        collected_data_norm = fetch_data(
+            gdf, min_sea_percent=sea_min_pct, display_tqdm=display_tqdm
+        )
         if collected_data_norm is not None:
             res = collected_data_norm[["Id", "Name"]]
             res.rename(columns={"Name": "safename"}, inplace=True)
@@ -716,10 +725,15 @@ def download_list_product_sequential(
         )
         if status_meaning == "OK":
             all_speeds.append(speed)
-            df_products_downloadable["status"].iloc[ii] = 1
+            # Using .at with the specific index label is safe and fast
+            df_products_downloadable.at[
+                df_products_downloadable.index[ii], "status"
+            ] = 1
             cpt["successful_download"] += 1
         else:
-            df_products_downloadable["status"].iloc[ii] = -1
+            df_products_downloadable.at[
+                df_products_downloadable.index[ii], "status"
+            ] = -1
         cpt["status_%s" % status_meaning] += 1
         # except KeyboardInterrupt:
         #     cpt["interrupted"] += 1
