@@ -120,7 +120,8 @@ def add_ids_to_listing_iterative(input_listing, output_listing=None):
     logging.info("Number of lines in the input listing: %s", len(df))
     df_target = df.assign(id=np.nan)
     # cpt_ids_found = (df_target["id"].isna() == False).sum()
-    cpt_ids_found = (not df_target["id"].isna()).sum()
+    # cpt_ids_found = (not df_target["id"].isna()).sum()
+    cpt_ids_found = df_target["id"].notna().sum()
     logging.info("cpt_ids_found %d", cpt_ids_found)
 
     tmplisting = input_listing
@@ -159,7 +160,8 @@ def add_ids_to_listing_iterative(input_listing, output_listing=None):
         dfmissing = df_target[(df_target["id"].isna())]
 
         # Si on n'a rien trouvé de nouveau dans cette boucle, inutile de continuer indéfiniment
-        new_cpt = (not df_target["id"].isna()).sum()
+        # new_cpt = (not df_target["id"].isna()).sum()
+        new_cpt = df_target["id"].notna().sum()
         if new_cpt == cpt_ids_found and loop_cpt > 1:
             logging.warning(
                 "Aucun nouvel ID trouvé lors de cette itération, arrêt de la boucle."
