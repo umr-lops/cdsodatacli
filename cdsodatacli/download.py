@@ -726,10 +726,14 @@ def download_list_product_sequential(
         if status_meaning == "OK":
             all_speeds.append(speed)
             # Using .at with the specific index label is safe and fast
-            df_products_downloadable.at[df_products_downloadable.index[ii], "status"] = 1
+            df_products_downloadable.at[
+                df_products_downloadable.index[ii], "status"
+            ] = 1
             cpt["successful_download"] += 1
         else:
-            df_products_downloadable.at[df_products_downloadable.index[ii], "status"] = -1
+            df_products_downloadable.at[
+                df_products_downloadable.index[ii], "status"
+            ] = -1
         cpt["status_%s" % status_meaning] += 1
         # except KeyboardInterrupt:
         #     cpt["interrupted"] += 1

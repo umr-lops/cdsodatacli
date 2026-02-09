@@ -490,7 +490,9 @@ def normalize_gdf(
     norm_gdf["geometry"] = norm_gdf["geometry"].fillna(WORLDPOLYGON)
 
     # Ensure every entry is a valid shapely geometry object (defensive check)
-    is_geom = norm_gdf["geometry"].apply(lambda x: isinstance(x, shapely.geometry.base.BaseGeometry))
+    is_geom = norm_gdf["geometry"].apply(
+        lambda x: isinstance(x, shapely.geometry.base.BaseGeometry)
+    )
     norm_gdf.loc[~is_geom, "geometry"] = WORLDPOLYGON
 
     # convert naives dates to utc
