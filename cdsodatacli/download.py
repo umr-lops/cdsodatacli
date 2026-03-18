@@ -1,5 +1,3 @@
-import subprocess
-
 import requests
 import logging
 from tqdm import tqdm
@@ -7,7 +5,8 @@ import datetime
 import time
 import os
 import random
-import secrets
+import traceback
+import shutil
 import pandas as pd
 import geopandas as gpd
 from requests.exceptions import ChunkedEncodingError
@@ -33,7 +32,8 @@ from cdsodatacli.utils import (
 )
 from cdsodatacli.product_parser import ExplodeSAFE
 from collections import defaultdict
-CHECK_INTERVAL = 1800 # seconds
+
+CHECK_INTERVAL = 1800  # seconds
 # chunksize = 4096
 chunksize = 8192  # like in the CDSE example
 MAX_RETRIES = 2
@@ -146,14 +146,24 @@ def CDS_Odata_download_one_product_v2(
         logging.debug("remove empty file %s", output_filepath_tmp)
         os.remove(output_filepath_tmp)
     elapsed_time = time.time() - t0
-    if status == 200:  # means OK download
+
+    # Dans CDS_Odata_download_one_product_v2, utiliser shutil.copy2 + os.remove
+    # directement, sans passer par shutil.move qui retente os.rename en interne
+    if status == 200 and os.path.exists(output_filepath_tmp):
         speed = total_length / elapsed_time
-        # shutil.move(output_filepath_tmp, output_filepath)
-        status = subprocess.check_output(
-            "mv " + output_filepath_tmp + " " + output_filepath, shell=True
-        )
-        logging.debug("move status: %s", status)
-        os.chmod(output_filepath, mode=0o0775)
+        try:
+            shutil.copy2(output_filepath_tmp, output_filepath)
+            os.remove(output_filepath_tmp)
+            os.chmod(output_filepath, mode=0o0775)
+        except Exception as e:
+            logging.error("Failed to move %s: %s", output_filepath_tmp, e)
+            if os.path.exists(output_filepath_tmp):
+                os.remove(output_filepath_tmp)  # nettoyer quoi qu'il arrive
+            status_meaning = "MoveError"
+
+        # except OSError as e:
+        #     logging.error("Failed to move %s: %s", output_filepath_tmp, e)
+        #     status_meaning = "MoveError"
     logging.debug("time to download this product: %1.1f sec", elapsed_time)
     logging.debug("average download speed: %1.1fMo/sec", speed)
     return speed, status_meaning, safename_base, semaphore_token_file
@@ -195,15 +205,20 @@ def filter_product_already_present(
         to_download = False
         if force_download:
             to_download = True
-        if check_safe_in_archive(safename=safename_product, conf=cdsodatacli_conf):
-            cpt["archived_product"] += 1
+        is_in_archive, archive_file = check_safe_in_archive(
+            safename=safename_product, conf=cdsodatacli_conf
+        )
+        if is_in_archive:
+            beg_archive = ("-").join(archive_file.split("/")[0:3])
+            cpt["preproc-archive_%s" % beg_archive] += 1
+            cpt["preproc-archived_product"] += 1
         elif check_safe_in_spool(safename=safename_product, conf=cdsodatacli_conf):
-            cpt["in_spool_product"] += 1
+            cpt["preproc-in_spool_product"] += 1
         elif check_safe_in_outputdir(outputdir=outputdir, safename=safename_product):
-            cpt["in_outdir_product"] += 1
+            cpt["preproc-in_outdir_product"] += 1
         else:
             to_download = True
-            cpt["product_absent_from_local_disks"] += 1
+            cpt["preproc-product_absent_from_local_disks"] += 1
         if to_download:
             index_to_download.append(ii)
             if id_present:
@@ -410,7 +425,9 @@ def download_list_product(
     cpt = defaultdict(int)
     all_speeds = []
     cpt["products_in_initial_listing"] = len(list_id)
-    lst_usable_tokens = get_list_of_existing_token_semaphore_file(token_dir=conf["token_directory"])
+    lst_usable_tokens = get_list_of_existing_token_semaphore_file(
+        token_dir=conf["token_directory"]
+    )
     if lst_usable_tokens == []:  # in case no token ready to be used -> create new one
         (
             access_token,
@@ -552,16 +569,20 @@ def test_listing_content(listing_path):
     return listing_OK
 
 
-def add_missing_cdse_hash_ids_in_listing(listing_path, display_tqdm=False):
+def add_missing_cdse_hash_ids_in_listing(
+    listing_path, display_tqdm=False, email=None, password=None
+):
     """
+    Add a column of CDSE hash id in a listing of products to download based on the safenames. This is useful for instance for the private data IOC products since the CDSE Odata search does not return the hash id for those products but only the safename. The method is using the same query method as the one used in the CDSE Odata search script (opensearch_private_data_IOC.py) to retrieve the hash id associated to each safename.
 
-    Parameters
-    ----------
-    listing_path (str):
-    display_tqdm (bool): True -> tqdm progress bar for each queries [optional, default=False]
+    Args:
+        listing_path (str):
+        display_tqdm (bool): True -> tqdm progress bar for each queries [optional, default=False]
+        email (str): email of the CDSE account to use for queries [optional, default None -> use cdsodatacli default behavior]
+        password (str): password of the CDSE account to use for queries [optional, default None -> use cdsodatacli default behavior]
 
-    Returns
-    -------
+    Returns:
+        res (pd.DataFrame): dataframe with 2 columns "id" and "safename" containing the hash id provided by CDSE Odata and the safename of the product
 
     """
     res = pd.DataFrame({"id": [], "safename": []})
@@ -570,7 +591,17 @@ def add_missing_cdse_hash_ids_in_listing(listing_path, display_tqdm=False):
     list_safe_a = df_raw["safenames"].values
     delta = datetime.timedelta(seconds=1)
     # We generate 8 bytes (16 chars) and slice off the last one to get 15.
-    hash_list = [secrets.token_hex(8)[:15] for _ in range(len(list_safe_a))]
+    # hash_list_queries = [secrets.token_hex(8)[:15] for _ in range(len(list_safe_a))] # no efficient in this case.
+    hash_list_queries = np.tile(["batch_query"], len(list_safe_a))
+    # specific for private data IOC (S1D for instance)
+    product_types = []
+    for ii in range(len(list_safe_a)):
+        if list_safe_a[ii].startswith("S1D"):
+            product_types.append(list_safe_a[ii][4:14] + "_PRIVATE")
+
+        else:
+            product_types.append(list_safe_a[ii][4:14])
+    # in product_types API expect for instance IW_GRDH_1S or WV_SLC__1S_PRIVATE.
     gdf = gpd.GeoDataFrame(
         {
             # "start_datetime" : [ None  ],
@@ -589,16 +620,21 @@ def add_missing_cdse_hash_ids_in_listing(listing_path, display_tqdm=False):
             "collection": np.tile(["SENTINEL-1"], len(list_safe_a)),
             "name": list_safe_a,
             "sensormode": [ExplodeSAFE(jj).mode for jj in list_safe_a],
-            "producttype": [ExplodeSAFE(jj).product[0:3] for jj in list_safe_a],
+            "producttype": product_types,
             "Attributes": np.tile([None], len(list_safe_a)),
             # "id_query": np.tile(["dummy2getProducthash"], len(list_safe_a)),
-            "id_query": hash_list,
+            "id_query": hash_list_queries,
         }
     )
+
     sea_min_pct = None
     if len(gdf["geometry"]) > 0:
         collected_data_norm = fetch_data(
-            gdf, min_sea_percent=sea_min_pct, display_tqdm=display_tqdm
+            gdf,
+            min_sea_percent=sea_min_pct,
+            display_tqdm=display_tqdm,
+            email=email,
+            password=password,
         )
         if collected_data_norm is not None:
             res = collected_data_norm[["Id", "Name"]]
@@ -805,17 +841,25 @@ def download_list_product_multithread_v3(
     while_loop = 0
     blacklist = []
     running_futures = set()
-    retries = defaultdict(int)
+    future_to_info = {}
+    # retries = defaultdict(int)
     pbar = tqdm(total=len(df2))
     # token = get_access_token(email=specific_account, password=account_passwd)
-    with (
-            ThreadPoolExecutor(max_workers=MAX_SESSION_PER_ACCOUNT) as executor,
-        ):
-    
+    with (ThreadPoolExecutor(max_workers=MAX_SESSION_PER_ACCOUNT) as executor,):
+
         while (df2["status"] == 0).any():
 
             while_loop += 1
+
             subset_to_treat = df2[df2["status"] == 0]
+            pbar.set_description(
+                f"loop={while_loop} | OK={cpt['successful_download']} | ERR={sum(v for k,v in cpt.items() if k.startswith('status_') and k != 'status_OK')} | todo={len(subset_to_treat)}"
+            )
+            if len(subset_to_treat) == 0:
+                logging.info(
+                    "All the products have been treated (success or error).Nothing to do, exiting loop"
+                )
+                break
             # get the 4 download session information that can be submit in //
             df_prod_downloadable = get_sessions_download_available(
                 conf,
@@ -825,7 +869,7 @@ def download_list_product_multithread_v3(
                 logins_group=account_group,
             )
             urls_index = list(df_prod_downloadable.index)
-            logging.info(
+            logging.debug(
                 "while_loop : %s, prod. to treat: %s, %s",
                 while_loop,
                 len(subset_to_treat),
@@ -833,14 +877,10 @@ def download_list_product_multithread_v3(
             )
             # if len(df_prod_downloadable) == 0:
             if len(df_prod_downloadable) == 0:
-                logging.debug('no session available wait a bit')
+                logging.debug("no session available wait a bit")
                 time.sleep(5)
                 continue
-            if len(subset_to_treat) == 0:
-                logging.info("Nothing to do, exiting loop")
-                break
 
-            
                 # future_to_url = {
                 #     executor.submit(
                 #         CDS_Odata_download_one_product_v2,
@@ -855,12 +895,17 @@ def download_list_product_multithread_v3(
                 # }
             errors_per_account = defaultdict(int)
 
-
+            currently_downloading = set(
+                info["safename"] for info in future_to_info.values()
+            )
             # 1) Submit as many futures as possible
             while urls_index and len(running_futures) < MAX_SESSION_PER_ACCOUNT:
                 url_one_index = urls_index.pop(0)
                 # id_product = subset_to_treat['id'].iloc[url_one_index]
-                # safename_base = subset_to_treat['safename'].iloc[url_one_index]
+                safename_base = subset_to_treat["safe"].iloc[url_one_index]
+                if safename_base in currently_downloading:
+                    logging.debug("skipping %s already being downloaded", safename_base)
+                    continue
                 # (
                 # access_token,
                 # date_generation_access_token,
@@ -879,7 +924,9 @@ def download_list_product_multithread_v3(
                 header = df_prod_downloadable["header"].iloc[url_one_index]
                 url_product = df_prod_downloadable["url"].iloc[url_one_index]
                 output_path = df_prod_downloadable["output_path"].iloc[url_one_index]
-                path_semaphore_token = df_prod_downloadable["token_semaphore"][url_one_index]
+                path_semaphore_token = df_prod_downloadable["token_semaphore"][
+                    url_one_index
+                ]
                 future = executor.submit(
                     CDS_Odata_download_one_product_v2,
                     session,
@@ -889,26 +936,72 @@ def download_list_product_multithread_v3(
                     path_semaphore_token,
                     cdsodatacli_conf_file=cdsodatacli_conf_file,
                 )
-                retries[safename_base] += 1
+                future_to_info[future] = {
+                    "safename": safename_base,
+                    "semaphore_token_file": path_semaphore_token,
+                }
+                currently_downloading.add(safename_base)  # mettre à jour immédiatement
+                # retries[safename_base] += 1
                 running_futures.add(future)
-
+            # 1.2
+            # après la boucle de soumission "while urls_index..."
+            # nettoyer les tokens des sessions préparées mais non soumises
+            for idx in urls_index:  # ce qui reste dans urls_index n'a pas été soumis
+                unused_token = df_prod_downloadable["token_semaphore"][idx]
+                if unused_token and os.path.exists(unused_token):
+                    login = os.path.basename(unused_token).split("_")[3]
+                    date_gen = datetime.datetime.strptime(
+                        os.path.basename(unused_token)
+                        .split("_")[4]
+                        .replace(".txt", ""),
+                        "%Y%m%dt%H%M%S",
+                    )
+                    remove_semaphore_token_file(
+                        token_dir=conf["token_directory"],
+                        login=login,
+                        date_generation_access_token=date_gen,
+                    )
             # 2) Wait for at least one download to finish
             done, running_futures = wait(
-                running_futures,
-                timeout=None,
-                return_when=FIRST_COMPLETED
+                running_futures, timeout=None, return_when=FIRST_COMPLETED
             )
 
             # 3) Handle completed downloads
             for future in done:
-                # try:
+                try:
                     # process result
-                (
-                speed,
-                status_meaning,
-                safename_base,
-                semaphore_token_file,
-                ) = future.result()
+                    (
+                        speed,
+                        status_meaning,
+                        safename_base,
+                        semaphore_token_file,
+                    ) = future.result()
+                    future_to_info.pop(future, None)
+                except Exception:
+                    info = future_to_info.pop(future, {})
+                    safename_base = info.get("safename", "unknown")
+                    semaphore_token_file = info.get("semaphore_token_file")
+                    if semaphore_token_file and os.path.exists(semaphore_token_file):
+                        login = os.path.basename(semaphore_token_file).split("_")[3]
+                        date_generation_access_token = datetime.datetime.strptime(
+                            os.path.basename(semaphore_token_file)
+                            .split("_")[4]
+                            .replace(".txt", ""),
+                            "%Y%m%dt%H%M%S",
+                        )
+                        remove_semaphore_token_file(
+                            token_dir=conf["token_directory"],
+                            login=login,
+                            date_generation_access_token=date_generation_access_token,
+                        )
+                    logging.error(
+                        "Unhandled exception for %s: %s",
+                        safename_base,
+                        traceback.format_exc(),
+                    )
+                    df2.loc[(df2["safe"] == safename_base), "status"] = -1
+                    pbar.update(1)
+                    continue
                 # remove semaphore once the download is over (successful or not)
                 login = os.path.basename(semaphore_token_file).split("_")[3]
                 date_generation_access_token = datetime.datetime.strptime(
@@ -923,7 +1016,7 @@ def download_list_product_multithread_v3(
                     login=login,
                     date_generation_access_token=date_generation_access_token,
                 )
-                logging.info("remove session semaphore for %s", login)
+                logging.debug("remove session semaphore for %s", login)
                 remove_semaphore_session_file(
                     session_dir=conf["active_session_directory"],
                     safename=safename_base,
@@ -947,16 +1040,15 @@ def download_list_product_multithread_v3(
                     errors_per_account[login] += 1
                     logging.info("error found for %s meaning %s", login, status_meaning)
                     # df2["status"][df2["safe"] == safename_base] = -1 # download in error
-                if retries[safename_base] > MAX_RETRIES:
-                    df2.loc[(df2["safe"] == safename_base),"status"] = -1
+                # if retries[safename_base] > MAX_RETRIES:
+                # df2.loc[(df2["safe"] == safename_base),"status"] = -1
                 cpt["status_%s" % status_meaning] += 1
 
                 pbar.update(1)
 
-
                 # except Exception as e:
                 #     # handle error
-                #     print("Download failed:", e)      
+                #     print("Download failed:", e)
             for acco in errors_per_account:
                 if errors_per_account[acco] >= MAX_SESSION_PER_ACCOUNT:
                     blacklist.append(acco)

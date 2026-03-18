@@ -179,7 +179,8 @@ def query_client():
             os.makedirs(
                 os.path.dirname(args.output_safe_listing), 0o0755, exist_ok=True
             )
-            result_query["Name"].to_csv(
+            print("with Ids")
+            result_query[["Id", "Name"]].to_csv(
                 args.output_safe_listing, index=False, header=False
             )
             logging.info("SAFE listing saved to : %s", args.output_safe_listing)
@@ -339,8 +340,7 @@ def fetch_data_single_query(
         logging.debug(gdf_norm.keys())
         logging.info(f"Length of input after slicing in time:{len(gdf_norm)}")
         urls_plus_headers = create_urls(
-            gdf=gdf_norm, top=top, email=email, password=password,
-            headers=headers
+            gdf=gdf_norm, top=top, email=email, password=password, headers=headers
         )
     else:
         urls_plus_headers = {"urls": [], "headers": None}
@@ -348,7 +348,7 @@ def fetch_data_single_query(
         collected_data, cpt = fetch_data_from_urls_sequential(
             urls_plus_headers=urls_plus_headers, cache_dir=cache_dir, cpt=cpt
         )
-        
+
     elif querymode == "multi":
         maxworker = 10
         logging.info("maximum // queries : %s", maxworker)

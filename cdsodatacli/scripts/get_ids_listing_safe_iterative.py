@@ -19,8 +19,10 @@ def entrypoint():
             "No email/password provided, using cdsodatacli default behavior for authentication."
         )
     add_ids_to_listing_iterative(
-        input_listing=args.input_listing, output_listing=args.output_listing,
-        email=args.email, password=args.password
+        input_listing=args.input_listing,
+        output_listing=args.output_listing,
+        email=args.email,
+        password=args.password,
     )
 
 
@@ -97,7 +99,9 @@ def entrypoint():
 #     return output_listing
 
 
-def add_ids_to_listing_iterative(input_listing, output_listing=None, email=None, password=None):
+def add_ids_to_listing_iterative(
+    input_listing, output_listing=None, email=None, password=None
+):
     """
     This method aim as a wrapper for add_missing_cdse_hash_ids_in_listing(),
     Sometimes (condition not clear for now, too many request?) some URLs/queries return error
@@ -202,7 +206,7 @@ def add_ids_to_listing_iterative(input_listing, output_listing=None, email=None,
         df_target[["id", "safename"]].to_csv(
             tmplisting_safeid, header=False, index=False
         )
-        logging.info('save incomplet retrieval SAFE+IDs : %s', tmplisting_safeid)
+        logging.info("save incomplet retrieval SAFE+IDs : %s", tmplisting_safeid)
 
     logging.info("loop to get IDs is over.")
     logging.info("Final count found: %s / %s", cpt_ids_found, len(df))

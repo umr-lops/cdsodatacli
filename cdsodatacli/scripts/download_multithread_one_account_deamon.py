@@ -42,7 +42,6 @@ def entrypoint():
             root.removeHandler(handler)
 
     import argparse
-    
 
     parser = argparse.ArgumentParser(description="download deamon CDSE")
     parser.add_argument("--verbose", action="store_true", default=False)

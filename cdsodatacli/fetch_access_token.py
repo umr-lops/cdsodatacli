@@ -11,6 +11,7 @@ import requests
 MAX_VALIDITY_ACCESS_TOKEN = 600  # sec (defined by CDS API)
 DATE_FORMAT_YMDTHMS = "%Y%m%dt%H%M%S"
 
+
 def get_bearer_access_token(
     conf,
     quiet=True,

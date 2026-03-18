@@ -163,7 +163,7 @@ def check_safe_in_archive(safename, conf):
     present_in_archive = False
     arch_potential_file = None
     for archive_type in conf["archives"]:
-        
+
         for uu in ["", ".zip", "replaced"]:
             arch_potential_file0 = os.path.join(
                 WhichArchiveDir(safename, conf=conf, archive_type=archive_type),
@@ -185,7 +185,7 @@ def check_safe_in_archive(safename, conf):
 
             logging.debug("the product is stored in : %s", arch_potential_file)
             break
-    return present_in_archive,arch_potential_file
+    return present_in_archive, arch_potential_file
 
 
 def convert_json_opensearch_query_to_listing_safe_4_dowload(json_path) -> str:
