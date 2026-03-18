@@ -905,6 +905,7 @@ def download_list_product_multithread_v3(
                 # safename_base = subset_to_treat["safe"].iloc[url_one_index]
                 # safename_base = subset_to_treat["safe"].loc[url_one_index]  # label-based
                 safename_base = df_prod_downloadable["safe"].loc[url_one_index]
+                assert isinstance(safename_base, str)
                 if safename_base in currently_downloading:
                     logging.debug("skipping %s already being downloaded", safename_base)
                     continue
@@ -926,13 +927,23 @@ def download_list_product_multithread_v3(
                 # header = df_prod_downloadable["header"].iloc[url_one_index]
                 # url_product = df_prod_downloadable["url"].iloc[url_one_index]
                 # output_path = df_prod_downloadable["output_path"].iloc[url_one_index]
+
+                # Corrected lines inside download_list_product_multithread_v3
                 session = df_prod_downloadable["session"].loc[url_one_index]
                 header = df_prod_downloadable["header"].loc[url_one_index]
                 url_product = df_prod_downloadable["url"].loc[url_one_index]
                 output_path = df_prod_downloadable["output_path"].loc[url_one_index]
-                path_semaphore_token = df_prod_downloadable["token_semaphore"][
+                path_semaphore_token = df_prod_downloadable["token_semaphore"].loc[
                     url_one_index
-                ]
+                ]  # Added .loc
+
+                # session = df_prod_downloadable["session"].loc[url_one_index]
+                # header = df_prod_downloadable["header"].loc[url_one_index]
+                # url_product = df_prod_downloadable["url"].loc[url_one_index]
+                # output_path = df_prod_downloadable["output_path"].loc[url_one_index]
+                # path_semaphore_token = df_prod_downloadable["token_semaphore"][
+                #     url_one_index
+                # ]
                 future = executor.submit(
                     CDS_Odata_download_one_product_v2,
                     session,

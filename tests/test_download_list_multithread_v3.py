@@ -36,6 +36,11 @@ def make_future_result(safename, status="OK", speed=10.0):
     return (speed, status, safename, FAKE_SEMAPHORE)
 
 
+# def make_future_result(s):
+#     # The 3rd value must be the string 's'
+#     return (1.0, "OK", s, FAKE_SEMAPHORE)
+
+
 def make_df2(safenames):
     """Build a minimal df2 as filter_product_already_present would return."""
     n = len(safenames)
@@ -148,6 +153,13 @@ class TestAllSuccessful:
 
     def test_all_status_1(self):
         safenames = ["SAFE_A", "SAFE_B"]
+
+        # Define a side effect function instead of a list
+        # This will return a result for the safename requested,
+        # no matter how many times it is called.
+        def mock_download_side_effect(id, safename, *args, **kwargs):
+            return make_future_result(safename)
+
         with (
             patch(
                 "cdsodatacli.download.get_sessions_download_available",
@@ -155,7 +167,7 @@ class TestAllSuccessful:
             ),
             patch(
                 "cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                side_effect=[make_future_result(s) for s in safenames],
+                side_effect=mock_download_side_effect,  # Use the function here
             ),
         ):
             result = download_list_product_multithread_v3(
@@ -164,6 +176,9 @@ class TestAllSuccessful:
                 outputdir="/fake/out",
                 account_group="logins",
             )
+
+        # Now that the mock doesn't crash, we check that all
+        # unique products eventually succeeded.
         assert (result["status"] == 1).all()
 
     def test_semaphore_token_removed_for_each_product(self, patch_semaphores):

@@ -27,19 +27,32 @@ def mock_conf():
 def test_filter_product_already_present(mock_conf):
     df = pd.DataFrame(
         {
-            "safe": ["SAFE_ARCHIVE", "SAFE_SPOOL", "SAFE_MISSING"],
+            "safe": [
+                "S1A_IW_GRDH_1SDV_20240101T120000_20240101T120025_052000_064000_1234",  # ARCHIVE
+                "S1A_IW_GRDH_1SDV_20240102T120000_20240102T120025_052001_064001_1235",  # SPOOL
+                "S1A_IW_GRDH_1SDV_20240103T120000_20240103T120025_052002_064002_1236",  # MISSING
+            ],
             "id": ["id1", "id2", "id3"],
         }
     )
     cpt = defaultdict(int)
 
-    archive_map = {
-        "SAFE_ARCHIVE": (True, "/home/archive/SAFE_ARCHIVE.zip"),
-        "SAFE_SPOOL": (False, None),
-        "SAFE_MISSING": (False, None),
-    }
-    spool_map = {"SAFE_ARCHIVE": False, "SAFE_SPOOL": True, "SAFE_MISSING": False}
+    s1_archive = "S1A_IW_GRDH_1SDV_20240101T120000_20240101T120025_052000_064000_1234"
+    s1_spool = "S1A_IW_GRDH_1SDV_20240102T120000_20240102T120025_052001_064001_1235"
+    s1_missing = "S1A_IW_GRDH_1SDV_20240103T120000_20240103T120025_052002_064002_1236"
 
+    archive_map = {
+        s1_archive: (True, "/home/archive/S1A_IW_GRDH_1SDV_20240101T120000.zip"),
+        s1_spool: (False, None),
+        s1_missing: (False, None),
+    }
+    spool_map = {
+        s1_archive: False,
+        s1_spool: True,
+        s1_missing: False,
+    }
+
+    # Change the patch targets from utils to download
     with (
         patch(
             "cdsodatacli.download.check_safe_in_archive",
@@ -56,11 +69,11 @@ def test_filter_product_already_present(mock_conf):
             cpt, df, "/tmp/out", mock_conf
         )
 
-        assert mock_archive.call_count == 3  # <-- add this first
+        assert mock_archive.call_count == 3
         assert len(df_to_dl) == 1
-        assert df_to_dl["safe"].iloc[0] == "SAFE_MISSING"
-        assert updated_cpt["archived_product"] == 1
-        assert updated_cpt["in_spool_product"] == 1
+        assert df_to_dl["safe"].iloc[0] == s1_missing
+        assert updated_cpt["preproc-archived_product"] == 1
+        assert updated_cpt["preproc-in_spool_product"] == 1
 
 
 # 2. Test core download function
