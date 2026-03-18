@@ -12,8 +12,15 @@ import os
 
 def entrypoint():
     args = parse_args()
+    if args.email and args.password:
+        logging.info("Using provided email and password for CDSE queries.")
+    else:
+        logging.info(
+            "No email/password provided, using cdsodatacli default behavior for authentication."
+        )
     add_ids_to_listing_iterative(
-        input_listing=args.input_listing, output_listing=args.output_listing
+        input_listing=args.input_listing, output_listing=args.output_listing,
+        email=args.email, password=args.password
     )
 
 
@@ -90,7 +97,7 @@ def entrypoint():
 #     return output_listing
 
 
-def add_ids_to_listing_iterative(input_listing, output_listing=None):
+def add_ids_to_listing_iterative(input_listing, output_listing=None, email=None, password=None):
     """
     This method aim as a wrapper for add_missing_cdse_hash_ids_in_listing(),
     Sometimes (condition not clear for now, too many request?) some URLs/queries return error
@@ -99,6 +106,8 @@ def add_ids_to_listing_iterative(input_listing, output_listing=None):
 
     :param input_listing: str input listing with only SAFE basenames
     :param output_listing: str where to store SAFE+ID [optional, default is input_listing+'.ids']
+    :param email: str email of the CDSE account to use for queries [optional, default None -> use cdsodatacli default behavior]
+    :param password: str password of the CDSE account to use for queries [optional, default None -> use cdsodatacli default behavior]
 
     Return:
         output_listing: str: listing containing lines SAFE+ID
@@ -126,10 +135,11 @@ def add_ids_to_listing_iterative(input_listing, output_listing=None):
 
     tmplisting = input_listing
     loop_cpt = 0
-    logging.getLogger().setLevel(
-        logging.CRITICAL
-    )  # Attention, cela coupe les logs globaux
-
+    # logging.getLogger().setLevel(
+    #     logging.CRITICAL
+    # )  # Attention, cela coupe les logs globaux
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("requests").setLevel(logging.WARNING)
     # On boucle tant qu'on n'a pas tout trouvé
     # NOTE: J'ai ajouté une condition de sécurité (loop_cpt < 10) pour éviter les boucles infinies si un ID n'existe vraiment pas
     while cpt_ids_found != len(df_target["id"]) and loop_cpt < 20:
@@ -137,7 +147,7 @@ def add_ids_to_listing_iterative(input_listing, output_listing=None):
 
         # Appel à l'API via cdsodatacli
         dfres = dl.add_missing_cdse_hash_ids_in_listing(
-            listing_path=tmplisting, display_tqdm=True
+            listing_path=tmplisting, display_tqdm=True, email=email, password=password
         )
 
         # --- CORRECTION ICI ---
@@ -192,6 +202,7 @@ def add_ids_to_listing_iterative(input_listing, output_listing=None):
         df_target[["id", "safename"]].to_csv(
             tmplisting_safeid, header=False, index=False
         )
+        logging.info('save incomplet retrieval SAFE+IDs : %s', tmplisting_safeid)
 
     logging.info("loop to get IDs is over.")
     logging.info("Final count found: %s / %s", cpt_ids_found, len(df))
@@ -238,6 +249,18 @@ def parse_args():
         required=True,
         help="input SAFE listing path containing only SAFE basenames",
         type=str,
+    )
+    parser.add_argument(
+        "--email",
+        required=False,
+        default=None,
+        help="email of the CDSE account to use for queries [optional, default None -> use cdsodatacli default behavior]",
+    )
+    parser.add_argument(
+        "--password",
+        required=False,
+        default=None,
+        help="password of the CDSE account to use for queries [optional, default None -> use cdsodatacli default behavior]",
     )
 
     args = parser.parse_args()
