@@ -32,7 +32,7 @@ def get_conf(path_config_file=None) -> dict:
             used_config_path = local_config_pontential_path
         else:
             used_config_path = config_path
-    logging.info("config path that is used: %s", used_config_path)
+    logging.debug("config path that is used: %s", used_config_path)
     stream = open(used_config_path, "r")
     conf = load(stream, Loader=Loader)
     return conf
@@ -161,7 +161,9 @@ def check_safe_in_archive(safename, conf):
 
     """
     present_in_archive = False
+    arch_potential_file = None
     for archive_type in conf["archives"]:
+        
         for uu in ["", ".zip", "replaced"]:
             arch_potential_file0 = os.path.join(
                 WhichArchiveDir(safename, conf=conf, archive_type=archive_type),
@@ -183,7 +185,7 @@ def check_safe_in_archive(safename, conf):
 
             logging.debug("the product is stored in : %s", arch_potential_file)
             break
-    return present_in_archive
+    return present_in_archive,arch_potential_file
 
 
 def convert_json_opensearch_query_to_listing_safe_4_dowload(json_path) -> str:
