@@ -2,6 +2,7 @@
 pytest unit tests for download_list_product_multithread_v3
 run with: pytest test_download_multithread_v3.py -v
 """
+
 import os
 import time
 import threading
@@ -29,6 +30,7 @@ FAKE_LOGIN = "user@example.com"
 FAKE_DATE_STR = "20240101t120000"
 FAKE_SEMAPHORE = f"/fake/token_dir/CDSE_access_token_{FAKE_LOGIN}_{FAKE_DATE_STR}.txt"
 
+
 def make_future_result(safename, status="OK", speed=10.0):
     """Return a tuple as CDS_Odata_download_one_product_v2 would."""
     return (speed, status, safename, FAKE_SEMAPHORE)
@@ -37,12 +39,14 @@ def make_future_result(safename, status="OK", speed=10.0):
 def make_df2(safenames):
     """Build a minimal df2 as filter_product_already_present would return."""
     n = len(safenames)
-    df = pd.DataFrame({
-        "safe": safenames,
-        "status": np.zeros(n),
-        "id": [f"id-{i}" for i in range(n)],
-        "outputpath": [f"/fake/out/{s}.zip" for s in safenames],
-    })
+    df = pd.DataFrame(
+        {
+            "safe": safenames,
+            "status": np.zeros(n),
+            "id": [f"id-{i}" for i in range(n)],
+            "outputpath": [f"/fake/out/{s}.zip" for s in safenames],
+        }
+    )
     return df
 
 
@@ -50,20 +54,23 @@ def make_downloadable_df(safenames):
     """Simulate the output of get_sessions_download_available."""
     n = len(safenames)
     sessions = [MagicMock() for _ in range(n)]
-    df = pd.DataFrame({
-        "safe": safenames,
-        "session": sessions,
-        "header": [{"Authorization": "Bearer tok"} for _ in range(n)],
-        "url": [f"https://fake.cdse/{s}" for s in safenames],
-        "output_path": [f"/fake/out/{s}.zip" for s in safenames],
-        "token_semaphore": [FAKE_SEMAPHORE for _ in range(n)],
-    })
+    df = pd.DataFrame(
+        {
+            "safe": safenames,
+            "session": sessions,
+            "header": [{"Authorization": "Bearer tok"} for _ in range(n)],
+            "url": [f"https://fake.cdse/{s}" for s in safenames],
+            "output_path": [f"/fake/out/{s}.zip" for s in safenames],
+            "token_semaphore": [FAKE_SEMAPHORE for _ in range(n)],
+        }
+    )
     return df
 
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def patch_conf(monkeypatch):
@@ -79,17 +86,21 @@ def patch_filter(monkeypatch):
     to-download (status=0).  Individual tests can override this.
     """
     with patch("cdsodatacli.download.filter_product_already_present") as mock:
+
         def _default(cpt, df, outputdir, force_download, cdsodatacli_conf):
             cpt["product_absent_from_local_disks"] = len(df)
             return make_df2(df["safe"].tolist()), cpt
+
         mock.side_effect = _default
         yield mock
 
 
 @pytest.fixture(autouse=True)
 def patch_semaphores():
-    with patch("cdsodatacli.download.remove_semaphore_token_file") as tok, \
-         patch("cdsodatacli.download.remove_semaphore_session_file") as sess:
+    with (
+        patch("cdsodatacli.download.remove_semaphore_token_file") as tok,
+        patch("cdsodatacli.download.remove_semaphore_session_file") as sess,
+    ):
         yield tok, sess
 
 
@@ -111,15 +122,22 @@ from cdsodatacli.download import download_list_product_multithread_v3  # noqa: E
 # Tests
 # ---------------------------------------------------------------------------
 
+
 class TestAllSuccessful:
     """Happy path: every product downloads successfully on first attempt."""
 
     def test_returns_dataframe(self):
         safenames = ["SAFE_A", "SAFE_B"]
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                   return_value=make_downloadable_df(safenames)), \
-             patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                   side_effect=[make_future_result(s) for s in safenames]):
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                side_effect=[make_future_result(s) for s in safenames],
+            ),
+        ):
             result = download_list_product_multithread_v3(
                 list_id=["id0", "id1"],
                 list_safename=safenames,
@@ -130,10 +148,16 @@ class TestAllSuccessful:
 
     def test_all_status_1(self):
         safenames = ["SAFE_A", "SAFE_B"]
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                   return_value=make_downloadable_df(safenames)), \
-             patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                   side_effect=[make_future_result(s) for s in safenames]):
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                side_effect=[make_future_result(s) for s in safenames],
+            ),
+        ):
             result = download_list_product_multithread_v3(
                 list_id=["id0", "id1"],
                 list_safename=safenames,
@@ -145,10 +169,16 @@ class TestAllSuccessful:
     def test_semaphore_token_removed_for_each_product(self, patch_semaphores):
         tok_mock, _ = patch_semaphores
         safenames = ["SAFE_A", "SAFE_B"]
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                   return_value=make_downloadable_df(safenames)), \
-             patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                   side_effect=[make_future_result(s) for s in safenames]):
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                side_effect=[make_future_result(s) for s in safenames],
+            ),
+        ):
             download_list_product_multithread_v3(
                 list_id=["id0", "id1"],
                 list_safename=safenames,
@@ -167,10 +197,16 @@ class TestDownloadError:
             make_future_result("SAFE_OK", status="OK"),
             make_future_result("SAFE_FAIL", status="Unauthorized", speed=np.nan),
         ]
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                   return_value=make_downloadable_df(safenames)), \
-             patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                   side_effect=results):
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                side_effect=results,
+            ),
+        ):
             result = download_list_product_multithread_v3(
                 list_id=["id0", "id1"],
                 list_safename=safenames,
@@ -183,10 +219,16 @@ class TestDownloadError:
     def test_semaphore_still_removed_on_error(self, patch_semaphores):
         tok_mock, _ = patch_semaphores
         safenames = ["SAFE_FAIL"]
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                   return_value=make_downloadable_df(safenames)), \
-             patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                   side_effect=[make_future_result("SAFE_FAIL", status="MoveError")]):
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                side_effect=[make_future_result("SAFE_FAIL", status="MoveError")],
+            ),
+        ):
             download_list_product_multithread_v3(
                 list_id=["id0"],
                 list_safename=safenames,
@@ -201,10 +243,16 @@ class TestWorkerException:
 
     def test_exception_marks_product_as_error(self):
         safenames = ["SAFE_CRASH"]
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                   return_value=make_downloadable_df(safenames)), \
-             patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                   side_effect=RuntimeError("disk full")):
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                side_effect=RuntimeError("disk full"),
+            ),
+        ):
             result = download_list_product_multithread_v3(
                 list_id=["id0"],
                 list_safename=safenames,
@@ -216,11 +264,17 @@ class TestWorkerException:
     def test_exception_cleans_semaphore(self, patch_semaphores):
         tok_mock, _ = patch_semaphores
         safenames = ["SAFE_CRASH"]
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                   return_value=make_downloadable_df(safenames)), \
-             patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                   side_effect=RuntimeError("disk full")), \
-             patch("os.path.exists", return_value=True):
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                side_effect=RuntimeError("disk full"),
+            ),
+            patch("os.path.exists", return_value=True),
+        ):
             download_list_product_multithread_v3(
                 list_id=["id0"],
                 list_safename=safenames,
@@ -244,10 +298,16 @@ class TestWorkerException:
                 raise RuntimeError("boom")
             return make_future_result(safename)
 
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                   side_effect=sessions_side_effect), \
-             patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                   side_effect=worker_side_effect):
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                side_effect=sessions_side_effect,
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                side_effect=worker_side_effect,
+            ),
+        ):
             result = download_list_product_multithread_v3(
                 list_id=["id0", "id1"],
                 list_safename=safenames,
@@ -271,10 +331,16 @@ class TestNoDuplicateDownload:
             safename = os.path.basename(output_path).replace(".zip", "")
             return make_future_result(safename)
 
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                   return_value=make_downloadable_df(safenames)), \
-             patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                   side_effect=tracking_worker):
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                side_effect=tracking_worker,
+            ),
+        ):
             download_list_product_multithread_v3(
                 list_id=["id0", "id0"],
                 list_safename=safenames,
@@ -293,6 +359,7 @@ class TestAllAlreadyPresent:
             cpt["archived_product"] = len(df)
             empty = pd.DataFrame({"safe": [], "status": [], "id": []})
             return empty, cpt
+
         patch_filter.side_effect = _all_archived
 
         with patch("cdsodatacli.download.get_sessions_download_available") as mock_sess:
@@ -318,11 +385,17 @@ class TestNoSessionAvailable:
                 return make_downloadable_df([])  # empty first 2 calls
             return make_downloadable_df(safenames)
 
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                   side_effect=sessions_side_effect), \
-             patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                   return_value=make_future_result("SAFE_A")), \
-             patch("cdsodatacli.download.time.sleep") as mock_sleep:
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                side_effect=sessions_side_effect,
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                return_value=make_future_result("SAFE_A"),
+            ),
+            patch("cdsodatacli.download.time.sleep") as mock_sleep,
+        ):
             download_list_product_multithread_v3(
                 list_id=["id0"],
                 list_safename=safenames,
@@ -348,6 +421,7 @@ class TestAssertLengths:
 # ---------------------------------------------------------------------------
 # NEW: Race condition tests
 # ---------------------------------------------------------------------------
+
 
 class TestRaceCondition:
     """
@@ -377,10 +451,16 @@ class TestRaceCondition:
                 barrier.set()  # release the worker on 2nd loop entry
             return make_downloadable_df(safenames)
 
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                   side_effect=sessions_side_effect), \
-             patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                   side_effect=slow_worker):
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                side_effect=sessions_side_effect,
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                side_effect=slow_worker,
+            ),
+        ):
             download_list_product_multithread_v3(
                 list_id=["id0"],
                 list_safename=safenames,
@@ -410,10 +490,16 @@ class TestRaceCondition:
                 active_at_same_time["count"] -= 1
             return make_future_result(safename)
 
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                   return_value=make_downloadable_df(safenames)), \
-             patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                   side_effect=concurrent_worker):
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                side_effect=concurrent_worker,
+            ),
+        ):
             result = download_list_product_multithread_v3(
                 list_id=["id0", "id1"],
                 list_safename=safenames,
@@ -441,10 +527,16 @@ class TestRaceCondition:
                 raise FileNotFoundError("tmp already moved by first thread")
             return make_future_result("SAFE_RACE")
 
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                   return_value=make_downloadable_df(safenames * 2)), \
-             patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                   side_effect=worker_with_race):
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames * 2),
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                side_effect=worker_with_race,
+            ),
+        ):
             # should not raise — the exception must be caught by the except block
             result = download_list_product_multithread_v3(
                 list_id=["id0", "id0"],
@@ -460,6 +552,7 @@ class TestRaceCondition:
 # NEW: Server not answering / network failure tests
 # ---------------------------------------------------------------------------
 
+
 class TestServerNotAnswering:
     """
     Simulate various network-level failures: timeout, connection refused,
@@ -468,10 +561,16 @@ class TestServerNotAnswering:
 
     def _run_with_worker_error(self, exc, safenames=None):
         safenames = safenames or ["SAFE_NET"]
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                   return_value=make_downloadable_df(safenames)), \
-             patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                   side_effect=exc):
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                side_effect=exc,
+            ),
+        ):
             return download_list_product_multithread_v3(
                 list_id=["id0"] * len(safenames),
                 list_safename=safenames,
@@ -507,10 +606,16 @@ class TestServerNotAnswering:
                 raise Timeout("server did not respond")
             return make_future_result(safename)
 
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                   side_effect=sessions_side_effect), \
-             patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                   side_effect=worker):
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                side_effect=sessions_side_effect,
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                side_effect=worker,
+            ),
+        ):
             result = download_list_product_multithread_v3(
                 list_id=["id0", "id1"],
                 list_safename=safenames,
@@ -522,11 +627,17 @@ class TestServerNotAnswering:
 
     def test_semaphore_cleaned_after_timeout(self, patch_semaphores):
         tok_mock, _ = patch_semaphores
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                   return_value=make_downloadable_df(["SAFE_TO"])), \
-             patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                   side_effect=Timeout("timeout")), \
-             patch("os.path.exists", return_value=True):
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(["SAFE_TO"]),
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                side_effect=Timeout("timeout"),
+            ),
+            patch("os.path.exists", return_value=True),
+        ):
             download_list_product_multithread_v3(
                 list_id=["id0"],
                 list_safename=["SAFE_TO"],
@@ -541,12 +652,18 @@ class TestServerNotAnswering:
         rather than raising — product must be marked -1, not retried forever.
         """
         safenames = ["SAFE_503"]
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                   return_value=make_downloadable_df(safenames)), \
-             patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                   return_value=make_future_result(
-                       "SAFE_503", status="Service Unavailable", speed=np.nan
-                   )):
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                return_value=make_future_result(
+                    "SAFE_503", status="Service Unavailable", speed=np.nan
+                ),
+            ),
+        ):
             result = download_list_product_multithread_v3(
                 list_id=["id0"],
                 list_safename=safenames,
@@ -560,10 +677,16 @@ class TestServerNotAnswering:
         If every product fails, the while loop must terminate (no infinite loop).
         """
         safenames = ["SAFE_A", "SAFE_B", "SAFE_C"]
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                   return_value=make_downloadable_df(safenames)), \
-             patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                   side_effect=Timeout("all down")):
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                side_effect=Timeout("all down"),
+            ),
+        ):
             result = download_list_product_multithread_v3(
                 list_id=["id0", "id1", "id2"],
                 list_safename=safenames,
@@ -577,6 +700,7 @@ class TestServerNotAnswering:
 # ---------------------------------------------------------------------------
 # NEW: Extended no-session / throttling tests
 # ---------------------------------------------------------------------------
+
 
 class TestNoSessionExtended:
     """
@@ -595,11 +719,17 @@ class TestNoSessionExtended:
                 return make_downloadable_df([])
             return make_downloadable_df(safenames)
 
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                   side_effect=sessions_side_effect), \
-             patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                   return_value=make_future_result("SAFE_A")), \
-             patch("cdsodatacli.download.time.sleep") as mock_sleep:
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                side_effect=sessions_side_effect,
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                return_value=make_future_result("SAFE_A"),
+            ),
+            patch("cdsodatacli.download.time.sleep") as mock_sleep,
+        ):
             download_list_product_multithread_v3(
                 list_id=["id0"],
                 list_safename=safenames,
@@ -624,11 +754,17 @@ class TestNoSessionExtended:
                 return make_downloadable_df([])
             return make_downloadable_df(safenames)
 
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                   side_effect=sessions_side_effect), \
-             patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                   return_value=make_future_result("SAFE_STARVED")), \
-             patch("cdsodatacli.download.time.sleep"):
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                side_effect=sessions_side_effect,
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                return_value=make_future_result("SAFE_STARVED"),
+            ),
+            patch("cdsodatacli.download.time.sleep"),
+        ):
             result = download_list_product_multithread_v3(
                 list_id=["id0"],
                 list_safename=safenames,
@@ -650,17 +786,21 @@ class TestNoSessionExtended:
 
         submitted = []
 
-        original_submit = None
-
         def tracking_worker(*a, **kw):
             submitted.append(1)
             return make_future_result("SAFE_A")
 
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                   side_effect=sessions_side_effect), \
-             patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                   side_effect=tracking_worker), \
-             patch("cdsodatacli.download.time.sleep"):
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                side_effect=sessions_side_effect,
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                side_effect=tracking_worker,
+            ),
+            patch("cdsodatacli.download.time.sleep"),
+        ):
             download_list_product_multithread_v3(
                 list_id=["id0"],
                 list_safename=safenames,
