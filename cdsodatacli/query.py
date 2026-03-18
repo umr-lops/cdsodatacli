@@ -257,6 +257,8 @@ def fetch_data(
     Returns:
         pd.DataFrame: Concatenated meta-data results from all queries.
     """
+    if email and password:
+        headers = get_access_token(email, password)
     collected_data = None
     # split the gdf in subsets based on the query_id
     unique_query_ids = gdf["id_query"].unique()
@@ -283,6 +285,7 @@ def fetch_data(
             email=email,
             password=password,
             cpt=cpt,
+            headers=headers if email and password else None,
         )
         pbar.set_description("queries: %s" % cpt)
         if collected_data is None:
@@ -302,6 +305,7 @@ def fetch_data_single_query(
     email=None,
     password=None,
     cpt=None,
+    headers=None,
 ):
     """Executes fetching logic for a GeoDataFrame subset (single query ID).
 
@@ -318,6 +322,7 @@ def fetch_data_single_query(
         email (str, optional): Auth email.
         password (str, optional): Auth password.
         cpt (collections.defaultdict, optional): Counter for tracking query status.
+        headers (dict, optional): Pre-obtained authentication headers. [optional]
 
     Returns:
         tuple: (pd.DataFrame, dict)
@@ -334,7 +339,8 @@ def fetch_data_single_query(
         logging.debug(gdf_norm.keys())
         logging.info(f"Length of input after slicing in time:{len(gdf_norm)}")
         urls_plus_headers = create_urls(
-            gdf=gdf_norm, top=top, email=email, password=password
+            gdf=gdf_norm, top=top, email=email, password=password,
+            headers=headers
         )
     else:
         urls_plus_headers = {"urls": [], "headers": None}
@@ -342,6 +348,7 @@ def fetch_data_single_query(
         collected_data, cpt = fetch_data_from_urls_sequential(
             urls_plus_headers=urls_plus_headers, cache_dir=cache_dir, cpt=cpt
         )
+        
     elif querymode == "multi":
         maxworker = 10
         logging.info("maximum // queries : %s", maxworker)
@@ -351,7 +358,6 @@ def fetch_data_single_query(
             max_workers=maxworker,
             cpt=cpt,
         )
-
     if collected_data is not None and collected_data.empty is False:
         data_dedup = remove_duplicates(safes_ori=collected_data)
         logging.info(
@@ -533,7 +539,7 @@ def normalize_gdf(
     return gdf_norm_sliced
 
 
-def create_urls(gdf, top=None, email=None, password=None):
+def create_urls(gdf, top=None, email=None, password=None, headers=None):
     """Constructs OData query URLs based on GeoDataFrame attributes.
 
     Args:
@@ -541,6 +547,7 @@ def create_urls(gdf, top=None, email=None, password=None):
         top (int, optional): The `$top` OData parameter. Defaults to 1000.
         email (str, optional): Account email for access token generation.
         password (str, optional): Account password.
+        headers (dict, optional): Pre-obtained authentication headers. [optional]
 
     Returns:
         dict: A dictionary containing:
@@ -550,12 +557,10 @@ def create_urls(gdf, top=None, email=None, password=None):
     start_time = time.time()
 
     # --- 1. Handle Authentication ---
-    headers = None
-    if email and password:
+    if email and password and headers is None:
         logging.info(f"[*] Authenticating for {email}...")
         headers = get_access_token(email, password)
         logging.info("[*] Authentication successful.")
-
     urlapi = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter="
     urls = []
 
