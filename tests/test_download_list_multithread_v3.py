@@ -157,7 +157,10 @@ class TestAllSuccessful:
         # Define a side effect function instead of a list
         # This will return a result for the safename requested,
         # no matter how many times it is called.
-        def mock_download_side_effect(id, safename, *args, **kwargs):
+        def mock_download_side_effect(
+            session, header, url, output_path, semaphore, **kw
+        ):
+            safename = os.path.basename(output_path).replace(".zip", "")
             return make_future_result(safename)
 
         with (
