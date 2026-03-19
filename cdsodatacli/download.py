@@ -846,7 +846,7 @@ def download_list_product_multithread_v3(
     max_parallel_download = 0
     # retries = defaultdict(int)
     pbar = tqdm(total=len(df2))
-    max_parallelism_seek = MAX_SESSION_PER_ACCOUNT*len(conf[account_group])
+    max_parallelism_seek = MAX_SESSION_PER_ACCOUNT * len(conf[account_group])
     # token = get_access_token(email=specific_account, password=account_passwd)
     with (ThreadPoolExecutor(max_workers=max_parallelism_seek) as executor,):
 
@@ -982,7 +982,7 @@ def download_list_product_multithread_v3(
                         date_generation_access_token=date_gen,
                     )
             # small check to know what is the maximum download parallelism we can reach
-            if len(running_futures)>max_parallel_download:
+            if len(running_futures) > max_parallel_download:
                 max_parallel_download = len(running_futures)
             # 2) Wait for at least one download to finish
             done, running_futures = wait(
@@ -1076,9 +1076,9 @@ def download_list_product_multithread_v3(
                     blacklist.append(acco)
                     logging.info("%s black listed for next loops", acco)
     elapsed_time = time.time() - t_start_download
-    logging.info("download over in %f seconds",elapsed_time)
+    logging.info("download over in %f seconds", elapsed_time)
     logging.info("counter: %s", cpt)
-    logging.info('maximum parallelism reached : %i',max_parallel_download)
+    logging.info("maximum parallelism reached : %i", max_parallel_download)
     # safety remove active session, all reamining because of error
     remove_semaphore_session_file(
         session_dir=conf["active_session_directory"],

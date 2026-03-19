@@ -22,6 +22,10 @@ FAKE_CONF = {
     "pre_spool": "/fake/pre_spool",
     "spool": "/fake/spool",
     "URL_download": "https://fake.cdse/odata/v1/Products(%s)/$value",
+    "logins": {
+        "user1@emailadrress.fr": "passwd1",
+        "user2@emailadrress.fr": "passwd2",
+    },
 }
 
 # Format: CDSE_access_token_<login>_<date>.txt
