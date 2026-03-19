@@ -806,6 +806,7 @@ def download_list_product_multithread_v3(
     v3 is working as deamon (whle loop) multi account round-robin
       and token semaphore files
     In this method we consider only one account with 4 parallel sessions
+
     Parameters
     ----------
     list_id (list): list of satellite product hashs
@@ -836,16 +837,18 @@ def download_list_product_multithread_v3(
     df2, cpt = filter_product_already_present(
         cpt, df, outputdir, force_download=force_download, cdsodatacli_conf=conf
     )
-
+    t_start_download = time.time()
     logging.info("%s", cpt)
     while_loop = 0
     blacklist = []
     running_futures = set()
     future_to_info = {}
+    max_parallel_download = 0
     # retries = defaultdict(int)
     pbar = tqdm(total=len(df2))
+    max_parallelism_seek = MAX_SESSION_PER_ACCOUNT*len(conf[account_group])
     # token = get_access_token(email=specific_account, password=account_passwd)
-    with (ThreadPoolExecutor(max_workers=MAX_SESSION_PER_ACCOUNT) as executor,):
+    with (ThreadPoolExecutor(max_workers=max_parallelism_seek) as executor,):
 
         while (df2["status"] == 0).any():
 
@@ -853,7 +856,7 @@ def download_list_product_multithread_v3(
 
             subset_to_treat = df2[df2["status"] == 0]
             pbar.set_description(
-                f"loop={while_loop} | OK={cpt['successful_download']} | ERR={sum(v for k,v in cpt.items() if k.startswith('status_') and k != 'status_OK')} | todo={len(subset_to_treat)}"
+                f"loop={while_loop} | OK={cpt['successful_download']} | ERR={sum(v for k,v in cpt.items() if k.startswith('status_') and k != 'status_OK')} | todo={len(subset_to_treat)} | //={len(running_futures)}"
             )
             if len(subset_to_treat) == 0:
                 logging.info(
@@ -899,7 +902,7 @@ def download_list_product_multithread_v3(
                 info["safename"] for info in future_to_info.values()
             )
             # 1) Submit as many futures as possible
-            while urls_index and len(running_futures) < MAX_SESSION_PER_ACCOUNT:
+            while urls_index and len(running_futures) < max_parallelism_seek:
                 url_one_index = urls_index.pop(0)
                 # id_product = subset_to_treat['id'].iloc[url_one_index]
                 # safename_base = subset_to_treat["safe"].iloc[url_one_index]
@@ -978,6 +981,9 @@ def download_list_product_multithread_v3(
                         login=login,
                         date_generation_access_token=date_gen,
                     )
+            # small check to know what is the maximum download parallelism we can reach
+            if len(running_futures)>max_parallel_download:
+                max_parallel_download = len(running_futures)
             # 2) Wait for at least one download to finish
             done, running_futures = wait(
                 running_futures, timeout=None, return_when=FIRST_COMPLETED
@@ -1047,7 +1053,6 @@ def download_list_product_multithread_v3(
                 #     logging.error("traceback : %s", traceback.format_exc())
                 #     speed = np.nan
                 #     status_meaning = "DownloadError"
-
                 if status_meaning == "OK":
                     df2.loc[(df2["safe"] == safename_base), "status"] = 1
                     all_speeds.append(speed)
@@ -1070,8 +1075,10 @@ def download_list_product_multithread_v3(
                 if errors_per_account[acco] >= MAX_SESSION_PER_ACCOUNT:
                     blacklist.append(acco)
                     logging.info("%s black listed for next loops", acco)
-    logging.info("download over.")
+    elapsed_time = time.time() - t_start_download
+    logging.info("download over in %f seconds",elapsed_time)
     logging.info("counter: %s", cpt)
+    logging.info('maximum parallelism reached : %i',max_parallel_download)
     # safety remove active session, all reamining because of error
     remove_semaphore_session_file(
         session_dir=conf["active_session_directory"],
