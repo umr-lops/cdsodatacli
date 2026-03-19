@@ -83,7 +83,7 @@ def CDS_Odata_download_one_product_v2(
     headers,
     url,
     output_filepath,
-    cdsodatacli_conf_file=None,
+    conf=None,
 ):
     """
 
@@ -108,7 +108,7 @@ def CDS_Odata_download_one_product_v2(
     # output_filepath_tmp = (
     #     output_filepath.replace(conf["spool"], conf["pre_spool"]) + ".tmp"
     # )
-    conf = get_conf(path_config_file=cdsodatacli_conf_file)
+    # conf = get_conf(path_config_file=cdsodatacli_conf_file)
     output_filepath_tmp = os.path.join(
         conf["pre_spool"], os.path.basename(output_filepath) + ".tmp"
     )
@@ -266,6 +266,12 @@ def download_list_product_multithread_v2(
     -------
         df2 (pd.DataFrame):
     """
+    warnings.warn(
+        "download_list_product_multithread_v2 is deprecated and will be removed in version 3.0.0. "
+        "Use get_bearer_access_token instead.",
+        DeprecationWarning,
+        stacklevel=2,  # pointe vers l'appelant, pas vers cette ligne
+    )
     assert len(list_id) == len(list_safename)
     logging.info("check_on_disk : %s", check_on_disk)
     cpt = defaultdict(int)

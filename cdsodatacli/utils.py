@@ -128,6 +128,8 @@ def WhichArchiveDir(safe, conf, archive_type):
         firstdate = safe[17:32]
     elif "S2" in safe:
         firstdate = safe[11:26]
+    else:
+        raise ValueError('safe not handle : %s',safe)
     year = firstdate[0:4]
     doy = datetime.datetime.strptime(firstdate, "%Y%m%dT%H%M%S").strftime("%j")
     sat = safe.split("_")[0]
