@@ -32,12 +32,12 @@ FAKE_CONF = {
 # split("_") -> [0]=CDSE [1]=access [2]=token [3]=login [4]=date.txt
 FAKE_LOGIN = "user@example.com"
 FAKE_DATE_STR = "20240101t120000"
-FAKE_SEMAPHORE = f"/fake/token_dir/CDSE_access_token_{FAKE_LOGIN}_{FAKE_DATE_STR}.txt"
+# FAKE_SEMAPHORE = f"/fake/token_dir/CDSE_access_token_{FAKE_LOGIN}_{FAKE_DATE_STR}.txt"
 
 
 def make_future_result(safename, status="OK", speed=10.0):
     """Return a tuple as CDS_Odata_download_one_product_v2 would."""
-    return (speed, status, safename, FAKE_SEMAPHORE)
+    return (speed, status, safename)
 
 
 # def make_future_result(s):
@@ -53,6 +53,7 @@ def make_df2(safenames):
             "safe": safenames,
             "status": np.zeros(n),
             "id": [f"id-{i}" for i in range(n)],
+            "login": FAKE_LOGIN,
             "outputpath": [f"/fake/out/{s}.zip" for s in safenames],
         }
     )
@@ -69,8 +70,9 @@ def make_downloadable_df(safenames):
             "session": sessions,
             "header": [{"Authorization": "Bearer tok"} for _ in range(n)],
             "url": [f"https://fake.cdse/{s}" for s in safenames],
+            "login": FAKE_LOGIN,
             "output_path": [f"/fake/out/{s}.zip" for s in safenames],
-            "token_semaphore": [FAKE_SEMAPHORE for _ in range(n)],
+            # "token_semaphore": [FAKE_SEMAPHORE for _ in range(n)],
         }
     )
     return df
@@ -107,10 +109,10 @@ def patch_filter(monkeypatch):
 @pytest.fixture(autouse=True)
 def patch_semaphores():
     with (
-        patch("cdsodatacli.download.remove_semaphore_token_file") as tok,
+        # patch("cdsodatacli.download.remove_semaphore_token_file") as tok,
         patch("cdsodatacli.download.remove_semaphore_session_file") as sess,
     ):
-        yield tok, sess
+        yield sess
 
 
 @pytest.fixture(autouse=True)
@@ -162,7 +164,7 @@ class TestAllSuccessful:
         # This will return a result for the safename requested,
         # no matter how many times it is called.
         def mock_download_side_effect(
-            session, header, url, output_path, semaphore, **kw
+            session, header, url, output_path, **kw
         ):
             safename = os.path.basename(output_path).replace(".zip", "")
             return make_future_result(safename)
@@ -187,27 +189,6 @@ class TestAllSuccessful:
         # Now that the mock doesn't crash, we check that all
         # unique products eventually succeeded.
         assert (result["status"] == 1).all()
-
-    def test_semaphore_token_removed_for_each_product(self, patch_semaphores):
-        tok_mock, _ = patch_semaphores
-        safenames = ["SAFE_A", "SAFE_B"]
-        with (
-            patch(
-                "cdsodatacli.download.get_sessions_download_available",
-                return_value=make_downloadable_df(safenames),
-            ),
-            patch(
-                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                side_effect=[make_future_result(s) for s in safenames],
-            ),
-        ):
-            download_list_product_multithread_v3(
-                list_id=["id0", "id1"],
-                list_safename=safenames,
-                outputdir="/fake/out",
-                account_group="logins",
-            )
-        assert tok_mock.call_count >= len(safenames)
 
 
 class TestDownloadError:
@@ -238,26 +219,6 @@ class TestDownloadError:
         assert result.loc[result["safe"] == "SAFE_FAIL", "status"].iloc[0] == -1
         assert result.loc[result["safe"] == "SAFE_OK", "status"].iloc[0] == 1
 
-    def test_semaphore_still_removed_on_error(self, patch_semaphores):
-        tok_mock, _ = patch_semaphores
-        safenames = ["SAFE_FAIL"]
-        with (
-            patch(
-                "cdsodatacli.download.get_sessions_download_available",
-                return_value=make_downloadable_df(safenames),
-            ),
-            patch(
-                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                side_effect=[make_future_result("SAFE_FAIL", status="MoveError")],
-            ),
-        ):
-            download_list_product_multithread_v3(
-                list_id=["id0"],
-                list_safename=safenames,
-                outputdir="/fake/out",
-                account_group="logins",
-            )
-        assert tok_mock.call_count >= 1
 
 
 class TestWorkerException:
@@ -283,28 +244,6 @@ class TestWorkerException:
             )
         assert result.loc[result["safe"] == "SAFE_CRASH", "status"].iloc[0] == -1
 
-    def test_exception_cleans_semaphore(self, patch_semaphores):
-        tok_mock, _ = patch_semaphores
-        safenames = ["SAFE_CRASH"]
-        with (
-            patch(
-                "cdsodatacli.download.get_sessions_download_available",
-                return_value=make_downloadable_df(safenames),
-            ),
-            patch(
-                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                side_effect=RuntimeError("disk full"),
-            ),
-            patch("os.path.exists", return_value=True),
-        ):
-            download_list_product_multithread_v3(
-                list_id=["id0"],
-                list_safename=safenames,
-                outputdir="/fake/out",
-                account_group="logins",
-            )
-        assert tok_mock.call_count >= 1
-
     def test_other_products_continue_after_exception(self):
         """A crash on one product must not abort the others."""
         safenames = ["SAFE_CRASH", "SAFE_OK"]
@@ -314,7 +253,7 @@ class TestWorkerException:
             pending = subset["safe"].tolist()
             return make_downloadable_df([s for s in safenames if s in pending])
 
-        def worker_side_effect(session, header, url, output_path, semaphore, **kw):
+        def worker_side_effect(session, header, url, output_path, **kw):
             safename = os.path.basename(output_path).replace(".zip", "")
             if safename == "SAFE_CRASH":
                 raise RuntimeError("boom")
@@ -348,7 +287,7 @@ class TestNoDuplicateDownload:
         safenames = ["SAFE_A", "SAFE_A"]  # duplicate in listing
         submission_count = {"n": 0}
 
-        def tracking_worker(session, header, url, output_path, semaphore, **kw):
+        def tracking_worker(session, header, url, output_path, **kw):
             submission_count["n"] += 1
             safename = os.path.basename(output_path).replace(".zip", "")
             return make_future_result(safename)
@@ -460,7 +399,7 @@ class TestRaceCondition:
         submission_count = {"n": 0}
         barrier = threading.Event()
 
-        def slow_worker(session, header, url, output_path, semaphore, **kw):
+        def slow_worker(session, header, url, output_path, **kw):
             submission_count["n"] += 1
             barrier.wait(timeout=2)  # block until test releases it
             return make_future_result("SAFE_SLOW")
@@ -500,7 +439,7 @@ class TestRaceCondition:
         active_at_same_time = {"count": 0, "max": 0}
         lock = threading.Lock()
 
-        def concurrent_worker(session, header, url, output_path, semaphore, **kw):
+        def concurrent_worker(session, header, url, output_path, **kw):
             safename = os.path.basename(output_path).replace(".zip", "")
             with lock:
                 active_at_same_time["count"] += 1
@@ -543,7 +482,7 @@ class TestRaceCondition:
         # Simulate: first call succeeds, second finds .tmp already gone
         call_count = {"n": 0}
 
-        def worker_with_race(session, header, url, output_path, semaphore, **kw):
+        def worker_with_race(session, header, url, output_path, **kw):
             call_count["n"] += 1
             if call_count["n"] == 2:
                 raise FileNotFoundError("tmp already moved by first thread")
@@ -622,7 +561,7 @@ class TestServerNotAnswering:
             pending = subset["safe"].tolist()
             return make_downloadable_df([s for s in safenames if s in pending])
 
-        def worker(session, header, url, output_path, semaphore, **kw):
+        def worker(session, header, url, output_path, **kw):
             safename = os.path.basename(output_path).replace(".zip", "")
             if safename == "SAFE_TIMEOUT":
                 raise Timeout("server did not respond")
@@ -647,26 +586,6 @@ class TestServerNotAnswering:
         assert result.loc[result["safe"] == "SAFE_OK", "status"].iloc[0] == 1
         assert result.loc[result["safe"] == "SAFE_TIMEOUT", "status"].iloc[0] == -1
 
-    def test_semaphore_cleaned_after_timeout(self, patch_semaphores):
-        tok_mock, _ = patch_semaphores
-        with (
-            patch(
-                "cdsodatacli.download.get_sessions_download_available",
-                return_value=make_downloadable_df(["SAFE_TO"]),
-            ),
-            patch(
-                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                side_effect=Timeout("timeout"),
-            ),
-            patch("os.path.exists", return_value=True),
-        ):
-            download_list_product_multithread_v3(
-                list_id=["id0"],
-                list_safename=["SAFE_TO"],
-                outputdir="/fake/out",
-                account_group="logins",
-            )
-        assert tok_mock.call_count >= 1
 
     def test_http_503_returned_as_status_meaning(self):
         """
