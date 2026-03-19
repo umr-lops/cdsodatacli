@@ -22,6 +22,11 @@ default_listing = os.path.join(
     "example_WV_OCN_listing.txt",
 )
 
+# conftest.py
+def pytest_configure(config):
+    config.addinivalue_line("markers", "integration: mark test as requiring real CDSE credentials")
+
+
 FAKE_CONF = {
     "logins": {"cprevost@ifremer.fr": "fakepasswd"},
     # "URL_identity":"https://fake_url.dummy",
@@ -46,6 +51,11 @@ def test_secrets():
         (default_listing, conf["test_default_output_directory"]),
     ],
 )
+@pytest.mark.skipif(
+    os.getenv("DEFAULT_LOGIN_CDSE") is None or os.getenv("DEFAULT_PASSWD_CDSE") is None,
+    reason="CDSE credentials not available in CI environment"
+)
+@pytest.mark.integration
 def test_download_WV_OCN_SAFE(listing, outputdir):
     if "./" in outputdir:
         outputdir = os.path.abspath(os.path.join(os.getcwd(), outputdir))

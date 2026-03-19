@@ -194,20 +194,21 @@ class TestDownloadError:
 
     def test_failed_product_status_minus1(self):
         safenames = ["SAFE_OK", "SAFE_FAIL"]
-        results = [
-            make_future_result("SAFE_OK", status="OK", speed=3.45),
-            make_future_result("SAFE_FAIL", status="Unauthorized", speed=np.nan),
-        ]
-        with (
-            patch(
-                "cdsodatacli.download.get_sessions_download_available",
-                return_value=make_downloadable_df(safenames),
-            ),
-            patch(
-                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                side_effect=results,
-            ),
-        ):
+
+        def sessions_side_effect(conf, subset, **kw):
+            pending = subset["safe"].tolist()
+            return make_downloadable_df([s for s in safenames if s in pending])
+
+        def worker_side_effect(session, header, url, output_path, **kw):
+            safename = os.path.basename(output_path).replace(".zip", "")
+            if safename == "SAFE_FAIL":
+                return make_future_result("SAFE_FAIL", status="Unauthorized", speed=np.nan)
+            return make_future_result(safename)
+
+        with patch("cdsodatacli.download.get_sessions_download_available",
+                side_effect=sessions_side_effect), \
+            patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                side_effect=worker_side_effect):
             result = download_list_product_multithread_v3(
                 list_id=["id0", "id1"],
                 list_safename=safenames,

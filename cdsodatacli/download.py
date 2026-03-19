@@ -249,6 +249,8 @@ def download_list_product_multithread_v2(
     cdsodatacli_conf_file=None,
 ):
     """
+    .. deprecated::
+        Use :func:`download_list_product_multithread_v3` instead. Will be removed in next release.
     v2 is handling multi account round-robin and token semaphore files
     Parameters
     ----------
