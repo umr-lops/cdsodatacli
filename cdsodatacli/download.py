@@ -4,7 +4,6 @@ from tqdm import tqdm
 import datetime
 import time
 import os
-import random
 import traceback
 import shutil
 import pandas as pd
@@ -14,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COM
 import numpy as np
 from cdsodatacli.fetch_access_token import (
     get_bearer_access_token,
+    get_valid_access_token,
     MAX_VALIDITY_ACCESS_TOKEN,
 )
 from cdsodatacli.session import (
@@ -314,7 +314,7 @@ def download_list_product_multithread_v2(
                     dfproductDownloaddable["url"].iloc[jj],
                     dfproductDownloaddable["output_path"].iloc[jj],
                     # dfproductDownloaddable["token_semaphore"][jj],
-                    cdsodatacli_conf_file=cdsodatacli_conf_file,
+                    conf=conf,
                 ): (jj)
                 for jj in range(len(dfproductDownloaddable))
             }
@@ -325,22 +325,25 @@ def download_list_product_multithread_v2(
                     speed,
                     status_meaning,
                     safename_base,
-                    semaphore_token_file,
+                    # semaphore_token_file,
                 ) = future.result()
                 # remove semaphore once the download is over (successful or not)
-                login = os.path.basename(semaphore_token_file).split("_")[3]
-                date_generation_access_token = datetime.datetime.strptime(
-                    os.path.basename(semaphore_token_file)
-                    .split("_")[4]
-                    .replace(".txt", ""),
-                    "%Y%m%dt%H%M%S",
-                )
+                # login = os.path.basename(semaphore_token_file).split("_")[3]
+                # date_generation_access_token = datetime.datetime.strptime(
+                #     os.path.basename(semaphore_token_file)
+                #     .split("_")[4]
+                #     .replace(".txt", ""),
+                #     "%Y%m%dt%H%M%S",
+                # )
 
                 # remove_semaphore_token_file(
                 #     token_dir=conf["token_directory"],
                 #     login=login,
                 #     date_generation_access_token=date_generation_access_token,
                 # )
+                login = dfproductDownloaddable["login"][
+                    dfproductDownloaddable["safe"] == safename_base
+                ].values
                 logging.info("remove session semaphore for %s", login)
                 remove_semaphore_session_file(
                     session_dir=conf["active_session_directory"],
@@ -397,7 +400,7 @@ def download_list_product(
     specific_account,
     specific_passwd=None,
     hideProgressBar=False,
-    cdsodatacli_conf_file=None,
+    conf=None,
 ):
     """
 
@@ -407,9 +410,9 @@ def download_list_product(
     list_safename (list) of string basename of SAFE product (eg. S1A_IW_GRDH_1SDV_20221013T065030_20221013T0650...SAFE)
     outputdir (str) path where product will be stored
     specific_account (str): CDSE account to use
-    specific_passwd (str): CDSE password associated to specific_account (optional)
+    specific_passwd (str): optional, None -> password is found from conf
     hideProgressBar (bool): True -> no tqdm progress bar
-    cdsodatacli_conf_file (str): path to the cdsodatacli configuration file
+    cdsodatacli_conf (dict): configuration
 
 
     Returns
@@ -417,33 +420,24 @@ def download_list_product(
 
     """
     assert len(list_id) == len(list_safename)
-    conf = get_conf(path_config_file=cdsodatacli_conf_file)
+    # conf = get_conf(path_config_file=cdsodatacli_conf_file)
     cpt = defaultdict(int)
     all_speeds = []
     cpt["products_in_initial_listing"] = len(list_id)
     # lst_usable_tokens = get_list_of_existing_token_semaphore_file(
     #     token_dir=conf["token_directory"]
     # )
-    lst_usable_tokens = []
-    if lst_usable_tokens == []:  # in case no token ready to be used -> create new one
-        (
-            access_token,
-            date_generation_access_token,
-            login,
-            path_semphore_token,
-        ) = get_bearer_access_token(
-            conf=conf,
-            quiet=hideProgressBar,
-            specific_account=specific_account,
-            passwd=specific_passwd,
-        )
-    else:  # select randomly one token among existing
-        path_semphore_token = random.choice(lst_usable_tokens)
-        date_generation_access_token = datetime.datetime.strptime(
-            os.path.basename(path_semphore_token).split("_")[4].replace(".txt", ""),
-            "%Y%m%dt%H%M%S",
-        )
-        access_token = open(path_semphore_token).readlines()[0]
+
+    (
+        access_token,
+        date_generation_access_token,
+        login,
+    ) = get_bearer_access_token(
+        conf=conf,
+        # quiet=hideProgressBar,
+        specific_account=specific_account,
+        specific_psswd=specific_passwd,
+    )
     if access_token is not None:
         headers = {"Authorization": "Bearer %s" % access_token}
         logging.debug("headers: %s", headers)
@@ -481,7 +475,6 @@ def download_list_product(
                         access_token,
                         date_generation_access_token,
                         specific_account,
-                        path_semphore_token,
                     ) = get_bearer_access_token(
                         conf=conf, specific_account=specific_account
                     )
@@ -510,7 +503,7 @@ def download_list_product(
                     url=url_product,
                     output_filepath=output_filepath,
                     # semaphore_token_file=path_semphore_token,
-                    cdsodatacli_conf_file=cdsodatacli_conf_file,
+                    conf=conf,
                 )
                 # remove_semaphore_token_file(
                 #     token_dir=conf["token_directory"],
@@ -544,6 +537,7 @@ def download_list_product(
             np.mean(all_speeds),
             np.std(all_speeds),
         )
+    return cpt
 
 
 def test_listing_content(listing_path):
@@ -694,29 +688,24 @@ def download_list_product_sequential(
             df_products_downloadable["session_semaphore"].iloc[ii]
         ).split("_")[3]
         headers = df_products_downloadable["header"].iloc[ii]
-        path_semaphore_token = df_products_downloadable["token_semaphore"].iloc[ii]
+        # path_semaphore_token = df_products_downloadable["token_semaphore"].iloc[ii]
 
         output_filepath = df_products_downloadable["output_path"].iloc[ii]
         safename_product = df_products_downloadable["safe"].iloc[ii]
         logging.info("start download : %s", safename_product)
-        date_generation_access_token = datetime.datetime.strptime(
-            os.path.basename(path_semaphore_token).split("_")[4].replace(".txt", ""),
-            "%Y%m%dt%H%M%S",
-        )
-
+        # date_generation_access_token = datetime.datetime.strptime(
+        #     os.path.basename(path_semaphore_token).split("_")[4].replace(".txt", ""),
+        #     "%Y%m%dt%H%M%S",
+        # )
+        access_token, date_generation_access_token = get_valid_access_token(login)
         logging.debug("url_product : %s", url_product)
-        if (
-            datetime.datetime.today() - date_generation_access_token
-        ).total_seconds() >= MAX_VALIDITY_ACCESS_TOKEN or not os.path.exists(
-            path_semaphore_token
-        ):
+        if access_token is None:
 
             logging.info("get a new access token")
             (
                 access_token,
                 date_generation_access_token,
                 login,
-                path_semaphore_token,
             ) = get_bearer_access_token(
                 conf=conf, specific_account=None, account_group=logins_group
             )
@@ -744,7 +733,7 @@ def download_list_product_sequential(
             url=url_product,
             output_filepath=output_filepath,
             # semaphore_token_file=path_semaphore_token,
-            cdsodatacli_conf_file=cdsodatacli_conf_file,
+            conf=conf,
         )
         # remove the token file, there is a check in the method on its validity
         # remove_semaphore_token_file(
@@ -940,7 +929,7 @@ def download_list_product_multithread_v3(
                     url_product,
                     output_path,
                     # path_semaphore_token,
-                    cdsodatacli_conf_file=cdsodatacli_conf_file,
+                    conf=conf,
                 )
                 future_to_info[future] = {
                     "safename": safename_base,
@@ -973,7 +962,7 @@ def download_list_product_multithread_v3(
                     ) = future.result()
                     # future_to_info.pop(future, None)
                 except Exception:
-                    
+
                     logging.error(
                         "Unhandled exception for %s: %s",
                         safename_base,
@@ -982,7 +971,7 @@ def download_list_product_multithread_v3(
                     df2.loc[(df2["safe"] == safename_base), "status"] = -1
                     pbar.update(1)
                     continue
-               
+
                 logging.debug("remove session semaphore for %s", login_used)
                 remove_semaphore_session_file(
                     session_dir=conf["active_session_directory"],
@@ -1004,7 +993,9 @@ def download_list_product_multithread_v3(
                 else:
                     df2.loc[(df2["safe"] == safename_base), "status"] = -1
                     errors_per_account[login_used] += 1
-                    logging.info("error found for %s meaning %s", login_used, status_meaning)
+                    logging.info(
+                        "error found for %s meaning %s", login_used, status_meaning
+                    )
                     # df2["status"][df2["safe"] == safename_base] = -1 # download in error
                 # if retries[safename_base] > MAX_RETRIES:
                 # df2.loc[(df2["safe"] == safename_base),"status"] = -1
@@ -1100,13 +1091,14 @@ def main():
     if not os.path.exists(args.outputdir):
         logging.debug("mkdir on %s", args.outputdir)
         os.makedirs(args.outputdir, 0o0775)
+    conf = get_conf(path_config_file=args.cdsodatacli_conf_file)
     download_list_product(
         list_id=inputdf["id"].values,
         list_safename=inputdf["safename"].values,
         outputdir=args.outputdir,
         hideProgressBar=args.hideProgressBar,
         specific_account=args.login,
-        cdsodatacli_conf_file=args.cdsodatacli_conf_file,
+        conf=conf,
     )
     elapsed = t0 - time.time()
     logging.info("end of function in %s seconds", elapsed)

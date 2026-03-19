@@ -163,9 +163,7 @@ class TestAllSuccessful:
         # Define a side effect function instead of a list
         # This will return a result for the safename requested,
         # no matter how many times it is called.
-        def mock_download_side_effect(
-            session, header, url, output_path, **kw
-        ):
+        def mock_download_side_effect(session, header, url, output_path, **kw):
             safename = os.path.basename(output_path).replace(".zip", "")
             return make_future_result(safename)
 
@@ -197,7 +195,7 @@ class TestDownloadError:
     def test_failed_product_status_minus1(self):
         safenames = ["SAFE_OK", "SAFE_FAIL"]
         results = [
-            make_future_result("SAFE_OK", status="OK"),
+            make_future_result("SAFE_OK", status="OK", speed=3.45),
             make_future_result("SAFE_FAIL", status="Unauthorized", speed=np.nan),
         ]
         with (
@@ -218,7 +216,6 @@ class TestDownloadError:
             )
         assert result.loc[result["safe"] == "SAFE_FAIL", "status"].iloc[0] == -1
         assert result.loc[result["safe"] == "SAFE_OK", "status"].iloc[0] == 1
-
 
 
 class TestWorkerException:
@@ -585,7 +582,6 @@ class TestServerNotAnswering:
             )
         assert result.loc[result["safe"] == "SAFE_OK", "status"].iloc[0] == 1
         assert result.loc[result["safe"] == "SAFE_TIMEOUT", "status"].iloc[0] == -1
-
 
     def test_http_503_returned_as_status_meaning(self):
         """

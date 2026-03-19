@@ -22,6 +22,13 @@ default_listing = os.path.join(
     "example_WV_OCN_listing.txt",
 )
 
+FAKE_CONF = {
+    "logins": {"cprevost@ifremer.fr": "fakepasswd"},
+    # "URL_identity":"https://fake_url.dummy",
+    "URL_identity": "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token",
+    "URL_download": "https://zipper.dataspace.copernicus.eu/odata/v1/Products(%s)/$value",
+}
+
 
 @pytest.fixture(scope="session")
 def test_secrets():
@@ -75,6 +82,7 @@ def test_download_WV_OCN_SAFE(listing, outputdir):
         specific_account=login_cdse,
         specific_passwd=passwd,
         hideProgressBar=False,
+        conf=conf,
     )
 
     # assert check_safe_in_outputdir(outputdir=outputdir,safename=inputdfclean['safename'].iloc[0]) is True

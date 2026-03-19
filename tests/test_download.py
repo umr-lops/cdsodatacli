@@ -98,8 +98,8 @@ def test_CDS_Odata_download_one_product_v2_success(
     output_path = str(tmp_path / "test.zip")
 
     with patch("builtins.open", mock_open()):
-        speed, meaning, name, sem = dl.CDS_Odata_download_one_product_v2(
-            session, {}, "http://url", output_path, "sem_file"
+        speed, meaning, name = dl.CDS_Odata_download_one_product_v2(
+            session=session, headers={}, url="http://url", output_filepath=output_path
         )
 
     assert meaning == "OK"
@@ -145,7 +145,7 @@ def test_download_list_product_sequential(
     fake_sem = "/tmp/type_group_status_user1_20240101t120000.txt"
 
     # Mocking token refresh
-    mock_token.return_value = ("token", datetime.datetime.now(), "user1", fake_sem)
+    mock_token.return_value = ("token", datetime.datetime.now(), "user1")
 
     mock_sessions.return_value = pd.DataFrame(
         {
@@ -153,16 +153,16 @@ def test_download_list_product_sequential(
             "session": [MagicMock()],
             "session_semaphore": [fake_sem],
             "header": [{"Auth": "Bearer"}],
-            "token_semaphore": [fake_sem],
+            # "token_semaphore": [fake_sem],
             "output_path": ["/tmp/out.zip"],
             "safe": ["SAFE1"],
         }
     )
 
-    mock_dl_one.return_value = (10.0, "OK", "SAFE1", fake_sem)
+    mock_dl_one.return_value = (10.0, "OK", "SAFE1")
 
     with (
-        patch("cdsodatacli.download.remove_semaphore_token_file"),
+        # patch("cdsodatacli.download.remove_semaphore_token_file"),
         patch("cdsodatacli.download.remove_semaphore_session_file"),
         patch("cdsodatacli.download.filter_product_already_present") as mock_filter,
     ):
@@ -191,7 +191,7 @@ def test_download_list_product_multithread_v2(
     mock_dl_one, mock_sessions, mock_get_conf, mock_conf
 ):
     mock_get_conf.return_value = mock_conf
-    fake_sem = "/tmp/type_group_status_user1_20240101t120000.txt"
+    # fake_sem = "/tmp/type_group_status_user1_20240101t120000.txt"
 
     mock_sessions.return_value = pd.DataFrame(
         {
@@ -199,15 +199,16 @@ def test_download_list_product_multithread_v2(
             "session": [MagicMock()],
             "header": [{}],
             "output_path": ["p1.zip"],
-            "token_semaphore": [fake_sem],
+            "login": ["foobar"],
+            # "token_semaphore": [fake_sem],
             "safe": ["SAFE1"],
         }
     )
 
-    mock_dl_one.return_value = (5.0, "OK", "SAFE1", fake_sem)
+    mock_dl_one.return_value = (5.0, "OK", "SAFE1")
 
     with (
-        patch("cdsodatacli.download.remove_semaphore_token_file"),
+        # patch("cdsodatacli.download.remove_semaphore_token_file"),
         patch("cdsodatacli.download.remove_semaphore_session_file"),
         patch("cdsodatacli.download.filter_product_already_present") as mock_filter,
     ):
