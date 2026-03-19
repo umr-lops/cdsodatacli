@@ -202,13 +202,21 @@ class TestDownloadError:
         def worker_side_effect(session, header, url, output_path, **kw):
             safename = os.path.basename(output_path).replace(".zip", "")
             if safename == "SAFE_FAIL":
-                return make_future_result("SAFE_FAIL", status="Unauthorized", speed=np.nan)
+                return make_future_result(
+                    "SAFE_FAIL", status="Unauthorized", speed=np.nan
+                )
             return make_future_result(safename)
 
-        with patch("cdsodatacli.download.get_sessions_download_available",
-                side_effect=sessions_side_effect), \
-            patch("cdsodatacli.download.CDS_Odata_download_one_product_v2",
-                side_effect=worker_side_effect):
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                side_effect=sessions_side_effect,
+            ),
+            patch(
+                "cdsodatacli.download.CDS_Odata_download_one_product_v2",
+                side_effect=worker_side_effect,
+            ),
+        ):
             result = download_list_product_multithread_v3(
                 list_id=["id0", "id1"],
                 list_safename=safenames,

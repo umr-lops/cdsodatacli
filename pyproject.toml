@@ -162,7 +162,7 @@ norecursedirs = [
   "__pycache__",
 ]
 markers = [
-    "integration: mark test as requiring real CDSE credentials and network access",
+  "integration: mark test as requiring real CDSE credentials and network access",
 ]
 doctest_optionflags = [
   "NUMBER",
