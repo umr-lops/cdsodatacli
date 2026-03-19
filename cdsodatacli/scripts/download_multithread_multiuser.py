@@ -6,7 +6,7 @@ import logging
 import os
 import cdsodatacli
 from cdsodatacli.download import (
-    download_list_product_multithread_v2,
+    download_list_product_multithread_v3,
     test_listing_content,
     add_missing_cdse_hash_ids_in_listing,
 )
@@ -100,7 +100,7 @@ def entrypoint():
         logging.debug("mkdir on %s", outputdir)
         os.makedirs(outputdir, 0o0775)
     if len(inputdf["id"]) > 0:
-        dfout = download_list_product_multithread_v2(
+        dfout = download_list_product_multithread_v3(
             list_id=inputdf["id"].values,
             list_safename=inputdf["safename"].values,
             outputdir=outputdir,
