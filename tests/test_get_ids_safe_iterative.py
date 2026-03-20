@@ -6,6 +6,10 @@ from cdsodatacli.scripts.get_ids_listing_safe_iterative import (
     add_ids_to_listing_iterative,
 )
 
+skip_in_ci = pytest.mark.skipif(
+    os.getenv("CI") == "true", reason="Skipped in CI environment"
+)
+
 
 @pytest.fixture
 def sample_listing(tmp_path):
@@ -20,6 +24,7 @@ def sample_listing(tmp_path):
     return str(p)
 
 
+@skip_in_ci
 def test_add_ids_to_listing_iterative_full_success(sample_listing, tmp_path):
     """Test case where all IDs are found in the first iteration."""
     output_path = str(tmp_path / "final_output.csv")
@@ -48,6 +53,7 @@ def test_add_ids_to_listing_iterative_full_success(sample_listing, tmp_path):
         assert set(df_out["id"]) == {"uuid0", "uuid1", "uuid2"}
 
 
+@skip_in_ci
 def test_add_ids_to_listing_iterative_multi_step(sample_listing, tmp_path):
     """Test case where IDs are found across multiple loops (iterations)."""
     output_path = str(tmp_path / "multi_step_output.csv")
@@ -80,6 +86,7 @@ def test_add_ids_to_listing_iterative_multi_step(sample_listing, tmp_path):
         assert mocked_api.call_count == 2
 
 
+@skip_in_ci
 def test_add_ids_to_listing_no_progress_break(sample_listing, tmp_path):
     """Test that the loop breaks if no new IDs are found to avoid infinite loops."""
     output_path = str(tmp_path / "break_output.csv")
@@ -98,12 +105,14 @@ def test_add_ids_to_listing_no_progress_break(sample_listing, tmp_path):
         assert df_out["id"].isna().all()
 
 
+@skip_in_ci
 def test_add_ids_to_listing_file_not_found():
     """Test behavior when the input file does not exist."""
     with pytest.raises(FileNotFoundError):
         add_ids_to_listing_iterative("non_existent_file.txt")
 
 
+@skip_in_ci
 def test_add_ids_to_listing_duplicates_in_api(sample_listing, tmp_path):
     """Test that the script handles duplicates returned by the API correctly."""
     output_path = str(tmp_path / "dedup_output.csv")

@@ -12,6 +12,9 @@ from cdsodatacli.download import download_list_product
 from cdsodatacli.utils import get_conf
 from dotenv import load_dotenv
 
+skip_in_ci = pytest.mark.skipif(
+    os.getenv("CI") == "true", reason="Skipped in CI environment"
+)
 load_dotenv()
 conf = get_conf()
 
@@ -21,6 +24,21 @@ default_listing = os.path.join(
     "scripts",
     "example_WV_OCN_listing.txt",
 )
+
+
+# conftest.py
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "integration: mark test as requiring real CDSE credentials"
+    )
+
+
+FAKE_CONF = {
+    "logins": {"cprevost@ifremer.fr": "fakepasswd"},
+    # "URL_identity":"https://fake_url.dummy",
+    "URL_identity": "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token",
+    "URL_download": "https://zipper.dataspace.copernicus.eu/odata/v1/Products(%s)/$value",
+}
 
 
 @pytest.fixture(scope="session")
@@ -39,6 +57,12 @@ def test_secrets():
         (default_listing, conf["test_default_output_directory"]),
     ],
 )
+@pytest.mark.skipif(
+    os.getenv("DEFAULT_LOGIN_CDSE") is None or os.getenv("DEFAULT_PASSWD_CDSE") is None,
+    reason="CDSE credentials not available in CI environment",
+)
+@pytest.mark.integration
+@skip_in_ci
 def test_download_WV_OCN_SAFE(listing, outputdir):
     if "./" in outputdir:
         outputdir = os.path.abspath(os.path.join(os.getcwd(), outputdir))
@@ -75,6 +99,7 @@ def test_download_WV_OCN_SAFE(listing, outputdir):
         specific_account=login_cdse,
         specific_passwd=passwd,
         hideProgressBar=False,
+        conf=conf,
     )
 
     # assert check_safe_in_outputdir(outputdir=outputdir,safename=inputdfclean['safename'].iloc[0]) is True

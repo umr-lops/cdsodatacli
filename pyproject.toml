@@ -53,6 +53,7 @@ dev = [
 queryCDS = "cdsodatacli.query:query_client"
 downloadFromCDS = "cdsodatacli.download:main"
 downloadMuliThreadMultiUser = 'cdsodatacli.scripts.download_multithread_multiuser:entrypoint'
+downloadMultiThreadMultiUserV3 = 'cdsodatacli.script.download_multithread_one_account_deamon:entrypoint'
 countProductsLocally = 'cdsodatacli.scripts.count_present_and_absent_products:entrypoint'
 
 
@@ -160,6 +161,9 @@ norecursedirs = [
   ".tox",
   ".git",
   "__pycache__",
+]
+markers = [
+  "integration: mark test as requiring real CDSE credentials and network access",
 ]
 doctest_optionflags = [
   "NUMBER",

@@ -7,8 +7,8 @@ import pandas as pd
 import requests
 from collections import defaultdict
 from cdsodatacli.fetch_access_token import (
-    get_list_of_exising_token,
     get_bearer_access_token,
+    get_valid_access_token,
 )
 
 MAX_SESSION_PER_ACCOUNT = 4  # each account CDSE have maximum 4 active sessions
@@ -148,8 +148,9 @@ def get_sessions_download_available(
     """
     df_products_downloadable = pd.DataFrame()
     all_sessions = []
+    all_logins = []
     all_headers = []
-    all_semaphores = []
+    # all_semaphores = []
     all_session_semaphores = []
     usable_accounts = []
     all_safe_basename = []
@@ -177,26 +178,29 @@ def get_sessions_download_available(
             logging.debug("no more account available for now.")
             break  # no more account free
         else:
-            lst_usable_tokens = get_list_of_exising_token(
-                token_dir=conf["token_directory"], account=account_free
+            # lst_usable_tokens = get_list_of_existing_token_semaphore_file(
+            #     token_dir=conf["token_directory"], account=account_free
+            # )
+            access_token, date_generation_access_token = get_valid_access_token(
+                login=account_free
             )
+            login = account_free
+            # lst_usable_tokens = []
             if (
-                lst_usable_tokens == []
+                access_token is None
             ):  # in case no token ready to be used -> create new one
                 (
                     access_token,
                     date_generation_access_token,
                     login,
-                    path_semphore_token,
                 ) = get_bearer_access_token(
                     conf=conf,
-                    quiet=hideProgressBar,
                     specific_account=account_free,
                     account_group=logins_group,
                 )
-            else:  # select randomly one token among existing
-                path_semphore_token = random.choice(lst_usable_tokens)
-                access_token = open(path_semphore_token).readlines()[0]
+            # else:  # select randomly one token among existing
+            #     path_semphore_token = random.choice(lst_usable_tokens)
+            #     access_token = open(path_semphore_token).readlines()[0]
             if access_token is not None:
                 bunch_product_downloadable.append(safename_product)
                 bunch_urls_to_download.append(subset_to_treat["urls"].iloc[ss])
@@ -214,13 +218,15 @@ def get_sessions_download_available(
                 session = requests.Session()
                 session.headers.update(headers)
                 all_sessions.append(session)
+                all_logins.append(login)
                 all_headers.append(headers)
-                all_semaphores.append(path_semphore_token)
+                # all_semaphores.append(path_semphore_token)
                 all_safe_basename.append(safename_product)
                 all_session_semaphores.append(path_semaphore_session)
     df_products_downloadable["session"] = all_sessions
     df_products_downloadable["header"] = all_headers
-    df_products_downloadable["token_semaphore"] = all_semaphores
+    # df_products_downloadable["token_semaphore"] = all_semaphores
+    df_products_downloadable["login"] = all_logins
     df_products_downloadable["url"] = bunch_urls_to_download
     df_products_downloadable["output_path"] = outputfiles_download_coming
     df_products_downloadable["session_semaphore"] = all_session_semaphores
