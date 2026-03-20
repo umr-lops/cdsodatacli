@@ -12,6 +12,9 @@ from cdsodatacli.download import download_list_product
 from cdsodatacli.utils import get_conf
 from dotenv import load_dotenv
 
+skip_in_ci = pytest.mark.skipif(
+    os.getenv("CI") == "true", reason="Skipped in CI environment"
+)
 load_dotenv()
 conf = get_conf()
 
@@ -59,6 +62,7 @@ def test_secrets():
     reason="CDSE credentials not available in CI environment",
 )
 @pytest.mark.integration
+@skip_in_ci
 def test_download_WV_OCN_SAFE(listing, outputdir):
     if "./" in outputdir:
         outputdir = os.path.abspath(os.path.join(os.getcwd(), outputdir))
