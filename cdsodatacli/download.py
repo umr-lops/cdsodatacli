@@ -4,6 +4,8 @@ from tqdm import tqdm
 import datetime
 import time
 import os
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 import warnings
 import traceback
 import shutil
@@ -165,6 +167,119 @@ def CDS_Odata_download_one_product_v2(
     logging.debug("average download speed: %1.1fMo/sec", speed)
     return speed, status_meaning, safename_base
 
+
+def cds_s3_download_one_product(
+    s3_path,       
+    output_filepath,
+    conf,
+):
+    """
+    Download a single SAFE product via the CDSE S3 endpoint using boto3.
+
+
+    
+    The conf dict must contain:
+        - pre_spool   (str): temp directory for .tmp files
+        - s3_access_key (str): CDSE S3 access key
+        - s3_secret_key (str): CDSE S3 secret key
+        - s3_endpoint   (str): e.g. "https://eodata.dataspace.copernicus.eu"
+        - s3_bucket     (str): e.g. "eodata"
+        - s3_path       (str): prefix inside the bucket, e.g.
+                               "Sentinel-1/SAR/GRD/2022/05/03/S1A_IW_GRDH_1SDV_20220503T000000.SAFE"
+        - s3_region     (str): 'default' CDSE requires "default"
+
+    Argument:
+        s3_path (str): e.g. "Sentinel-1/SAR/GRD/2022/05/03/S1A_IW_GRDH_1SDV_20220503T000000.SAFE"
+        output_filepath (str): output full path when download is finished (not the pre-spool but the spool)
+        conf (dict): configuration see details above
+
+    Returns
+    -------
+        speed         (float): download speed in Mo/second
+        elapsed_time (int): number of seconds to download the product
+        total_mb (int): MegaBytes downloaded (zip)
+        status_meaning (str): human-readable outcome
+        safename_base  (str): basename without .zip
+    """
+
+
+    speed = np.nan
+    status_meaning = "unknown"
+    t0 = time.time()
+
+    safename_base = os.path.basename(output_filepath).replace(".zip", "")
+    output_filepath_tmp = os.path.join(
+        conf["pre_spool"], os.path.basename(output_filepath) + ".tmp"
+    )
+
+    try:
+        s3 = boto3.resource(
+            "s3",
+            endpoint_url=conf["s3_endpoint"],
+            aws_access_key_id=conf["s3_access_key"],
+            aws_secret_access_key=conf["s3_secret_key"],
+            region_name=conf.get("s3_region", "default"),
+        )
+        bucket = s3.Bucket(conf["s3_bucket"])
+
+        # List all objects under the SAFE prefix
+        objects = list(bucket.objects.filter(Prefix=s3_path))
+        if not objects:
+            raise FileNotFoundError(f"No S3 objects found under prefix: {s3_path}")
+
+        total_bytes = sum(obj.size for obj in objects)
+        total_mb = total_bytes / 1e6
+        logging.debug("Total size to download: %.1f Mo", total_mb)
+
+        # For a zipped single-file product, download into tmp then move
+        # For a .SAFE folder (multi-file), download each file in place
+        if len(objects) == 1:
+            obj = objects[0]
+            logging.debug("Downloading single object %s -> %s", obj.key, output_filepath_tmp)
+            bucket.download_file(obj.key, output_filepath_tmp)
+
+            elapsed_time = time.time() - t0
+            speed = total_mb / elapsed_time
+
+            try:
+                shutil.copy2(output_filepath_tmp, output_filepath)
+                os.remove(output_filepath_tmp)
+                os.chmod(output_filepath, mode=0o0775)
+                status_meaning = "Downloaded"
+            except Exception as e:
+                logging.error("Failed to move %s: %s", output_filepath_tmp, e)
+                if os.path.exists(output_filepath_tmp):
+                    os.remove(output_filepath_tmp)
+                status_meaning = "MoveError"
+
+        else:
+            # Multi-file .SAFE: reconstruct directory tree under output_filepath
+            for obj in objects:
+                relative_key = os.path.relpath(obj.key, s3_path)
+                local_file = os.path.join(output_filepath, relative_key)
+                os.makedirs(os.path.dirname(local_file), exist_ok=True)
+                if not obj.key.endswith("/"):  # skip folder pseudo-objects
+                    logging.debug("Downloading %s -> %s", obj.key, local_file)
+                    bucket.download_file(obj.key, local_file)
+
+            elapsed_time = time.time() - t0
+            speed = total_mb / elapsed_time
+            status_meaning = "Downloaded"
+
+    except FileNotFoundError as e:
+        logging.error("S3 product not found: %s", e)
+        status_meaning = "NotFound"
+        elapsed_time = time.time() - t0
+    except (BotoCoreError, ClientError) as e:
+        logging.error("S3 error while downloading %s: %s", output_filepath, e)
+        status_meaning = "S3Error"
+        elapsed_time = time.time() - t0
+        if os.path.exists(output_filepath_tmp):
+            os.remove(output_filepath_tmp)
+
+    logging.debug("time to download this product: %1.1f sec", elapsed_time)
+    logging.debug("average download speed: %1.1f Mo/sec", speed)
+    return speed,elapsed_time,total_mb, status_meaning, safename_base
 
 def filter_product_already_present(
     cpt, df, outputdir, cdsodatacli_conf, force_download=False
