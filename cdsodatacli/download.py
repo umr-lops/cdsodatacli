@@ -4,6 +4,7 @@ from tqdm import tqdm
 import datetime
 import time
 import os
+import warnings
 import traceback
 import shutil
 import pandas as pd
@@ -83,7 +84,7 @@ def CDS_Odata_download_one_product_v2(
     headers,
     url,
     output_filepath,
-    conf=None,
+    conf,
 ):
     """
 
@@ -95,7 +96,7 @@ def CDS_Odata_download_one_product_v2(
     headers (dict)
     url (str)
     output_filepath (str): full path where to store fetch file
-    cdsodatacli_conf_file (str): path to the cdsodatacli configuration file
+    conf (dict): configuration
 
     Returns
     -------
@@ -267,7 +268,7 @@ def download_list_product_multithread_v2(
         df2 (pd.DataFrame):
     """
     warnings.warn(
-        "download_list_product_multithread_v2 is deprecated and will be removed in version 3.0.0. "
+        "download_list_product_multithread_v2 is deprecated and will be removed in next release. "
         "Use get_bearer_access_token instead.",
         DeprecationWarning,
         stacklevel=2,  # pointe vers l'appelant, pas vers cette ligne

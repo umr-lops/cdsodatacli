@@ -99,7 +99,11 @@ def test_CDS_Odata_download_one_product_v2_success(
 
     with patch("builtins.open", mock_open()):
         speed, meaning, name = dl.CDS_Odata_download_one_product_v2(
-            session=session, headers={}, url="http://url", output_filepath=output_path
+            session=session,
+            headers={},
+            url="http://url",
+            output_filepath=output_path,
+            conf=mock_get_conf,
         )
 
     assert meaning == "OK"

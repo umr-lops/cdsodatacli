@@ -11,5 +11,5 @@ pre_spool: "./sentinel1_cdse_pre_spool"
 archives:
   default: "./my_archive"
 test_default_output_directory: "./my_tests"
-token_directory: "./CDSE_odata_token_access"
+# token_directory: "./CDSE_odata_token_access"
 active_session_directory: "./CDSE_odata_active_sessions"
