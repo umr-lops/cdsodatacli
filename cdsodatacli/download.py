@@ -1159,7 +1159,7 @@ def download_list_product_multithread_v4(
     list_safename,
     outputdir,
     account_group,
-    hideProgressBar=False,
+    hideprogressbar=False,
     check_on_disk=True,
     cdsodatacli_conf_file=None,
 ):
@@ -1188,7 +1188,7 @@ def download_list_product_multithread_v4(
     cpt = defaultdict(int)
     cpt["products_in_initial_listing"] = len(list_id)
     conf = get_conf(path_config_file=cdsodatacli_conf_file)
-    if hideProgressBar:
+    if hideprogressbar:
         os.environ["DISABLE_TQDM"] = "True"
     all_speeds = []
     # status, 0->not treated, -1->error download , 1-> successful download
