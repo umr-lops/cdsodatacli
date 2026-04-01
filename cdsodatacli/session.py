@@ -131,7 +131,7 @@ def remove_semaphore_session_file(session_dir, safename=None, login=None):
 
 
 def get_sessions_download_available(
-    conf, subset_to_treat, hideProgressBar=True, blacklist=None, logins_group="logins"
+    conf, subset_to_treat, blacklist=None, logins_group="logins"
 ):
     """
 
@@ -139,7 +139,6 @@ def get_sessions_download_available(
     ----------
     conf (dict) configuration dictionary of cdsodatacli package
     subset_to_treat (pandas.DatFrame)
-    hideProgressBar (bool)
     blacklist (list): list of account not usable [default=None]
     logins_group (str): logins or loginsbackfill (for instance, it depends on the localconfig.yml)
     Returns
@@ -156,6 +155,7 @@ def get_sessions_download_available(
     all_safe_basename = []
     bunch_product_downloadable = []
     bunch_urls_to_download = []
+    bunch_s3path_to_download = []
     outputfiles_download_coming = []
 
     lst_sessions_active = get_list_active_session(conf, login_group=logins_group)
@@ -204,6 +204,7 @@ def get_sessions_download_available(
             if access_token is not None:
                 bunch_product_downloadable.append(safename_product)
                 bunch_urls_to_download.append(subset_to_treat["urls"].iloc[ss])
+                bunch_s3path_to_download.append(subset_to_treat['S3path'].iloc[ss])
                 outputfiles_download_coming.append(
                     subset_to_treat["outputpath"].iloc[ss]
                 )
@@ -228,6 +229,7 @@ def get_sessions_download_available(
     # df_products_downloadable["token_semaphore"] = all_semaphores
     df_products_downloadable["login"] = all_logins
     df_products_downloadable["url"] = bunch_urls_to_download
+    df_products_downloadable["S3path"] = bunch_s3path_to_download # to check S3path
     df_products_downloadable["output_path"] = outputfiles_download_coming
     df_products_downloadable["session_semaphore"] = all_session_semaphores
     df_products_downloadable["safe"] = all_safe_basename
