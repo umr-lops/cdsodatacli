@@ -32,6 +32,7 @@ from cdsodatacli.utils import (
 from cdsodatacli.product_parser import ExplodeSAFE
 from collections import defaultdict
 
+logger = logging.getLogger(__name__)
 CHECK_INTERVAL = 1800  # seconds
 # chunksize = 4096
 chunksize = 8192  # like in the CDSE example
@@ -54,10 +55,10 @@ MAX_RETRIES = 2
 #     """
 #     t0 = time.time()
 #     with open(output_filepath, "wb") as f:
-#         logging.info("Downloading %s" % output_filepath)
+#         logger.info("Downloading %s" % output_filepath)
 #         response = session.get(url, headers=headers, stream=True)
 #         total_length = int(int(response.headers.get("content-length")) / 1000 / 1000)
-#         logging.debug("total_length : %s Mo", total_length)
+#         logger.debug("total_length : %s Mo", total_length)
 #         if total_length is None:  # no content length header
 #             f.write(response.content)
 #         else:
@@ -73,9 +74,9 @@ MAX_RETRIES = 2
 #                     f.write(data)
 #                     progress_bar.update(chunksize / 1000.0 / 1000.0)  # update progress
 #     elapsed_time = time.time() - t0
-#     logging.info("time to download this product: %1.1f sec", elapsed_time)
+#     logger.info("time to download this product: %1.1f sec", elapsed_time)
 #     speed = total_length / elapsed_time
-#     logging.info("average download speed: %1.1fMo/sec", speed)
+#     logger.info("average download speed: %1.1fMo/sec", speed)
 #     return speed
 
 
@@ -115,7 +116,7 @@ def CDS_Odata_download_one_product_v2(
     )
     safename_base = os.path.basename(output_filepath).replace(".zip", "")
     with open(output_filepath_tmp, "wb") as f:
-        logging.debug("Downloading %s" % output_filepath)
+        logger.debug("Downloading %s" % output_filepath)
         response = session.get(url, headers=headers, stream=True)
         status = response.status_code
         status_meaning = response.reason
@@ -124,14 +125,14 @@ def CDS_Odata_download_one_product_v2(
             "Transfer-Encoding" in response.headers
             and response.headers["Transfer-Encoding"] == "chunked"
         ):
-            logging.warning(
+            logger.warning(
                 "Server is using 'Transfer-Encoding: chunked'. Content length may not be accurate."
             )
         if response.ok:
             total_length = int(
                 int(response.headers.get("content-length")) / 1000 / 1000
             )
-            logging.debug("total_length : %s Mo", total_length)
+            logger.debug("total_length : %s Mo", total_length)
             try:
                 for chunk in response.iter_content(chunk_size=chunksize):
                     if chunk:
@@ -140,7 +141,7 @@ def CDS_Odata_download_one_product_v2(
                 status = -1
                 status_meaning = "ChunkedEncodingError"
     if (not response.ok or status == -1) and os.path.exists(output_filepath_tmp):
-        logging.debug("remove empty file %s", output_filepath_tmp)
+        logger.debug("remove empty file %s", output_filepath_tmp)
         os.remove(output_filepath_tmp)
     elapsed_time = time.time() - t0
 
@@ -153,16 +154,16 @@ def CDS_Odata_download_one_product_v2(
             os.remove(output_filepath_tmp)
             os.chmod(output_filepath, mode=0o0775)
         except Exception as e:
-            logging.error("Failed to move %s: %s", output_filepath_tmp, e)
+            logger.error("Failed to move %s: %s", output_filepath_tmp, e)
             if os.path.exists(output_filepath_tmp):
                 os.remove(output_filepath_tmp)  # nettoyer quoi qu'il arrive
             status_meaning = "MoveError"
 
         # except OSError as e:
-        #     logging.error("Failed to move %s: %s", output_filepath_tmp, e)
+        #     logger.error("Failed to move %s: %s", output_filepath_tmp, e)
         #     status_meaning = "MoveError"
-    logging.debug("time to download this product: %1.1f sec", elapsed_time)
-    logging.debug("average download speed: %1.1fMo/sec", speed)
+    logger.debug("time to download this product: %1.1f sec", elapsed_time)
+    logger.debug("average download speed: %1.1fMo/sec", speed)
     return speed, status_meaning, safename_base
 
 
@@ -222,8 +223,8 @@ def filter_product_already_present(
                 id_product = df["id"].iloc[ii]
                 url_product = cdsodatacli_conf["URL_download"] % id_product
 
-                logging.debug("url_product : %s", url_product)
-                logging.debug(
+                logger.debug("url_product : %s", url_product)
+                logger.debug(
                     "id_product : %s safename_product : %s",
                     id_product,
                     safename_product,
@@ -274,7 +275,7 @@ def download_list_product_multithread_v2(
         stacklevel=2,  # pointe vers l'appelant, pas vers cette ligne
     )
     assert len(list_id) == len(list_safename)
-    logging.info("check_on_disk : %s", check_on_disk)
+    logger.info("check_on_disk : %s", check_on_disk)
     cpt = defaultdict(int)
     cpt["products_in_initial_listing"] = len(list_id)
     conf = get_conf(path_config_file=cdsodatacli_conf_file)
@@ -290,7 +291,7 @@ def download_list_product_multithread_v2(
         cpt, df, outputdir, force_download=force_download, cdsodatacli_conf=conf
     )
 
-    logging.info("%s", cpt)
+    logger.info("%s", cpt)
     while_loop = 0
     blacklist = []
     while (df2["status"] == 0).any():
@@ -304,7 +305,7 @@ def download_list_product_multithread_v2(
             blacklist=blacklist,
             logins_group=account_group,
         )
-        logging.info(
+        logger.info(
             "while_loop : %s, prod. to treat: %s, slot avail.:%s, %s",
             while_loop,
             len(subset_to_treat),
@@ -353,7 +354,7 @@ def download_list_product_multithread_v2(
                 login = dfproductDownloaddable["login"][
                     dfproductDownloaddable["safe"] == safename_base
                 ].values
-                logging.info("remove session semaphore for %s", login)
+                logger.info("remove session semaphore for %s", login)
                 remove_semaphore_session_file(
                     session_dir=conf["active_session_directory"],
                     safename=safename_base,
@@ -364,7 +365,7 @@ def download_list_product_multithread_v2(
                 #     cpt["interrupted"] += 1
                 #     raise ("keyboard interrupt")
                 # except:
-                #     logging.error("traceback : %s", traceback.format_exc())
+                #     logger.error("traceback : %s", traceback.format_exc())
                 #     speed = np.nan
                 #     status_meaning = "DownloadError"
 
@@ -375,7 +376,7 @@ def download_list_product_multithread_v2(
                 else:
                     df2.loc[(df2["safe"] == safename_base), "status"] = -1
                     errors_per_account[login] += 1
-                    logging.info("error found for %s meaning %s", login, status_meaning)
+                    logger.info("error found for %s meaning %s", login, status_meaning)
                     # df2["status"][df2["safe"] == safename_base] = -1 # download in error
                 cpt["status_%s" % status_meaning] += 1
 
@@ -383,9 +384,9 @@ def download_list_product_multithread_v2(
             for acco in errors_per_account:
                 if errors_per_account[acco] >= MAX_SESSION_PER_ACCOUNT:
                     blacklist.append(acco)
-                    logging.info("%s black listed for next loops", acco)
-    logging.info("download over.")
-    logging.info("counter: %s", cpt)
+                    logger.info("%s black listed for next loops", acco)
+    logger.info("download over.")
+    logger.info("counter: %s", cpt)
     # safety remove active session, all reamining because of error
     remove_semaphore_session_file(
         session_dir=conf["active_session_directory"],
@@ -394,7 +395,7 @@ def download_list_product_multithread_v2(
     )
 
     if len(all_speeds) > 0:
-        logging.info(
+        logger.info(
             "average download speed %1.1f Mo/s (stdev: %1.1f Mo/s)",
             np.mean(all_speeds),
             np.std(all_speeds),
@@ -449,7 +450,7 @@ def download_list_product(
     )
     if access_token is not None:
         headers = {"Authorization": "Bearer %s" % access_token}
-        logging.debug("headers: %s", headers)
+        logger.debug("headers: %s", headers)
         session = requests.Session()
         session.headers.update(headers)
         if hideProgressBar:
@@ -470,8 +471,8 @@ def download_list_product(
             else:
                 cpt["product_absent_from_local_disks"] += 1
 
-                logging.debug("url_product : %s", url_product)
-                logging.debug(
+                logger.debug("url_product : %s", url_product)
+                logger.debug(
                     "id_product : %s safename_product : %s",
                     id_product,
                     safename_product,
@@ -479,7 +480,7 @@ def download_list_product(
                 if (
                     datetime.datetime.today() - date_generation_access_token
                 ).total_seconds() >= MAX_VALIDITY_ACCESS_TOKEN:
-                    logging.info("get a new access token")
+                    logger.info("get a new access token")
                     (
                         access_token,
                         date_generation_access_token,
@@ -490,7 +491,7 @@ def download_list_product(
                     headers = {"Authorization": "Bearer %s" % access_token}
                     session.headers.update(headers)
                 else:
-                    logging.debug("reuse same access token, still valid.")
+                    logger.debug("reuse same access token, still valid.")
                 output_filepath = os.path.join(outputdir, safename_product + ".zip")
                 # if access_token is None -> crash of the method but it is expected since this method is supposed to be used with a working account
                 # path_semaphore_token = write_token_semphore_file(
@@ -533,15 +534,15 @@ def download_list_product(
                 #     raise ("keyboard interrupt")
                 # except:
                 #     cpt["download_KO"] += 1
-                #     logging.error(
+                #     logger.error(
                 #         "impossible to fetch %s from CDS: %s",
                 #         url_product,
                 #         traceback.format_exc(),
                 #     )
-    logging.info("download over.")
-    logging.info("counter: %s", cpt)
+    logger.info("download over.")
+    logger.info("counter: %s", cpt)
     if len(all_speeds) > 0:
-        logging.info(
+        logger.info(
             "average download speed %1.1f Mo/s (stdev: %1.1f Mo/s)",
             np.mean(all_speeds),
             np.std(all_speeds),
@@ -678,7 +679,7 @@ def download_list_product_sequential(
         blacklist=None,
         logins_group=logins_group,
     )
-    logging.info("product downloadable: %s", len(df_products_downloadable))
+    logger.info("product downloadable: %s", len(df_products_downloadable))
     df_products_downloadable["status"] = 0
     if hideProgressBar:
         os.environ["DISABLE_TQDM"] = "True"
@@ -701,16 +702,16 @@ def download_list_product_sequential(
 
         output_filepath = df_products_downloadable["output_path"].iloc[ii]
         safename_product = df_products_downloadable["safe"].iloc[ii]
-        logging.info("start download : %s", safename_product)
+        logger.info("start download : %s", safename_product)
         # date_generation_access_token = datetime.datetime.strptime(
         #     os.path.basename(path_semaphore_token).split("_")[4].replace(".txt", ""),
         #     "%Y%m%dt%H%M%S",
         # )
         access_token, date_generation_access_token = get_valid_access_token(login)
-        logging.debug("url_product : %s", url_product)
+        logger.debug("url_product : %s", url_product)
         if access_token is None:
 
-            logging.info("get a new access token")
+            logger.info("get a new access token")
             (
                 access_token,
                 date_generation_access_token,
@@ -721,7 +722,7 @@ def download_list_product_sequential(
             headers = {"Authorization": "Bearer %s" % access_token}
             session.headers.update(headers)
         else:
-            logging.debug("reuse same access token, still valid.")
+            logger.debug("reuse same access token, still valid.")
         # output_filepath = os.path.join(outputdir, safename_product + ".zip")
         # write_token_semphore_file() already called in  get_bearer_access_token() , called by get_sessions_download_available()
         # path_semaphore_token = write_token_semphore_file(
@@ -772,15 +773,15 @@ def download_list_product_sequential(
         #     raise ("keyboard interrupt")
         # except:
         #     cpt["download_KO"] += 1
-        #     logging.error(
+        #     logger.error(
         #         "impossible to fetch %s from CDS: %s",
         #         url_product,
         #         traceback.format_exc(),
         #     )
-    logging.info("download over.")
-    logging.info("counter: %s", cpt)
+    logger.info("download over.")
+    logger.info("counter: %s", cpt)
     if len(all_speeds) > 0:
-        logging.info(
+        logger.info(
             "average download speed %1.1f Mo/s (stdev: %1.1f Mo/s)",
             np.mean(all_speeds),
             np.std(all_speeds),
@@ -818,7 +819,7 @@ def download_list_product_multithread_v3(
         df2 (pd.DataFrame):
     """
     assert len(list_id) == len(list_safename)
-    logging.info("check_on_disk : %s", check_on_disk)
+    logger.info("check_on_disk : %s", check_on_disk)
     cpt = defaultdict(int)
     cpt["products_in_initial_listing"] = len(list_id)
     conf = get_conf(path_config_file=cdsodatacli_conf_file)
@@ -834,7 +835,7 @@ def download_list_product_multithread_v3(
         cpt, df, outputdir, force_download=force_download, cdsodatacli_conf=conf
     )
     t_start_download = time.time()
-    logging.info("%s", cpt)
+    logger.info("%s", cpt)
     while_loop = 0
     blacklist = []
     running_futures = set()
@@ -855,7 +856,7 @@ def download_list_product_multithread_v3(
                 f"loop={while_loop} | OK={cpt['successful_download']} | ERR={sum(v for k,v in cpt.items() if k.startswith('status_') and k != 'status_OK')} | todo={len(subset_to_treat)} | //={len(running_futures)}"
             )
             if len(subset_to_treat) == 0:
-                logging.info(
+                logger.info(
                     "All the products have been treated (success or error).Nothing to do, exiting loop"
                 )
                 break
@@ -868,7 +869,7 @@ def download_list_product_multithread_v3(
                 logins_group=account_group,
             )
             urls_index = list(df_prod_downloadable.index)
-            logging.debug(
+            logger.debug(
                 "while_loop : %s, prod. to treat: %s, %s",
                 while_loop,
                 len(subset_to_treat),
@@ -876,7 +877,7 @@ def download_list_product_multithread_v3(
             )
             # if len(df_prod_downloadable) == 0:
             if len(df_prod_downloadable) == 0:
-                logging.debug("no session available wait a bit")
+                logger.debug("no session available wait a bit")
                 time.sleep(5)
                 continue
             errors_per_account = defaultdict(int)
@@ -894,7 +895,7 @@ def download_list_product_multithread_v3(
                 logintobeused = df_prod_downloadable["login"].loc[url_one_index]
                 assert isinstance(safename_base, str)
                 if safename_base in currently_downloading:
-                    logging.debug("skipping %s already being downloaded", safename_base)
+                    logger.debug("skipping %s already being downloaded", safename_base)
                     continue
                 # (
                 # access_token,
@@ -972,7 +973,7 @@ def download_list_product_multithread_v3(
                     # future_to_info.pop(future, None)
                 except Exception:
 
-                    logging.error(
+                    logger.error(
                         "Unhandled exception for %s: %s",
                         safename_base,
                         traceback.format_exc(),
@@ -981,7 +982,7 @@ def download_list_product_multithread_v3(
                     pbar.update(1)
                     continue
 
-                logging.debug("remove session semaphore for %s", login_used)
+                logger.debug("remove session semaphore for %s", login_used)
                 remove_semaphore_session_file(
                     session_dir=conf["active_session_directory"],
                     safename=safename_base,
@@ -992,7 +993,7 @@ def download_list_product_multithread_v3(
                 #     cpt["interrupted"] += 1
                 #     raise ("keyboard interrupt")
                 # except:
-                #     logging.error("traceback : %s", traceback.format_exc())
+                #     logger.error("traceback : %s", traceback.format_exc())
                 #     speed = np.nan
                 #     status_meaning = "DownloadError"
                 if status_meaning == "OK":
@@ -1002,7 +1003,7 @@ def download_list_product_multithread_v3(
                 else:
                     df2.loc[(df2["safe"] == safename_base), "status"] = -1
                     errors_per_account[login_used] += 1
-                    logging.info(
+                    logger.info(
                         "error found for %s meaning %s", login_used, status_meaning
                     )
                     # df2["status"][df2["safe"] == safename_base] = -1 # download in error
@@ -1018,11 +1019,11 @@ def download_list_product_multithread_v3(
             for acco in errors_per_account:
                 if errors_per_account[acco] >= MAX_SESSION_PER_ACCOUNT:
                     blacklist.append(acco)
-                    logging.info("%s black listed for next loops", acco)
+                    logger.info("%s black listed for next loops", acco)
     elapsed_time = time.time() - t_start_download
-    logging.info("download over in %f seconds", elapsed_time)
-    logging.info("counter: %s", cpt)
-    logging.info("maximum parallelism reached : %i", max_parallel_download)
+    logger.info("download over in %f seconds", elapsed_time)
+    logger.info("counter: %s", cpt)
+    logger.info("maximum parallelism reached : %i", max_parallel_download)
     # safety remove active session, all reamining because of error
     remove_semaphore_session_file(
         session_dir=conf["active_session_directory"],
@@ -1031,7 +1032,7 @@ def download_list_product_multithread_v3(
     )
 
     if len(all_speeds) > 0:
-        logging.info(
+        logger.info(
             "average download speed %1.1f Mo/s (stdev: %1.1f Mo/s)",
             np.mean(all_speeds),
             np.std(all_speeds),
@@ -1087,18 +1088,18 @@ def main():
     args = parser.parse_args()
     fmt = "%(asctime)s %(levelname)s %(filename)s(%(lineno)d) %(message)s"
     if args.verbose:
-        logging.basicConfig(
+        logger.basicConfig(
             level=logging.DEBUG, format=fmt, datefmt="%d/%m/%Y %H:%M:%S", force=True
         )
     else:
-        logging.basicConfig(
+        logger.basicConfig(
             level=logging.INFO, format=fmt, datefmt="%d/%m/%Y %H:%M:%S", force=True
         )
     t0 = time.time()
     # inputs = open(args.listing).readlines()
     inputdf = pd.read_csv(args.listing, names=["id", "safename"], delimiter=",")
     if not os.path.exists(args.outputdir):
-        logging.debug("mkdir on %s", args.outputdir)
+        logger.debug("mkdir on %s", args.outputdir)
         os.makedirs(args.outputdir, 0o0775)
     conf = get_conf(path_config_file=args.cdsodatacli_conf_file)
     download_list_product(
@@ -1110,4 +1111,4 @@ def main():
         conf=conf,
     )
     elapsed = t0 - time.time()
-    logging.info("end of function in %s seconds", elapsed)
+    logger.info("end of function in %s seconds", elapsed)

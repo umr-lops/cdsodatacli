@@ -20,6 +20,7 @@ from geodatasets import get_path
 import numpy as np
 from cdsodatacli.fetch_access_token import get_access_token
 
+logger = logging.getLogger(__name__)
 
 DEFAULT_TOP_ROWS_PER_QUERY = 1000
 WORLDPOLYGON = shapely.wkt.loads("POLYGON((-180 -90,180 -90,180 90,-180 90,-180 -90))")
@@ -138,11 +139,11 @@ def query_client():
     args = parser.parse_args()
     fmt = "%(asctime)s %(levelname)s %(filename)s(%(lineno)d) %(message)s"
     if args.verbose:
-        logging.basicConfig(
+        logger.basicConfig(
             level=logging.DEBUG, format=fmt, datefmt="%d/%m/%Y %H:%M:%S", force=True
         )
     else:
-        logging.basicConfig(
+        logger.basicConfig(
             level=logging.INFO, format=fmt, datefmt="%d/%m/%Y %H:%M:%S", force=True
         )
     t0 = time.time()
@@ -172,9 +173,9 @@ def query_client():
         email=args.email,
         password=args.password,
     )
-    logging.info("time to query : %1.1f sec", time.time() - t0)
+    logger.info("time to query : %1.1f sec", time.time() - t0)
     if result_query is not None and result_query.empty is False:
-        logging.info("number of product found: %s", len(result_query))
+        logger.info("number of product found: %s", len(result_query))
         if args.output_safe_listing is not None:
             os.makedirs(
                 os.path.dirname(args.output_safe_listing), 0o0755, exist_ok=True
@@ -183,14 +184,14 @@ def query_client():
             result_query[["Id", "Name"]].to_csv(
                 args.output_safe_listing, index=False, header=False
             )
-            logging.info("SAFE listing saved to : %s", args.output_safe_listing)
+            logger.info("SAFE listing saved to : %s", args.output_safe_listing)
             os.chmod(args.output_safe_listing, 0o0644)
     else:
         if args.output_safe_listing is not None:
             os.makedirs(
                 os.path.dirname(args.output_safe_listing), 0o0755, exist_ok=True
             )
-            logging.info(
+            logger.info(
                 "no product found -> empty listing saved on disk: %s",
                 args.output_safe_listing,
             )
@@ -273,7 +274,7 @@ def fetch_data(
     for qi in pbar:
         query_id = unique_query_ids[qi]
         gdf_subset = gdf[gdf["id_query"] == query_id]
-        logging.info(
+        logger.info(
             f"fetching data for query_id:{query_id} with {len(gdf_subset)} geometries"
         )
         data_subset, cpt = fetch_data_single_query(
@@ -337,8 +338,8 @@ def fetch_data_single_query(
             gdf=gdf,
             timedelta_slice=timedelta_slice,
         )
-        logging.debug(gdf_norm.keys())
-        logging.info(f"Length of input after slicing in time:{len(gdf_norm)}")
+        logger.debug(gdf_norm.keys())
+        logger.info(f"Length of input after slicing in time:{len(gdf_norm)}")
         urls_plus_headers = create_urls(
             gdf=gdf_norm, top=top, email=email, password=password, headers=headers
         )
@@ -351,7 +352,7 @@ def fetch_data_single_query(
 
     elif querymode == "multi":
         maxworker = 10
-        logging.info("maximum // queries : %s", maxworker)
+        logger.info("maximum // queries : %s", maxworker)
         collected_data, cpt = fetch_data_from_urls_multithread(
             urls_plus_headers=urls_plus_headers,
             cache_dir=cache_dir,
@@ -360,18 +361,18 @@ def fetch_data_single_query(
         )
     if collected_data is not None and collected_data.empty is False:
         data_dedup = remove_duplicates(safes_ori=collected_data)
-        logging.info(
+        logger.info(
             "number of product after removing duplicates: %s", len(data_dedup["Name"])
         )
         full_data = multy_to_poly(collected_data=data_dedup)
-        logging.info(
+        logger.info(
             "number of product after removing multipolygon: %s", len(full_data["Name"])
         )
         if min_sea_percent is not None:
             full_data = sea_percent(
                 collected_data=full_data, min_sea_percent=min_sea_percent
             )
-            logging.info(
+            logger.info(
                 "number of product after adding sea percent: %s", len(full_data["Name"])
             )
     else:
@@ -496,12 +497,12 @@ def normalize_gdf(
                 % list(gdf.index[gdf.index.duplicated(keep=False)].unique())
             )
         if len(gdf) == 0:
-            logging.error("gdf is empty")
+            logger.error("gdf is empty")
             return gdf_norm_sliced
         norm_gdf = gdf.copy()
         norm_gdf.set_geometry("geometry", inplace=True)
     else:
-        logging.error("gdf is None")
+        logger.error("gdf is None")
         return gdf_norm_sliced
 
     # if there is no geometry, set it to world polygon
@@ -527,12 +528,12 @@ def normalize_gdf(
     # check valid input geometry
     if not all(norm_gdf.is_valid):
         invalid_indices = norm_gdf.index[~norm_gdf.is_valid].tolist()
-        logging.error(f"Invalid geometries at indices: {invalid_indices}")
+        logger.error(f"Invalid geometries at indices: {invalid_indices}")
         raise ValueError("Invalid geometries found. Check them with gdf.is_valid")
 
     end_time = time.time()
     processing_time = end_time - start_time
-    logging.info(f"processing time to normalize the GeoDataFrame :{processing_time}s")
+    logger.info(f"processing time to normalize the GeoDataFrame :{processing_time}s")
     gdf_norm_sliced = apply_slicing_time_to_gdf(
         gdf=norm_gdf, timedelta_slice=timedelta_slice
     )
@@ -558,9 +559,9 @@ def create_urls(gdf, top=None, email=None, password=None, headers=None):
 
     # --- 1. Handle Authentication ---
     if email and password and headers is None:
-        logging.info(f"[*] Authenticating for {email}...")
+        logger.info(f"[*] Authenticating for {email}...")
         headers = get_access_token(email, password)
-        logging.info("[*] Authentication successful.")
+        logger.info("[*] Authentication successful.")
     urlapi = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter="
     urls = []
 
@@ -628,8 +629,8 @@ def create_urls(gdf, top=None, email=None, password=None, headers=None):
         urls.append((enter_index, url))
 
     processing_time = time.time() - start_time
-    logging.info("processing time:%1.1fs", processing_time)
-    logging.debug(
+    logger.info("processing time:%1.1fs", processing_time)
+    logger.debug(
         "example of generated URL: %s", urls[0][1] if urls else "No URLs generated"
     )
     return {"urls": urls, "headers": headers}
@@ -673,12 +674,12 @@ def fetch_one_url(url, cpt, index, cache_dir, headers=None):
         cache_file = get_cache_filename(url, cache_dir)
         if os.path.exists(cache_file):
             cpt["cache_used"] += 1
-            logging.debug("cache file exists: %s", cache_file)
+            logger.debug("cache file exists: %s", cache_file)
             with open(cache_file, "r") as f:
                 json_data = json.load(f)
                 collected_data = process_data(json_data)
     if json_data is None:
-        logging.debug("no cache file -> go for query CDS")
+        logger.debug("no cache file -> go for query CDS")
         cpt["urls_tested"] += 1
         try:
             json_data = requests.get(url, headers=headers, timeout=timeout).json()
@@ -689,7 +690,7 @@ def fetch_one_url(url, cpt, index, cache_dir, headers=None):
             raise
         except ValueError:
             cpt["urls_KO"] += 1
-            logging.error(
+            logger.error(
                 "impossible to get data from CDS for query: %s: %s",
                 url,
                 traceback.format_exc(),
@@ -707,7 +708,7 @@ def fetch_one_url(url, cpt, index, cache_dir, headers=None):
             cpt["product_proposed_by_CDS"] += len(collected_data["Name"])
             collected_data["id_original_query"] = index
             if len(collected_data) == DEFAULT_TOP_ROWS_PER_QUERY:
-                logging.warning(
+                logger.warning(
                     "%i products found in a single OData query (max is %s).",
                     len(collected_data),
                     DEFAULT_TOP_ROWS_PER_QUERY,
@@ -744,7 +745,7 @@ def fetch_data_from_urls_sequential(urls_plus_headers, cache_dir, cpt=None):
     collected_data_final = None
     if cache_dir is not None:
         if not os.path.exists(cache_dir):
-            logging.info("mkdir cache dir: %s", cache_dir)
+            logger.info("mkdir cache dir: %s", cache_dir)
             os.makedirs(cache_dir)
     for ii in tqdm(range(len(urls)), disable=True):
         url = urls[ii][1]
@@ -759,8 +760,8 @@ def fetch_data_from_urls_sequential(urls_plus_headers, cache_dir, cpt=None):
         collected_data_final = pd.concat(collected_data_x)
     end_time = time.time()
     processing_time = end_time - start_time
-    logging.info("fetch_data_from_urls time:%1.1fsec", processing_time)
-    logging.info("counter: %s", cpt)
+    logger.info("fetch_data_from_urls time:%1.1fsec", processing_time)
+    logger.info("counter: %s", cpt)
     if collected_data_final is not None:
         assert "id_original_query" in collected_data_final
     return collected_data_final, cpt
@@ -806,7 +807,7 @@ def fetch_data_from_urls_multithread(
                 if not df.empty:
                     collected_data = pd.concat([collected_data, df])
             pbar.update(1)
-    logging.info("counter: %s", cpt)
+    logger.info("counter: %s", cpt)
     return collected_data, cpt
 
 
@@ -823,7 +824,7 @@ def process_data(json_data):
     if "value" in json_data:
         res = pd.DataFrame.from_dict(json_data["value"])
     else:
-        logging.debug("No data found.")
+        logger.debug("No data found.")
     return res
 
 
@@ -844,8 +845,8 @@ def remove_duplicates(safes_ori):
     end_time = time.time()
     processing_time = end_time - start_time
     nb_duplicate = len(safes_ori) - len(safes_dedup)
-    logging.info("nb duplicate removed: %s", nb_duplicate)
-    logging.info("remove_duplicates processing time:%1.1f sec", processing_time)
+    logger.info("nb duplicate removed: %s", nb_duplicate)
+    logger.info("remove_duplicates processing time:%1.1f sec", processing_time)
     return safes_dedup
 
 
@@ -875,7 +876,7 @@ def multy_to_poly(collected_data=None):
     collected_data.dropna(subset=["Id"], inplace=True)
     end_time = time.time()
     processing_time = end_time - start_time
-    logging.info(f"multi_to_poly processing time:{processing_time}s")
+    logger.info(f"multi_to_poly processing time:{processing_time}s")
     return collected_data
 
 
@@ -916,5 +917,5 @@ def sea_percent(collected_data, min_sea_percent=None):
     collected_data = collected_data[collected_data["sea_percent"] >= min_sea_percent]
     end_time = time.time()
     processing_time = end_time - start_time
-    logging.info(f"sea_percent processing time:{processing_time}s")
+    logger.info(f"sea_percent processing time:{processing_time}s")
     return collected_data
