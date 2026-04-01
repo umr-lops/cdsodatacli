@@ -432,9 +432,12 @@ def apply_slicing_time_to_gdf(gdf, timedelta_slice=None):
                 if not gdf_slice.empty:
                     gdf_slices.append(gdf_slice)
                 slice_begin = slice_end
-    gdf_norm = gpd.GeoDataFrame(
-        pd.concat(gdf_slices, ignore_index=False), crs=gdf_slices[0].crs
-    )
+    if len(gdf_slices)>0:
+        gdf_norm = gpd.GeoDataFrame(
+            pd.concat(gdf_slices, ignore_index=False), crs=gdf_slices[0].crs
+        )
+    else:
+        gdf_norm = gdf
     return gdf_norm
 
 
@@ -533,9 +536,11 @@ def normalize_gdf(
     end_time = time.time()
     processing_time = end_time - start_time
     logging.info(f"processing time to normalize the GeoDataFrame :{processing_time}s")
+
     gdf_norm_sliced = apply_slicing_time_to_gdf(
-        gdf=norm_gdf, timedelta_slice=timedelta_slice
-    )
+            gdf=norm_gdf, timedelta_slice=timedelta_slice
+        )
+
     return gdf_norm_sliced
 
 
