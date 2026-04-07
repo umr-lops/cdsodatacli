@@ -12,6 +12,8 @@ ACTIVE_ACCESS_TOKEN = (
 )  # login -> list of {'access-token': str, 'access-token-creation-date': datetime}
 _token_cache_lock = threading.Lock()  # protect concurrent access from threads
 
+logger = logging.getLogger(__name__)
+
 
 def get_bearer_access_token(
     conf, specific_account=None, specific_psswd=None, account_group="logins"
@@ -51,7 +53,7 @@ def get_bearer_access_token(
                     datetime.datetime.today() - entry["access-token-creation-date"]
                 ).total_seconds()
                 if age < MAX_VALIDITY_ACCESS_TOKEN - 30:  # 30s safety margin
-                    logging.debug("reusing cached token for %s (age=%ds)", login, age)
+                    logger.debug("reusing cached token for %s (age=%ds)", login, age)
                     return (
                         entry["access-token"],
                         entry["access-token-creation-date"],
@@ -76,7 +78,7 @@ def get_bearer_access_token(
     if not token:
         raise ValueError("No access token for account %s" % login)
     date_generation = datetime.datetime.today()
-    logging.debug("new token obtained for %s", login)
+    logger.debug("new token obtained for %s", login)
 
     with _token_cache_lock:
         # store new token
@@ -97,7 +99,7 @@ def get_bearer_access_token(
                     datetime.datetime.today() - entry["access-token-creation-date"]
                 ).total_seconds()
                 if age > MAX_VALIDITY_ACCESS_TOKEN:
-                    logging.debug(
+                    logger.debug(
                         "removing expired token for %s (age=%ds)", logintest, age
                     )
                     # expired -> do NOT keep it
@@ -129,7 +131,7 @@ def get_valid_access_token(login):
     """
     with _token_cache_lock:
         if login not in ACTIVE_ACCESS_TOKEN:
-            logging.debug("no token found in cache for %s", login)
+            logger.debug("no token found in cache for %s", login)
             return None, None
         for entry in ACTIVE_ACCESS_TOKEN[login]:
             age = (
@@ -138,9 +140,9 @@ def get_valid_access_token(login):
             if (
                 age < MAX_VALIDITY_ACCESS_TOKEN - 30
             ):  # 30s safety margin, same as in get_bearer_access_token
-                logging.debug("valid token found in cache for %s (age=%ds)", login, age)
+                logger.debug("valid token found in cache for %s (age=%ds)", login, age)
                 return entry["access-token"], entry["access-token-creation-date"]
-        logging.debug("no valid token found in cache for %s (all expired)", login)
+        logger.debug("no valid token found in cache for %s (all expired)", login)
         return None, None
 
 
@@ -203,7 +205,7 @@ def get_valid_access_token(login):
 #             datetime.datetime.today() - date_generation_access_token
 #         ).total_seconds() < MAX_VALIDITY_ACCESS_TOKEN:
 #             lst_token.append(ll)
-#     logging.debug("Number of token found: %s", len(lst_token))
+#     logger.debug("Number of token found: %s", len(lst_token))
 #     return lst_token
 
 
@@ -232,7 +234,7 @@ def get_valid_access_token(login):
 #         >= MAX_VALIDITY_ACCESS_TOKEN
 #     ):
 #         os.remove(path_token)
-#         logging.debug("token semaphore file removed")
+#         logger.debug("token semaphore file removed")
 
 
 def get_access_token(email, password):
@@ -252,13 +254,13 @@ def get_access_token(email, password):
     response = requests.post(auth_url, data=auth_data, verify=False, timeout=10)
     response.raise_for_status()
     token = response.json().get("access_token")
-    logging.debug(f"Obtained ACCESS_TOKEN for {email}")
+    logger.debug(f"Obtained ACCESS_TOKEN for {email}")
     # check that token was obtained
     if not token:
         raise ValueError("No access token found in the response.")
     else:
         if len(token) > 20:
-            logging.debug("Token: %s...%s", token[:10], token[-10:])
+            logger.debug("Token: %s...%s", token[:10], token[-10:])
         else:
-            logging.debug("Token: %s", token)
+            logger.debug("Token: %s", token)
         return {"Authorization": f"Bearer {token}", "Accept": "application/json"}
