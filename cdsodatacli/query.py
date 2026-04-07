@@ -711,7 +711,7 @@ def fetch_one_url(url, cpt, index, cache_dir, headers=None):
             cpt["product_proposed_by_CDS"] += len(collected_data["Name"])
             collected_data["id_original_query"] = index
             if len(collected_data) == DEFAULT_TOP_ROWS_PER_QUERY:
-                logging.warning(
+                logger.warning(
                     "%i products found in a single OData query (max is %s).",
                     len(collected_data),
                     DEFAULT_TOP_ROWS_PER_QUERY,
