@@ -38,11 +38,10 @@ def setup_logger(verbose: bool = False) -> logging.Logger:
 
 # ── HELPERS ──────────────────────────────────────────────────────────────────
 def parse_start_time(product_name: str) -> datetime | None:
-    """Extract and parse the start timestamp from a Sentinel-1 product name."""
     try:
-        inst = ExplodeSAFE(product_name)  # Validate format and raise if not Sentinel-1
-        return inst.startdate  # Already a datetime object
-    except (IndexError, ValueError):
+        inst = ExplodeSAFE(product_name)
+        return inst.startdate
+    except (IndexError, ValueError, AttributeError):  # Added AttributeError
         return None
 
 
