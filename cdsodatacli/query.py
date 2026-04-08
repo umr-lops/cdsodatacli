@@ -433,9 +433,12 @@ def apply_slicing_time_to_gdf(gdf, timedelta_slice=None):
                 if not gdf_slice.empty:
                     gdf_slices.append(gdf_slice)
                 slice_begin = slice_end
-    gdf_norm = gpd.GeoDataFrame(
-        pd.concat(gdf_slices, ignore_index=False), crs=gdf_slices[0].crs
-    )
+    if len(gdf_slices) > 0:
+        gdf_norm = gpd.GeoDataFrame(
+            pd.concat(gdf_slices, ignore_index=False), crs=gdf_slices[0].crs
+        )
+    else:
+        gdf_norm = gdf
     return gdf_norm
 
 
