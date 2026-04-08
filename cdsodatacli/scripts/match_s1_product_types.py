@@ -19,6 +19,7 @@ ODATA_URL = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products"
 
 VALID_PRODUCT_TYPES = ["GRDH", "GRDM", "SLC_", "OCN_", "RAW_"]
 
+
 # ── LOGGING SETUP ────────────────────────────────────────────────────────────
 def setup_logger(verbose: bool = False) -> logging.Logger:
     logger = logging.getLogger("s1_matchup")
@@ -28,8 +29,7 @@ def setup_logger(verbose: bool = False) -> logging.Logger:
     handler.setLevel(logging.DEBUG if verbose else logging.INFO)
 
     formatter = logging.Formatter(
-        fmt="%(asctime)s [%(levelname)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
+        fmt="%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
@@ -41,7 +41,7 @@ def parse_start_time(product_name: str) -> datetime | None:
     """Extract and parse the start timestamp from a Sentinel-1 product name."""
     try:
         inst = ExplodeSAFE(product_name)  # Validate format and raise if not Sentinel-1
-        return inst.startdate             # Already a datetime object
+        return inst.startdate  # Already a datetime object
     except (IndexError, ValueError):
         return None
 
@@ -49,8 +49,11 @@ def parse_start_time(product_name: str) -> datetime | None:
 MAX_DELTA_SECONDS = 8
 
 
-def closest_in_time(reference_dt: datetime, candidates: list[dict]) -> tuple[dict, float]:
+def closest_in_time(
+    reference_dt: datetime, candidates: list[dict]
+) -> tuple[dict, float]:
     """Return (candidate, delta_seconds) for the product closest in time to reference_dt."""
+
     def time_delta(prod):
         dt = parse_start_time(prod["Name"])
         if dt is None:
@@ -77,13 +80,17 @@ def find_product_for_safe(
         clean_id = source_id.replace(".SAFE", "").replace("_COG", "")
         parts = clean_id.split("_")
 
-        platform     = parts[0]  # e.g. S1A
-        start_time   = parts[4]  # e.g. 20230726T071112
+        platform = parts[0]  # e.g. S1A
+        start_time = parts[4]  # e.g. 20230726T071112
         datatake_hex = parts[7]  # e.g. 05F692
 
         # Normalise target type: pad to 4 chars with trailing underscore if needed
         # so "GRDH" stays "GRDH", "SLC_" stays "SLC_", etc.
-        type_token = target_type.rstrip("_").ljust(4, "_") if len(target_type) < 4 else target_type
+        type_token = (
+            target_type.rstrip("_").ljust(4, "_")
+            if len(target_type) < 4
+            else target_type
+        )
 
         query_filter = (
             f"startswith(Name,'{platform}') and "
@@ -100,7 +107,7 @@ def find_product_for_safe(
             return {
                 "source_id": source_id,
                 "status": "error",
-                "note": f"HTTP {resp.status_code}: {resp.text[:200]}"
+                "note": f"HTTP {resp.status_code}: {resp.text[:200]}",
             }
 
         products = resp.json().get("value", [])
@@ -109,7 +116,7 @@ def find_product_for_safe(
             return {
                 "source_id": source_id,
                 "status": "not_found",
-                "note": f"No {target_type} product found for DataTake {datatake_hex}"
+                "note": f"No {target_type} product found for DataTake {datatake_hex}",
             }
 
         # ── Match strategy ───────────────────────────────────────────────────
@@ -140,8 +147,9 @@ def find_product_for_safe(
                 }
             match_method = "closest_in_time"
             logger.debug(
-                "No exact timestamp match; picked closest product "
-                "(delta=%.0fs): %s", delta, match["Name"]
+                "No exact timestamp match; picked closest product " "(delta=%.0fs): %s",
+                delta,
+                match["Name"],
             )
 
         return {
@@ -150,7 +158,7 @@ def find_product_for_safe(
             "target_name": match["Name"],
             "target_type": target_type,
             "match_method": match_method,
-            "size_mb": round(match["ContentLength"] / 1024 ** 2, 2),
+            "size_mb": round(match["ContentLength"] / 1024**2, 2),
             "download_url": (
                 f"https://download.dataspace.copernicus.eu"
                 f"/odata/v1/Products({match['Id']})/$value"
@@ -172,7 +180,8 @@ def entrypoint(
 ) -> list[dict]:
     logger.info(
         "Starting matchup: %d product(s) → target type '%s'",
-        len(safe_list), target_type
+        len(safe_list),
+        target_type,
     )
     results = []
     delta_distribution: defaultdict[int, int] = defaultdict(int)
@@ -186,13 +195,17 @@ def entrypoint(
                 continue
 
             logger.debug("Processing %s", safe_id)
-            res = find_product_for_safe(safe_id, target_type, logger, delta_distribution)
+            res = find_product_for_safe(
+                safe_id, target_type, logger, delta_distribution
+            )
             results.append(res)
 
             if "target_name" in res:
                 logger.debug(
                     "  ✓ Found (%s): %s  [%.1f MB]",
-                    res["match_method"], res["target_name"], res["size_mb"]
+                    res["match_method"],
+                    res["target_name"],
+                    res["size_mb"],
                 )
             else:
                 logger.debug(
@@ -202,7 +215,9 @@ def entrypoint(
             time.sleep(0.5)  # Be polite to the OData endpoint
 
     except KeyboardInterrupt:
-        logger.warning("Interrupted by user after %d product(s) processed.", len(results))
+        logger.warning(
+            "Interrupted by user after %d product(s) processed.", len(results)
+        )
 
     # ── Write results ────────────────────────────────────────────────────────
     output_path = Path(output_filename)
@@ -213,13 +228,16 @@ def entrypoint(
             else:
                 fh.write(f"# NOT_FOUND: {r['source_id']} — {r.get('note', '')}\n")
 
-    found     = sum(1 for r in results if "target_name" in r)
+    found = sum(1 for r in results if "target_name" in r)
     not_found = sum(1 for r in results if r.get("status") == "not_found")
-    errors    = sum(1 for r in results if r.get("status") == "error")
+    errors = sum(1 for r in results if r.get("status") == "error")
 
     logger.info(
         "Done — %d found, %d not found, %d errors. Results → %s",
-        found, not_found, errors, output_path.resolve()
+        found,
+        not_found,
+        errors,
+        output_path.resolve(),
     )
 
     # ── Delta distribution ────────────────────────────────────────────────────
@@ -227,7 +245,7 @@ def entrypoint(
         logger.info("Delta-time distribution (seconds → count):")
         for delta_s, count in sorted(delta_distribution.items()):
             label = f"{delta_s}s" if delta_s > 0 else "exact"
-            flag  = "  ← above threshold" if delta_s > MAX_DELTA_SECONDS else ""
+            flag = "  ← above threshold" if delta_s > MAX_DELTA_SECONDS else ""
             logger.info("  %6s : %d%s", label, count, flag)
 
     return results
@@ -249,7 +267,7 @@ Examples:
 
   # Enable verbose/debug logging
   python s1_matchup.py --prodtype OCN_ --input-listing list.txt --verbose
-        """
+        """,
     )
 
     source_group = parser.add_mutually_exclusive_group(required=True)
@@ -284,7 +302,8 @@ Examples:
         help="Enable dev mode with reduced number of SAFE to treat.",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Enable DEBUG-level logging.",
     )
@@ -297,7 +316,7 @@ def load_listing(filepath: str, logger: logging.Logger) -> list[str]:
     if not path.exists():
         logger.error("Input listing file not found: %s", filepath)
         raise SystemExit(1)
-    lines = [l.strip() for l in path.read_text().splitlines() if l.strip()]
+    lines = [lili.strip() for lili in path.read_text().splitlines() if lili.strip()]
     logger.info("Loaded %d product ID(s) from %s", len(lines), filepath)
     return lines
 
