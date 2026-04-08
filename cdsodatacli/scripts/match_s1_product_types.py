@@ -320,8 +320,7 @@ def load_listing(filepath: str, logger: logging.Logger) -> list[str]:
     return lines
 
 
-# ── MAIN ──────────────────────────────────────────────────────────────────────
-if __name__ == "__main__":
+def main():
     args = parse_args()
     logger = setup_logger(verbose=args.verbose)
 
@@ -340,3 +339,8 @@ if __name__ == "__main__":
         output_filename=args.output,
         logger=logger,
     )
+
+
+# ── MAIN ──────────────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    main()
