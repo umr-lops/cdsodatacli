@@ -24,12 +24,19 @@ def sample_listing(tmp_path):
     return str(p)
 
 
+@pytest.fixture
+def sample_conf():
+    """Creates a minimal dummy conf dict matching cdsodatacli's expected structure."""
+    return {
+        "list_sar_unit_private_data": [],
+    }
+
+
 @skip_in_ci
-def test_add_ids_to_listing_iterative_full_success(sample_listing, tmp_path):
+def test_add_ids_to_listing_iterative_full_success(sample_listing, tmp_path, sample_conf):
     """Test case where all IDs are found in the first iteration."""
     output_path = str(tmp_path / "final_output.csv")
 
-    # Prepare mocked response from the API wrapper
     mock_df = pd.DataFrame(
         {
             "safename": [
@@ -45,7 +52,9 @@ def test_add_ids_to_listing_iterative_full_success(sample_listing, tmp_path):
         "cdsodatacli.download.add_missing_cdse_hash_ids_in_listing",
         return_value=mock_df,
     ):
-        result_file = add_ids_to_listing_iterative(sample_listing, output_path)
+        result_file = add_ids_to_listing_iterative(
+            sample_listing, output_path, conf=sample_conf
+        )
 
         assert os.path.exists(result_file)
         df_out = pd.read_csv(result_file, names=["id", "safename"])
@@ -54,7 +63,7 @@ def test_add_ids_to_listing_iterative_full_success(sample_listing, tmp_path):
 
 
 @skip_in_ci
-def test_add_ids_to_listing_iterative_multi_step(sample_listing, tmp_path):
+def test_add_ids_to_listing_iterative_multi_step(sample_listing, tmp_path, sample_conf):
     """Test case where IDs are found across multiple loops (iterations)."""
     output_path = str(tmp_path / "multi_step_output.csv")
 
@@ -78,7 +87,9 @@ def test_add_ids_to_listing_iterative_multi_step(sample_listing, tmp_path):
     ) as mocked_api:
         mocked_api.side_effect = [mock_response_1, mock_response_2]
 
-        result_file = add_ids_to_listing_iterative(sample_listing, output_path)
+        result_file = add_ids_to_listing_iterative(
+            sample_listing, output_path, conf=sample_conf
+        )
 
         df_out = pd.read_csv(result_file, names=["id", "safename"])
         assert len(df_out) == 3
@@ -87,7 +98,7 @@ def test_add_ids_to_listing_iterative_multi_step(sample_listing, tmp_path):
 
 
 @skip_in_ci
-def test_add_ids_to_listing_no_progress_break(sample_listing, tmp_path):
+def test_add_ids_to_listing_no_progress_break(sample_listing, tmp_path, sample_conf):
     """Test that the loop breaks if no new IDs are found to avoid infinite loops."""
     output_path = str(tmp_path / "break_output.csv")
 
@@ -98,7 +109,9 @@ def test_add_ids_to_listing_no_progress_break(sample_listing, tmp_path):
         "cdsodatacli.download.add_missing_cdse_hash_ids_in_listing",
         return_value=empty_df,
     ):
-        result_file = add_ids_to_listing_iterative(sample_listing, output_path)
+        result_file = add_ids_to_listing_iterative(
+            sample_listing, output_path, conf=sample_conf
+        )
 
         df_out = pd.read_csv(result_file, names=["id", "safename"])
         # IDs should be NaN because nothing was found, but the script should have finished
@@ -106,14 +119,14 @@ def test_add_ids_to_listing_no_progress_break(sample_listing, tmp_path):
 
 
 @skip_in_ci
-def test_add_ids_to_listing_file_not_found():
+def test_add_ids_to_listing_file_not_found(sample_conf):
     """Test behavior when the input file does not exist."""
     with pytest.raises(FileNotFoundError):
-        add_ids_to_listing_iterative("non_existent_file.txt")
+        add_ids_to_listing_iterative("non_existent_file.txt", conf=sample_conf)
 
 
 @skip_in_ci
-def test_add_ids_to_listing_duplicates_in_api(sample_listing, tmp_path):
+def test_add_ids_to_listing_duplicates_in_api(sample_listing, tmp_path, sample_conf):
     """Test that the script handles duplicates returned by the API correctly."""
     output_path = str(tmp_path / "dedup_output.csv")
 
@@ -132,8 +145,44 @@ def test_add_ids_to_listing_duplicates_in_api(sample_listing, tmp_path):
         "cdsodatacli.download.add_missing_cdse_hash_ids_in_listing",
         return_value=mock_df,
     ):
-        result_file = add_ids_to_listing_iterative(sample_listing, output_path)
+        result_file = add_ids_to_listing_iterative(
+            sample_listing, output_path, conf=sample_conf
+        )
         df_out = pd.read_csv(result_file, names=["id", "safename"])
 
         # Should still correspond to input length (3) even if API was weird
         assert len(df_out) == 3
+
+
+@skip_in_ci
+def test_add_ids_to_listing_with_email_password(sample_listing, tmp_path, sample_conf):
+    """Test that email and password are forwarded to the underlying API call."""
+    output_path = str(tmp_path / "auth_output.csv")
+
+    mock_df = pd.DataFrame(
+        {
+            "safename": ["S1A_IW_GRDH_1SDV_20220503T000000"],
+            "id": ["uuid0"],
+        }
+    )
+
+    with patch(
+        "cdsodatacli.download.add_missing_cdse_hash_ids_in_listing",
+        return_value=mock_df,
+    ) as mocked_api:
+        # Only one SAFE in the listing for this test
+        p = tmp_path / "single_safe.txt"
+        p.write_text("S1A_IW_GRDH_1SDV_20220503T000000")
+
+        add_ids_to_listing_iterative(
+            str(p),
+            output_path,
+            email="user@example.com",
+            password="secret",
+            conf=sample_conf,
+        )
+
+        call_kwargs = mocked_api.call_args
+        assert call_kwargs.kwargs.get("email") == "user@example.com"
+        assert call_kwargs.kwargs.get("password") == "secret"
+        assert "conf" not in call_kwargs.kwargs

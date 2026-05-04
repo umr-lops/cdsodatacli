@@ -18,3 +18,5 @@ s3_secret_key: None
 s3_endpoint: "https://eodata.dataspace.copernicus.eu"
 s3_bucket: 'eodata'
 s3_region: 'default'
+list_sar_unit_private_data: []
+  #- S1E

@@ -140,7 +140,9 @@ def get_sessions_download_available(
     conf (dict) configuration dictionary of cdsodatacli package
     subset_to_treat (pandas.DatFrame)
     blacklist (list): list of account not usable [default=None]
-    logins_group (str): logins or loginsbackfill (for instance, it depends on the localconfig.yml)
+    logins_group (str): name of the group of CDSE accounts to use (can contain multiple accounts, it depends on the localconfig.yml)
+
+
     Returns
     -------
 
@@ -162,7 +164,8 @@ def get_sessions_download_available(
     # account_free = None
     account_counter = defaultdict(int)
     for aa in conf[logins_group]:
-        account_counter[aa] = 0
+        account_tmp = list(aa)[0]
+        account_counter[account_tmp] = 0
     logging.debug("(re)init the counts for accounts.")
     for toto in lst_sessions_active:
         account = os.path.basename(toto).split("_")[3]
@@ -181,6 +184,7 @@ def get_sessions_download_available(
             # lst_usable_tokens = get_list_of_existing_token_semaphore_file(
             #     token_dir=conf["token_directory"], account=account_free
             # )
+
             access_token, date_generation_access_token = get_valid_access_token(
                 login=account_free
             )
@@ -198,13 +202,15 @@ def get_sessions_download_available(
                     specific_account=account_free,
                     account_group=logins_group,
                 )
+         
+
             # else:  # select randomly one token among existing
             #     path_semphore_token = random.choice(lst_usable_tokens)
             #     access_token = open(path_semphore_token).readlines()[0]
             if access_token is not None:
                 bunch_product_downloadable.append(safename_product)
                 bunch_urls_to_download.append(subset_to_treat["urls"].iloc[ss])
-                bunch_s3path_to_download.append(subset_to_treat['S3path'].iloc[ss])
+                bunch_s3path_to_download.append(subset_to_treat['S3Path'].iloc[ss])
                 outputfiles_download_coming.append(
                     subset_to_treat["outputpath"].iloc[ss]
                 )
@@ -229,7 +235,7 @@ def get_sessions_download_available(
     # df_products_downloadable["token_semaphore"] = all_semaphores
     df_products_downloadable["login"] = all_logins
     df_products_downloadable["url"] = bunch_urls_to_download
-    df_products_downloadable["S3path"] = bunch_s3path_to_download # to check S3path
+    df_products_downloadable["S3Path"] = bunch_s3path_to_download # to check S3path
     df_products_downloadable["output_path"] = outputfiles_download_coming
     df_products_downloadable["session_semaphore"] = all_session_semaphores
     df_products_downloadable["safe"] = all_safe_basename

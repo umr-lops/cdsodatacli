@@ -31,6 +31,7 @@ from cdsodatacli.utils import (
     check_safe_in_spool,
     check_safe_in_outputdir,
 )
+from cdsodatacli.s3_temporary_access_token import _get_fresh_s3_client
 from cdsodatacli.product_parser import ExplodeSAFE
 from collections import defaultdict
 
@@ -170,6 +171,7 @@ def CDS_Odata_download_one_product_v2(
 
 def cds_s3_download_one_product(
     s3_path,       
+    header,
     output_filepath,
     conf,
 ):
@@ -190,6 +192,7 @@ def cds_s3_download_one_product(
 
     Argument:
         s3_path (str): e.g. "Sentinel-1/SAR/GRD/2022/05/03/S1A_IW_GRDH_1SDV_20220503T000000.SAFE"
+        header (dict): HTTP headers to authenticate the S3 request, if needed (e.g. with temporary token)
         output_filepath (str): output full path when download is finished (not the pre-spool but the spool)
         conf (dict): configuration see details above
 
@@ -204,6 +207,7 @@ def cds_s3_download_one_product(
 
 
     speed = np.nan
+    total_mb = 0
     status_meaning = "unknown"
     t0 = time.time()
 
@@ -211,15 +215,16 @@ def cds_s3_download_one_product(
     output_filepath_tmp = os.path.join(
         conf["pre_spool"], os.path.basename(output_filepath) + ".tmp"
     )
-
+    
     try:
-        s3 = boto3.resource(
-            "s3",
-            endpoint_url=conf["s3_endpoint"],
-            aws_access_key_id=conf["s3_access_key"],
-            aws_secret_access_key=conf["s3_secret_key"],
-            region_name=conf.get("s3_region", "default"),
-        )
+        s3 = _get_fresh_s3_client(conf, headers=header)
+        # s3 = boto3.resource(
+        #     "s3",
+        #     endpoint_url=conf["s3_endpoint"],
+        #     aws_access_key_id=conf["s3_access_key"],
+        #     aws_secret_access_key=conf["s3_secret_key"],
+        #     region_name=conf.get("s3_region", "default"),
+        # )
         bucket = s3.Bucket(conf["s3_bucket"])
 
         # List all objects under the SAFE prefix
@@ -664,43 +669,49 @@ def download_list_product(
     return cpt
 
 
-def test_listing_content(listing_path):
+def test_listing_content(listing_path)->bool:
     """
-    make sure that a lsiting of products to download respect the following format:
-        cdse-hash-id,safename
+    make sure that a listing of products to download respect the following format:
+        cdse-hash-id,safename or s3-path,safename
+
     Arguments:
     ---------
         listing_path (str):
     Returns
     -------
-
+        listing_OK (bool): True -> the listing is OK, False -> the listing is not OK
     """
     fid = open(listing_path)
     first_line = fid.readline()
+    second_line = fid.readline()
     listing_OK = False
-    if "," in first_line:
-        if "SAFE" in first_line.split(",")[1] and "S" in first_line.split(",")[1][0]:
+    if "," in second_line:
+        if "SAFE" in second_line.split(",")[1] and "S" in second_line.split(",")[1][0]:
             listing_OK = True
+    # check that there is a header in the listing.
+    if "safename" in first_line.lower() and ("id" in first_line.lower() or "s3_path" in first_line.lower()):
+        listing_OK = True
     return listing_OK
 
 
 def add_missing_cdse_hash_ids_in_listing(
-    listing_path, display_tqdm=False, email=None, password=None
+    listing_path, conf, display_tqdm=False, email=None, password=None
 ):
     """
-    Add a column of CDSE hash id in a listing of products to download based on the safenames. This is useful for instance for the private data IOC products since the CDSE Odata search does not return the hash id for those products but only the safename. The method is using the same query method as the one used in the CDSE Odata search script (opensearch_private_data_IOC.py) to retrieve the hash id associated to each safename.
+    Add columns of CDSE product ID and S3 path in a listing of products to download based on the safenames. This is useful for instance for the private data IOC products since the CDSE Odata search does not return the hash id for those products but only the safename. The method is using the same query method as the one used in the CDSE Odata search script (opensearch_private_data_IOC.py) to retrieve the hash id associated to each safename.
 
     Args:
         listing_path (str):
+        conf (dict): configuration of the lib cdsodatacli (used to know which unit is PRIVATE)
         display_tqdm (bool): True -> tqdm progress bar for each queries [optional, default=False]
         email (str): email of the CDSE account to use for queries [optional, default None -> use cdsodatacli default behavior]
         password (str): password of the CDSE account to use for queries [optional, default None -> use cdsodatacli default behavior]
 
     Returns:
-        res (pd.DataFrame): dataframe with 2 columns "id" and "safename" containing the hash id provided by CDSE Odata and the safename of the product
+        res (pd.DataFrame): dataframe with 3 columns "id", "safename", and "S3Path" containing the hash id provided by CDSE Odata and the safename of the product
 
     """
-    res = pd.DataFrame({"id": [], "safename": []})
+    res = pd.DataFrame({"id": [], "safename": [], "S3Path": []})
     df_raw = pd.read_csv(listing_path, names=["safenames"])
     df_raw = df_raw[df_raw["safenames"].str.contains(".SAFE")]
     list_safe_a = df_raw["safenames"].values
@@ -711,7 +722,8 @@ def add_missing_cdse_hash_ids_in_listing(
     # specific for private data IOC (S1D for instance)
     product_types = []
     for ii in range(len(list_safe_a)):
-        if list_safe_a[ii].startswith("S1D"):
+        # if list_safe_a[ii].startswith("S1D"):
+        if list_safe_a[0:3] in conf['list_sar_unit_private_data']:
             product_types.append(list_safe_a[ii][4:14] + "_PRIVATE")
 
         else:
@@ -752,9 +764,11 @@ def add_missing_cdse_hash_ids_in_listing(
             password=password,
         )
         if collected_data_norm is not None:
-            res = collected_data_norm[["Id", "Name"]]
+            res = collected_data_norm[["Id", "Name", "S3Path"]]
             res.rename(columns={"Name": "safename"}, inplace=True)
             res.rename(columns={"Id": "id"}, inplace=True)
+            assert 'S3Path' in res.columns, "S3Path column is missing in the result, check the fetch_data method"
+            
     return res
 
 
@@ -1155,8 +1169,7 @@ def download_list_product_multithread_v3(
 
 
 def download_list_product_multithread_v4(
-    list_id,
-    list_safename,
+    inputdf,
     outputdir,
     account_group,
     hideprogressbar=False,
@@ -1171,11 +1184,10 @@ def download_list_product_multithread_v4(
 
     Parameters
     ----------
-    list_id (list): list of satellite product hashs
-    list_safename (list): list of product names
+    inputdf (pd.DataFrame): DataFrame containing the products to download with columns "S3Path", "id", and "safename"
     outputdir (str): the directory where to store the product collected
     account_group (str): a group define in the config file with a unique account -> 4 sessions in parallel
-    hideProgressBar (bool): True -> no tqdm progress bar in stdout
+    hideprogressbar (bool): True -> no tqdm progress bar in stdout
     check_on_disk (bool): True -> if the product is in the spool dir or in archive dir the download is skipped
     cdsodatacli_conf_file (str): path to the cdsodatacli configuration file [ optional, default is None -> use cdsodatacli default behavior]
 
@@ -1183,21 +1195,25 @@ def download_list_product_multithread_v4(
     -------
         df2 (pd.DataFrame):
     """
-    assert len(list_id) == len(list_safename)
+    assert len(inputdf["S3Path"]) == len(inputdf["safename"])
+    if "status" not in inputdf.columns:
+        inputdf["status"] = np.zeros(len(inputdf["safename"]))
     logging.info("check_on_disk : %s", check_on_disk)
     cpt = defaultdict(int)
-    cpt["products_in_initial_listing"] = len(list_id)
+    cpt["products_in_initial_listing"] = len(inputdf["S3Path"])
     conf = get_conf(path_config_file=cdsodatacli_conf_file)
     if hideprogressbar:
         os.environ["DISABLE_TQDM"] = "True"
     all_speeds = []
+    all_elapsed_time = []
+    all_total_mb = []
     # status, 0->not treated, -1->error download , 1-> successful download
-    df = pd.DataFrame(
-        {"safe": list_safename, "status": np.zeros(len(list_safename)), "id": list_id}
-    )
+    # df = pd.DataFrame(
+    #     {"safe": list_safename, "status": np.zeros(len(list_safename)), "s3path": list_s3path}
+    # )
     force_download = not check_on_disk
     df2, cpt = filter_product_already_present(
-        cpt, df, outputdir, force_download=force_download, cdsodatacli_conf=conf
+        cpt, inputdf.rename(columns={'safename': 'safe'}), outputdir, force_download=force_download, cdsodatacli_conf=conf
     )
     t_start_download = time.time()
     logging.info("%s", cpt)
@@ -1215,7 +1231,6 @@ def download_list_product_multithread_v4(
         while (df2["status"] == 0).any():
 
             while_loop += 1
-
             subset_to_treat = df2[df2["status"] == 0]
             pbar.set_description(
                 f"loop={while_loop} | OK={cpt['successful_download']} | ERR={sum(v for k,v in cpt.items() if k.startswith('status_') and k != 'status_OK')} | todo={len(subset_to_treat)} | //={len(running_futures)}"
@@ -1229,7 +1244,6 @@ def download_list_product_multithread_v4(
             df_prod_downloadable = get_sessions_download_available(
                 conf,
                 subset_to_treat,
-                hideProgressBar=True,
                 blacklist=blacklist,
                 logins_group=account_group,
             )
@@ -1286,6 +1300,7 @@ def download_list_product_multithread_v4(
                 header = df_prod_downloadable["header"].loc[url_one_index]
                 url_product = df_prod_downloadable["url"].loc[url_one_index]
                 output_path = df_prod_downloadable["output_path"].loc[url_one_index]
+                s3path = df_prod_downloadable["S3Path"].loc[url_one_index]
                 # path_semaphore_token = df_prod_downloadable["token_semaphore"].loc[
                 #     url_one_index
                 # ]  # Added .loc
@@ -1298,12 +1313,10 @@ def download_list_product_multithread_v4(
                 #     url_one_index
                 # ]
                 future = executor.submit(
-                    CDS_Odata_download_one_product_v2,
-                    session,
+                    cds_s3_download_one_product,
+                    s3path,
                     header,
-                    url_product,
                     output_path,
-                    # path_semaphore_token,
                     conf=conf,
                 )
                 future_to_info[future] = {
@@ -1329,8 +1342,11 @@ def download_list_product_multithread_v4(
                 login_used = info.get("login", "unknown")
                 try:
                     # process result
+                    # speed,elapsed_time,total_mb, status_meaning, safename_base
                     (
                         speed,
+                        elapsed_time,
+                        total_mb,
                         status_meaning,
                         safename_base,
                         # semaphore_token_file,
@@ -1364,6 +1380,8 @@ def download_list_product_multithread_v4(
                 if status_meaning == "OK":
                     df2.loc[(df2["safe"] == safename_base), "status"] = 1
                     all_speeds.append(speed)
+                    all_elapsed_time.append(elapsed_time)
+                    all_total_mb.append(total_mb)
                     cpt["successful_download"] += 1
                 else:
                     df2.loc[(df2["safe"] == safename_base), "status"] = -1
@@ -1401,6 +1419,18 @@ def download_list_product_multithread_v4(
             "average download speed %1.1f Mo/s (stdev: %1.1f Mo/s)",
             np.mean(all_speeds),
             np.std(all_speeds),
+        )
+    if len(all_elapsed_time) > 0:
+        logging.info(
+            "average elapsed time %1.1f s (stdev: %1.1f s)",
+            np.mean(all_elapsed_time),
+            np.std(all_elapsed_time),
+        )
+    if len(all_total_mb) > 0:
+        logging.info(
+            "cumulated size %1.1f Go (average: %1.1f Go)",
+            np.sum(all_total_mb) / 1024,
+            np.mean(all_total_mb) / 1024,
         )
     return df2
 

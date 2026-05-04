@@ -20,6 +20,7 @@ def mock_conf():
         "active_session_directory": "/tmp/sessions",
         "logins": [{"user1@email.fr": "passwd1"}],
         "default_login": {"user1@email.fr": "passwd1"},
+        "list_sar_unit_private_data": ["S1D"],
     }
 
 
@@ -113,7 +114,7 @@ def test_CDS_Odata_download_one_product_v2_success(
 
 
 # 3. Test Metadata generation
-def test_add_missing_cdse_hash_ids_in_listing(tmp_path):
+def test_add_missing_cdse_hash_ids_in_listing(tmp_path,mock_conf):
     listing = tmp_path / "list.txt"
     listing.write_text("S1A_IW_GRDH_1SDV_20220503T000000.SAFE")
 
@@ -132,7 +133,7 @@ def test_add_missing_cdse_hash_ids_in_listing(tmp_path):
         patch("cdsodatacli.download.fetch_data", return_value=mock_query_result),
     ):
 
-        res = dl.add_missing_cdse_hash_ids_in_listing(str(listing))
+        res = dl.add_missing_cdse_hash_ids_in_listing(str(listing), mock_conf)
         assert not res.empty
         assert res["id"].iloc[0] == "uuid-123"
 
