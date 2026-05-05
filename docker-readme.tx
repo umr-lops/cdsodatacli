@@ -1,3 +1,5 @@
+# build docker image
+
 docker build -f Dockerfile . -t cdsodatacli:test
 
 docker run -i -t --rm cdsodatacli:test /bin/bash
@@ -6,6 +8,13 @@ docker run -i -t --rm cdsodatacli:test downloadFromCDS -h
 
 docker run -i -t --rm cdsodatacli:test downloadMuliThreadMultiUser -h
 
-# apptainer
+# apptainer from docker
 
  apptainer build --force /tmp/cdsodatacli_20251112_apptainer.sif "docker-daemon://cdsodatacli:2025.11.12"
+
+# apptainer direct 
+
+apptainer build --build-arg BUILD_STAGE=production /scratch/agrouaze/cdsodatacli_2026.4.29.sif cdsodatacli_apptainer.def
+## test image 
+apptainer exec cdsodatacli_2026.4.29.sif get-odata-ids -h
+

@@ -139,11 +139,11 @@ def query_client():
     args = parser.parse_args()
     fmt = "%(asctime)s %(levelname)s %(filename)s(%(lineno)d) %(message)s"
     if args.verbose:
-        logger.basicConfig(
+        logging.basicConfig(
             level=logging.DEBUG, format=fmt, datefmt="%d/%m/%Y %H:%M:%S", force=True
         )
     else:
-        logger.basicConfig(
+        logging.basicConfig(
             level=logging.INFO, format=fmt, datefmt="%d/%m/%Y %H:%M:%S", force=True
         )
     t0 = time.time()
