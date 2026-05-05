@@ -114,7 +114,7 @@ def test_CDS_Odata_download_one_product_v2_success(
 
 
 # 3. Test Metadata generation
-def test_add_missing_cdse_hash_ids_in_listing(tmp_path,mock_conf):
+def test_add_missing_cdse_hash_ids_in_listing(tmp_path, mock_conf):
     listing = tmp_path / "list.txt"
     listing.write_text("S1A_IW_GRDH_1SDV_20220503T000000.SAFE")
 

@@ -4,7 +4,6 @@ from tqdm import tqdm
 import datetime
 import time
 import os
-import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 import warnings
 import traceback
@@ -171,7 +170,7 @@ def CDS_Odata_download_one_product_v2(
 
 
 def cds_s3_download_one_product(
-    s3_path,       
+    s3_path,
     header,
     output_filepath,
     conf,
@@ -180,7 +179,7 @@ def cds_s3_download_one_product(
     Download a single SAFE product via the CDSE S3 endpoint using boto3.
 
 
-    
+
     The conf dict must contain:
         - pre_spool   (str): temp directory for .tmp files
         - s3_access_key (str): CDSE S3 access key
@@ -206,7 +205,6 @@ def cds_s3_download_one_product(
         safename_base  (str): basename without .zip
     """
 
-
     speed = np.nan
     total_mb = 0
     status_meaning = "unknown"
@@ -216,9 +214,9 @@ def cds_s3_download_one_product(
     output_filepath_tmp = os.path.join(
         conf["pre_spool"], os.path.basename(output_filepath) + ".tmp"
     )
-    
+    s3_credentials = None
     try:
-        s3 = _get_fresh_s3_client(conf, headers=header)
+        s3_credentials, s3_resources = _get_fresh_s3_client(conf, headers=header)
         # s3 = boto3.resource(
         #     "s3",
         #     endpoint_url=conf["s3_endpoint"],
@@ -226,7 +224,7 @@ def cds_s3_download_one_product(
         #     aws_secret_access_key=conf["s3_secret_key"],
         #     region_name=conf.get("s3_region", "default"),
         # )
-        bucket = s3.Bucket(conf["s3_bucket"])
+        bucket = s3_resources.Bucket(conf["s3_bucket"])
 
         # List all objects under the SAFE prefix
         objects = list(bucket.objects.filter(Prefix=s3_path))
@@ -241,7 +239,10 @@ def cds_s3_download_one_product(
         # For a .SAFE folder (multi-file), download each file in place
         if len(objects) == 1:
             obj = objects[0]
-            logging.debug("Downloading single object %s -> %s", obj.key, output_filepath_tmp)
+            logging.info("object key: %s, size: %.1f Mo", obj.key, obj.size / 1e6)
+            logging.debug(
+                "Downloading single object %s -> %s", obj.key, output_filepath_tmp
+            )
             bucket.download_file(obj.key, output_filepath_tmp)
 
             elapsed_time = time.time() - t0
@@ -282,13 +283,26 @@ def cds_s3_download_one_product(
         elapsed_time = time.time() - t0
         if os.path.exists(output_filepath_tmp):
             os.remove(output_filepath_tmp)
+    if s3_credentials is not None:
+        # Delete the temporary S3 credentials
+        delete_response = requests.delete(
+            f"https://s3-keys-manager.cloudferro.com/api/user/credentials/access_id/{s3_credentials['access_id']}",
+            headers=header,
+        )
+        if delete_response.status_code == 204:
+            logger.debug("Temporary S3 credentials deleted successfully.")
+        else:
+            logger.error(
+                f"Failed to delete temporary S3 credentials. Status code: {delete_response.status_code}"
+            )
 
     logging.debug("time to download this product: %1.1f sec", elapsed_time)
     logging.debug("average download speed: %1.1f Mo/sec", speed)
-    return speed,elapsed_time,total_mb, status_meaning, safename_base
+    return speed, elapsed_time, total_mb, status_meaning, safename_base
+
 
 def filter_product_already_present(
-    cpt, df, outputdir, cdsodatacli_conf, force_download=False
+    cpt, df, outputdir, cdsodatacli_conf, force_download=False, extension=".zip"
 ):
     """
     Based on a dataframe of products to download, filter those already present locally.
@@ -301,6 +315,7 @@ def filter_product_already_present(
     outputdir (str)
     cdsodatacli_conf (dict): configuration dictionary of the lib cdsodatacli
     force_download (bool): True -> download all products even if already present locally [optional, default is False]
+    extension (str): file extension to check for presence on disk, default is ".zip" but can be ".SAFE" if products are already unzipped in the outputdir
 
 
     Returns
@@ -351,7 +366,7 @@ def filter_product_already_present(
                 )
                 all_urls_to_download.append(url_product)
 
-            output_filepath = os.path.join(outputdir, safename_product + ".zip")
+            output_filepath = os.path.join(outputdir, safename_product + extension)
             all_output_filepath.append(output_filepath)
 
     df_todownload = df.iloc[index_to_download]
@@ -671,7 +686,7 @@ def download_list_product(
     return cpt
 
 
-def test_listing_content(listing_path)->bool:
+def test_listing_content(listing_path) -> bool:
     """
     make sure that a listing of products to download respect the following format:
         cdse-hash-id,safename or s3-path,safename
@@ -691,7 +706,9 @@ def test_listing_content(listing_path)->bool:
         if "SAFE" in second_line.split(",")[1] and "S" in second_line.split(",")[1][0]:
             listing_OK = True
     # check that there is a header in the listing.
-    if "safename" in first_line.lower() and ("id" in first_line.lower() or "s3_path" in first_line.lower()):
+    if "safename" in first_line.lower() and (
+        "id" in first_line.lower() or "s3_path" in first_line.lower()
+    ):
         listing_OK = True
     return listing_OK
 
@@ -725,7 +742,7 @@ def add_missing_cdse_hash_ids_in_listing(
     product_types = []
     for ii in range(len(list_safe_a)):
         # if list_safe_a[ii].startswith("S1D"):
-        if list_safe_a[0:3] in conf['list_sar_unit_private_data']:
+        if list_safe_a[0:3] in conf["list_sar_unit_private_data"]:
             product_types.append(list_safe_a[ii][4:14] + "_PRIVATE")
 
         else:
@@ -769,8 +786,15 @@ def add_missing_cdse_hash_ids_in_listing(
             res = collected_data_norm[["Id", "Name", "S3Path"]]
             res.rename(columns={"Name": "safename"}, inplace=True)
             res.rename(columns={"Id": "id"}, inplace=True)
-            assert 'S3Path' in res.columns, "S3Path column is missing in the result, check the fetch_data method"
-            
+            # remove the /eodata/ at the begining of the S3Path.
+            res["S3Path"] = res["S3Path"].apply(lambda x: x.replace("/eodata/", ""))
+            assert (
+                "S3Path" in res.columns
+            ), "S3Path column is missing in the result, check the fetch_data method"
+            assert (
+                res["S3Path"].iloc[0].startswith("Sentinel-1/")
+            ), "S3Path column does not contain expected values, check the fetch_data method"
+
     return res
 
 
@@ -1134,7 +1158,7 @@ def download_list_product_multithread_v3(
                     df2.loc[(df2["safe"] == safename_base), "status"] = -1
                     errors_per_account[login_used] += 1
                     logger.info(
-                        "error found for %s meaning %s", login_used, status_meaning
+                        "error found for %s reason: %s", login_used, status_meaning
                     )
                     # df2["status"][df2["safe"] == safename_base] = -1 # download in error
                 # if retries[safename_base] > MAX_RETRIES:
@@ -1215,7 +1239,12 @@ def download_list_product_multithread_v4(
     # )
     force_download = not check_on_disk
     df2, cpt = filter_product_already_present(
-        cpt, inputdf.rename(columns={'safename': 'safe'}), outputdir, force_download=force_download, cdsodatacli_conf=conf
+        cpt,
+        inputdf.rename(columns={"safename": "safe"}),
+        outputdir,
+        force_download=force_download,
+        cdsodatacli_conf=conf,
+        extension="",
     )
     t_start_download = time.time()
     logging.info("%s", cpt)
@@ -1298,9 +1327,9 @@ def download_list_product_multithread_v4(
                 # output_path = df_prod_downloadable["output_path"].iloc[url_one_index]
 
                 # Corrected lines inside download_list_product_multithread_v3
-                session = df_prod_downloadable["session"].loc[url_one_index]
+                # session = df_prod_downloadable["session"].loc[url_one_index]
                 header = df_prod_downloadable["header"].loc[url_one_index]
-                url_product = df_prod_downloadable["url"].loc[url_one_index]
+                # url_product = df_prod_downloadable["url"].loc[url_one_index]
                 output_path = df_prod_downloadable["output_path"].loc[url_one_index]
                 s3path = df_prod_downloadable["S3Path"].loc[url_one_index]
                 # path_semaphore_token = df_prod_downloadable["token_semaphore"].loc[
@@ -1379,7 +1408,7 @@ def download_list_product_multithread_v4(
                 #     logging.error("traceback : %s", traceback.format_exc())
                 #     speed = np.nan
                 #     status_meaning = "DownloadError"
-                if status_meaning == "OK":
+                if status_meaning == "OK" or status_meaning == "Downloaded":
                     df2.loc[(df2["safe"] == safename_base), "status"] = 1
                     all_speeds.append(speed)
                     all_elapsed_time.append(elapsed_time)

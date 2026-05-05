@@ -16,7 +16,8 @@ active_session_directory: "./CDSE_odata_active_sessions"
 s3_access_key: None # prefered solution it to use temporary S3 access token generate on the fly
 s3_secret_key: None
 s3_endpoint: "https://eodata.dataspace.copernicus.eu"
-s3_bucket: 'eodata'
-s3_region: 'default'
-list_sar_unit_private_data: []
+s3_bucket: "eodata"
+s3_region: "default"
+list_sar_unit_private_data:
+  []
   #- S1E

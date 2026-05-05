@@ -33,7 +33,9 @@ def sample_conf():
 
 
 @skip_in_ci
-def test_add_ids_to_listing_iterative_full_success(sample_listing, tmp_path, sample_conf):
+def test_add_ids_to_listing_iterative_full_success(
+    sample_listing, tmp_path, sample_conf
+):
     """Test case where all IDs are found in the first iteration."""
     output_path = str(tmp_path / "final_output.csv")
 

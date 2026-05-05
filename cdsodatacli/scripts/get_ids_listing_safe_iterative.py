@@ -155,7 +155,11 @@ def add_ids_to_listing_iterative(
 
         # Appel à l'API via cdsodatacli
         dfres = dl.add_missing_cdse_hash_ids_in_listing(
-            listing_path=tmplisting, display_tqdm=True, email=email, password=password, conf=conf
+            listing_path=tmplisting,
+            display_tqdm=True,
+            email=email,
+            password=password,
+            conf=conf,
         )
 
         # --- CORRECTION ICI ---

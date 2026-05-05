@@ -42,22 +42,31 @@ def get_bearer_access_token(
                 [list(d.keys())[0] for d in conf[account_group] if isinstance(d, dict)]
             )
         elif isinstance(conf[account_group], dict):
+
             login = random.choice(list(conf[account_group].keys()))
         else:
-            raise ValueError(f"Unexpected format for account group {account_group} in config file")
+            raise ValueError(
+                f"Unexpected format for account group {account_group} in config file"
+            )
     else:
         login = specific_account
 
     if specific_psswd is None:
-        if isinstance(conf[account_group],list):
+        if isinstance(conf[account_group], list):
             idx = next(i for i, d in enumerate(conf[account_group]) if login in d)
             passwd = conf[account_group][idx][login]
         elif isinstance(conf[account_group], dict):
             passwd = conf[account_group][login]
         else:
-            raise ValueError(f"Unexpected format for account group {account_group} in config file")
+            raise ValueError(
+                f"Unexpected format for account group {account_group} in config file"
+            )
     else:
         passwd = specific_psswd
+    logger.debug(
+        f"Requesting access token for account {login} from group {account_group}"
+    )
+    logger.debug(f"Password for {login} is {'*' * len(passwd) if passwd else '(none)'}")
     # check if a valid token already exists in cache before hitting the server
     with _token_cache_lock:
         if login in ACTIVE_ACCESS_TOKEN:

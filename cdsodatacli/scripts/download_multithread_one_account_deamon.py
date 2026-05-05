@@ -76,8 +76,8 @@ def entrypoint():
     )
     parser.add_argument(
         "--download-backend",
-        choices=['zipper','s3endpoint'],
-        default='s3endpoint',
+        choices=["zipper", "s3endpoint"],
+        default="s3endpoint",
         help="backend to use for downloading products, 'zipper' will use the legacy zipper API, 's3endpoint' will use direct S3 endpoint access (default: 's3endpoint')",
     )
     args = parser.parse_args()
@@ -99,25 +99,25 @@ def entrypoint():
     conf = get_conf(path_config_file=args.cdsodatacli_conf_file)
     logins_group = args.logingroup
     logging.info(
-        "Number of account in  %s logins_group : %s",
+        "Number of account in  %s logins_group : %i",
         logins_group,
         len(conf[logins_group]),
     )
     outputdir = args.outputdir
-    if args.download_backend == 'zipper':
+    if args.download_backend == "zipper":
         first_var = "id"
     else:
         first_var = "S3Path"
     if test_listing_content(listing_path=listing):
-        
-        inputdf = pd.read_csv(listing, delimiter=",") # header is mandatory
+
+        inputdf = pd.read_csv(listing, delimiter=",")  # header is mandatory
     else:
-        inputdf = add_missing_cdse_hash_ids_in_listing(listing_path=listing,conf=conf)
+        inputdf = add_missing_cdse_hash_ids_in_listing(listing_path=listing, conf=conf)
     if not os.path.exists(outputdir):
         logging.debug("mkdir on %s", outputdir)
         os.makedirs(outputdir, 0o0775)
     if len(inputdf[first_var]) > 0:
-        if args.download_backend == 'zipper':
+        if args.download_backend == "zipper":
             logging.info("Using zipper backend for download")
             dfout = download_list_product_multithread_v3(
                 list_id=inputdf["id"].values,
@@ -129,9 +129,9 @@ def entrypoint():
                 cdsodatacli_conf_file=args.cdsodatacli_conf_file,
             )
         else:
-            logging.info("Using s3endpoint backend for download")   
+            logging.info("Using s3endpoint backend for download")
             dfout = download_list_product_multithread_v4(
-                inputdf=inputdf,#.rename(columns={'safename':'safe'}),
+                inputdf=inputdf,  # .rename(columns={'safename':'safe'}),
                 outputdir=outputdir,
                 hideprogressbar=False,
                 account_group=logins_group,

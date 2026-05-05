@@ -164,7 +164,14 @@ def get_sessions_download_available(
     # account_free = None
     account_counter = defaultdict(int)
     for aa in conf[logins_group]:
-        account_tmp = list(aa)[0]
+        if isinstance(aa, str):
+            account_tmp = aa
+        elif isinstance(aa, dict):
+            account_tmp = list(aa)[0]
+        else:
+            raise ValueError(
+                f"Unexpected format for account {aa} in group {logins_group}"
+            )
         account_counter[account_tmp] = 0
     logging.debug("(re)init the counts for accounts.")
     for toto in lst_sessions_active:
@@ -202,7 +209,6 @@ def get_sessions_download_available(
                     specific_account=account_free,
                     account_group=logins_group,
                 )
-         
 
             # else:  # select randomly one token among existing
             #     path_semphore_token = random.choice(lst_usable_tokens)
@@ -210,7 +216,7 @@ def get_sessions_download_available(
             if access_token is not None:
                 bunch_product_downloadable.append(safename_product)
                 bunch_urls_to_download.append(subset_to_treat["urls"].iloc[ss])
-                bunch_s3path_to_download.append(subset_to_treat['S3Path'].iloc[ss])
+                bunch_s3path_to_download.append(subset_to_treat["S3Path"].iloc[ss])
                 outputfiles_download_coming.append(
                     subset_to_treat["outputpath"].iloc[ss]
                 )
@@ -235,7 +241,7 @@ def get_sessions_download_available(
     # df_products_downloadable["token_semaphore"] = all_semaphores
     df_products_downloadable["login"] = all_logins
     df_products_downloadable["url"] = bunch_urls_to_download
-    df_products_downloadable["S3Path"] = bunch_s3path_to_download # to check S3path
+    df_products_downloadable["S3Path"] = bunch_s3path_to_download  # to check S3path
     df_products_downloadable["output_path"] = outputfiles_download_coming
     df_products_downloadable["session_semaphore"] = all_session_semaphores
     df_products_downloadable["safe"] = all_safe_basename
