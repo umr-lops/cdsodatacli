@@ -125,8 +125,11 @@ def test_add_missing_cdse_hash_ids_in_listing(tmp_path, mock_conf):
     mock_exploded.product = "GRDH"
 
     mock_query_result = pd.DataFrame(
-        {"Id": ["uuid-123"], "Name": ["S1A_IW_GRDH_1SDV_20220503T000000.SAFE"],
-         "S3Path": ["Sentinel-1/SAR/GRD/S1A_IW_GRDH_1SDV_20220503T000000.SAFE"]}
+        {
+            "Id": ["uuid-123"],
+            "Name": ["S1A_IW_GRDH_1SDV_20220503T000000.SAFE"],
+            "S3Path": ["Sentinel-1/SAR/GRD/S1A_IW_GRDH_1SDV_20220503T000000.SAFE"],
+        }
     )
 
     with (
@@ -220,10 +223,19 @@ def test_download_list_product_multithread_v2(
     ):
 
         mock_filter.return_value = (
-            pd.DataFrame({"safe": ["SAFE1"], "status": [0], "id": ["id1"],
-                          "S3Path": ["Sentinel-1/SAR/GRD/S1A_IW_GRDH_1SDV_20220503T000000.SAFE"],
-                            "output_path": ["/tmp/SAFE1.zip"], "header": [{}],
-                              "url": ["url1"]}),
+            pd.DataFrame(
+                {
+                    "safe": ["SAFE1"],
+                    "status": [0],
+                    "id": ["id1"],
+                    "S3Path": [
+                        "Sentinel-1/SAR/GRD/S1A_IW_GRDH_1SDV_20220503T000000.SAFE"
+                    ],
+                    "output_path": ["/tmp/SAFE1.zip"],
+                    "header": [{}],
+                    "url": ["url1"],
+                }
+            ),
             defaultdict(int),
         )
 
