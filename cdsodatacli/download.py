@@ -432,6 +432,7 @@ def download_list_product(
     assert len(list_id) == len(list_safename)
     # conf = get_conf(path_config_file=cdsodatacli_conf_file)
     cpt = defaultdict(int)
+    cpt["product_absent_from_local_disks"] = 0
     all_speeds = []
     cpt["products_in_initial_listing"] = len(list_id)
     # lst_usable_tokens = get_list_of_existing_token_semaphore_file(
