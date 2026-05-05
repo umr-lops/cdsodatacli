@@ -944,11 +944,10 @@ def download_list_product_sequential(
 
 
 def download_list_product_multithread_v3(
-    list_id,
-    list_safename,
+    inputdf,
     outputdir,
     account_group,
-    hideProgressBar=False,
+    hideprogressbar=False,
     check_on_disk=True,
     cdsodatacli_conf_file=None,
 ):
@@ -960,11 +959,10 @@ def download_list_product_multithread_v3(
 
     Parameters
     ----------
-    list_id (list): list of satellite product hashs
-    list_safename (list): list of product names
+    inputdf (pd.DataFrame): DataFrame containing product information with columns 'id' and 'safename'
     outputdir (str): the directory where to store the product collected
     account_group (str): a group define in the config file with a unique account -> 4 sessions in parallel
-    hideProgressBar (bool): True -> no tqdm progress bar in stdout
+    hideprogressbar (bool): True -> no tqdm progress bar in stdout
     check_on_disk (bool): True -> if the product is in the spool dir or in archive dir the download is skipped
     cdsodatacli_conf_file (str): path to the cdsodatacli configuration file [ optional, default is None -> use cdsodatacli default behavior]
 
@@ -972,21 +970,23 @@ def download_list_product_multithread_v3(
     -------
         df2 (pd.DataFrame):
     """
-    assert len(list_id) == len(list_safename)
+    
+    assert len(inputdf["id"]) == len(inputdf["safename"])
+    if "status" not in inputdf.columns:
+        inputdf["status"] = np.zeros(len(inputdf["safename"]))
     logger.info("check_on_disk : %s", check_on_disk)
     cpt = defaultdict(int)
-    cpt["products_in_initial_listing"] = len(list_id)
+    cpt["products_in_initial_listing"] = len(inputdf["id"])
     conf = get_conf(path_config_file=cdsodatacli_conf_file)
-    if hideProgressBar:
+    if hideprogressbar:
         os.environ["DISABLE_TQDM"] = "True"
     all_speeds = []
     # status, 0->not treated, -1->error download , 1-> successful download
-    df = pd.DataFrame(
-        {"safe": list_safename, "status": np.zeros(len(list_safename)), "id": list_id}
-    )
+
     force_download = not check_on_disk
     df2, cpt = filter_product_already_present(
-        cpt, df, outputdir, force_download=force_download, cdsodatacli_conf=conf
+        cpt, inputdf.rename(columns={"safename": "safe"}),
+          outputdir, force_download=force_download, cdsodatacli_conf=conf
     )
     t_start_download = time.time()
     logger.info("%s", cpt)
@@ -1018,7 +1018,6 @@ def download_list_product_multithread_v3(
             df_prod_downloadable = get_sessions_download_available(
                 conf,
                 subset_to_treat,
-                hideProgressBar=True,
                 blacklist=blacklist,
                 logins_group=account_group,
             )

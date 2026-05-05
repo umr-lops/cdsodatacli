@@ -120,8 +120,7 @@ def entrypoint():
         if args.download_backend == "zipper":
             logging.info("Using zipper backend for download")
             dfout = download_list_product_multithread_v3(
-                list_id=inputdf["id"].values,
-                list_safename=inputdf["safename"].values,
+                inputdf=inputdf,
                 outputdir=outputdir,
                 hideprogressbar=False,
                 account_group=logins_group,
