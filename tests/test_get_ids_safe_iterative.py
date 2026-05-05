@@ -187,4 +187,4 @@ def test_add_ids_to_listing_with_email_password(sample_listing, tmp_path, sample
         call_kwargs = mocked_api.call_args
         assert call_kwargs.kwargs.get("email") == "user@example.com"
         assert call_kwargs.kwargs.get("password") == "secret"
-        assert "conf" not in call_kwargs.kwargs
+        assert "conf" in call_kwargs.kwargs
