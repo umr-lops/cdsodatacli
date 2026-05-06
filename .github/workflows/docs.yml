@@ -15,7 +15,7 @@ jobs:
       - name: Set up conda
         uses: conda-incubator/setup-miniconda@v3
         with:
-          environment-file: ci/docs.yaml  # or cdsodatacli-docs.yml
+          environment-file: ci/requirements/docs.yaml
           python-version: "3.11"
 
       - name: Install package
