@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  id-token: write
+  pages: write
+
 jobs:
   build-docs:
     runs-on: ubuntu-latest
