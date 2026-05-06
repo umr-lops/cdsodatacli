@@ -1266,7 +1266,7 @@ def download_list_product_multithread_v4(
             while_loop += 1
             subset_to_treat = df2[df2["status"] == 0]
             pbar.set_description(
-                f"loop={while_loop} | OK={cpt['successful_download']} | ERR={sum(v for k,v in cpt.items() if k.startswith('status_') and k != 'status_OK')} | todo={len(subset_to_treat)} | //={len(running_futures)}"
+                f"loop={while_loop} | OK={cpt['successful_download']} | ERR={sum(v for k,v in cpt.items() if k.startswith('status_') and k != 'status_OK' and k != 'status_Downloaded')} | todo={len(subset_to_treat)} | //={len(running_futures)}"
             )
             if len(subset_to_treat) == 0:
                 logger.info(
