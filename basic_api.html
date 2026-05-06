@@ -1,0 +1,407 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>methods descriptions &mdash; cdsodatacli  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/cdsodatacli.css?v=ff59c8f8" />
+      <link rel="stylesheet" type="text/css" href="_static/jupyter-sphinx.css" />
+      <link rel="stylesheet" type="text/css" href="_static/thebelab.css" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="_static/thebelab-helper.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/npm/@jupyter-widgets/html-manager@^1.0.1/dist/embed-amd.js"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="How to use ‘id_query’ ?" href="examples/id_query_usage.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            cdsodatacli
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installing.html">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="installing.html#conda-install">conda install</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installing.html#docker-image-building">docker image building</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installing.html#update-cdsodatacli-to-the-latest-version">Update cdsodatacli to the latest version</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Usage</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Do a query through CDSE Odata API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#download-a-listing-of-product">Download a listing of product</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="usage.html#single-threaded-download-with-a-given-user-login">1. Single-threaded download with a given user/login</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage.html#multi-threaded-download-with-multiple-users-accounts">2. Multi-threaded download with multiple users/accounts</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#get-cdse-odata-ids-for-a-list-of-products">Get CDSE Odata IDs for a list of products</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#get-equivalent-s1-product-types">Get equivalent S1 product types</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/basic_usage.html">define a GeoDataFrame</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/id_query_usage.html">How to use ‘id_query’ ?</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="examples/id_query_usage.html#we-can-check-that-product-IDs-are-exatcly-the-same">we can check that product IDs are exatcly the same</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">methods descriptions</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#cdsodatacli.query.fetch_data"><code class="docutils literal notranslate"><span class="pre">fetch_data()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#cdsodatacli.download.download_list_product"><code class="docutils literal notranslate"><span class="pre">download_list_product()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#cdsodatacli.download.download_list_product_sequential"><code class="docutils literal notranslate"><span class="pre">download_list_product_sequential()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#cdsodatacli.download.download_list_product_multithread_v4"><code class="docutils literal notranslate"><span class="pre">download_list_product_multithread_v4()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#cdsodatacli.utils.get_conf"><code class="docutils literal notranslate"><span class="pre">get_conf()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#cdsodatacli.utils.check_safe_in_outputdir"><code class="docutils literal notranslate"><span class="pre">check_safe_in_outputdir()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#cdsodatacli.utils.check_safe_in_spool"><code class="docutils literal notranslate"><span class="pre">check_safe_in_spool()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#cdsodatacli.utils.WhichArchiveDir"><code class="docutils literal notranslate"><span class="pre">WhichArchiveDir()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#cdsodatacli.utils.check_safe_in_archive"><code class="docutils literal notranslate"><span class="pre">check_safe_in_archive()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#cdsodatacli.utils.convert_json_opensearch_query_to_listing_safe_4_dowload"><code class="docutils literal notranslate"><span class="pre">convert_json_opensearch_query_to_listing_safe_4_dowload()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#cdsodatacli.utils.convert_json_odata_query_to_listing_safe_4_download"><code class="docutils literal notranslate"><span class="pre">convert_json_odata_query_to_listing_safe_4_download()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#cdsodatacli.s3_temporary_access_token._get_fresh_s3_client"><code class="docutils literal notranslate"><span class="pre">_get_fresh_s3_client()</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">cdsodatacli</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">methods descriptions</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="methods-descriptions">
+<span id="basic-api"></span><h1>methods descriptions<a class="headerlink" href="#methods-descriptions" title="Link to this heading"></a></h1>
+<p id="module-cdsodatacli">odata client for Copernicus Data Space catalog</p>
+<dl class="py function" id="module-cdsodatacli.query">
+<dt class="sig sig-object py" id="cdsodatacli.query.fetch_data">
+<span class="sig-prename descclassname"><span class="pre">cdsodatacli.query.</span></span><span class="sig-name descname"><span class="pre">fetch_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timedelta_slice</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_sea_percent</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">top</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">querymode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'seq'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">email</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">password</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">display_tqdm</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cdsodatacli.query.fetch_data" title="Link to this definition"></a></dt>
+<dd><p>Fetches meta-data of CDSE products based on provided parameters.</p>
+<p>Splits the input GeoDataFrame by the <cite>id_query</cite> column and executes fetching
+for each unique query ID.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>gdf</strong> (<em>gpd.GeoDataFrame</em>) – <p>Geospatial data for the query.</p>
+<dl class="simple">
+<dt>Mandatory columns:</dt><dd><ul>
+<li><p>’start_datetime’: Starting date for the query.</p></li>
+<li><p>’end_datetime’: Ending date for the query.</p></li>
+<li><p>’id_query’: Unique identifier of the query.</p></li>
+</ul>
+</dd>
+<dt>Optional columns:</dt><dd><ul>
+<li><p>’name’: SAFE name pattern.</p></li>
+<li><p>’collection’: e.g., SENTINEL-1.</p></li>
+<li><p>’sensormode’: e.g., IW.</p></li>
+<li><p>’producttype’: e.g., GRD.</p></li>
+<li><p>’geometry’: shapely geometry for area of interest.</p></li>
+<li><p>’Attributes’: Extra OData filters.</p></li>
+</ul>
+</dd>
+</dl>
+</p></li>
+<li><p><strong>timedelta_slice</strong> (<em>datetime.timedelta</em><em>, </em><em>optional</em>) – Time window size to split queries
+to avoid OData’s 1000 product limit.</p></li>
+<li><p><strong>min_sea_percent</strong> (<em>float</em><em>, </em><em>optional</em>) – Minimum sea percent to filter products.</p></li>
+<li><p><strong>top</strong> (<em>int</em><em>, </em><em>optional</em>) – Max rows per individual OData query.</p></li>
+<li><p><strong>cache_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Path to directory for storing/reusing results.</p></li>
+<li><p><strong>querymode</strong> (<em>str</em>) – ‘seq’ (sequential) or ‘multi’ (multithreaded). Defaults to ‘seq’.</p></li>
+<li><p><strong>email</strong> (<em>str</em><em>, </em><em>optional</em>) – CDSE account email for authentication.</p></li>
+<li><p><strong>password</strong> (<em>str</em><em>, </em><em>optional</em>) – CDSE account password.</p></li>
+<li><p><strong>display_tqdm</strong> (<em>bool</em>) – Whether to show a progress bar. Defaults to False.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Concatenated meta-data results from all queries.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pd.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function" id="module-cdsodatacli.download">
+<dt class="sig sig-object py" id="cdsodatacli.download.download_list_product">
+<span class="sig-prename descclassname"><span class="pre">cdsodatacli.download.</span></span><span class="sig-name descname"><span class="pre">download_list_product</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">list_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">list_safename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outputdir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">specific_account</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">specific_passwd</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hideProgressBar</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">conf</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cdsodatacli.download.download_list_product" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>Odata</strong> (<em>list_id</em><em> (</em><em>list</em><em>) of </em><em>string could be hash</em><em> (</em><em>eg a1e74573-aa77-55d6-a08d-7b6612761819</em><em>) </em><em>provided by CDS</em>)</p></li>
+<li><p><strong>S1A_IW_GRDH_1SDV_20221013T065030_20221013T0650</strong><strong>...</strong><strong>SAFE</strong><strong>)</strong> (<em>list_safename</em><em> (</em><em>list</em><em>) of </em><em>string basename</em><em> of </em><em>SAFE product</em><em> (</em><em>eg.</em>)</p></li>
+<li><p><strong>stored</strong> (<em>outputdir</em><em> (</em><em>str</em><em>) </em><em>path where product will be</em>)</p></li>
+<li><p><strong>(</strong><strong>str</strong><strong>)</strong> (<em>specific_passwd</em>)</p></li>
+<li><p><strong>(</strong><strong>str</strong><strong>)</strong></p></li>
+<li><p><strong>(</strong><strong>bool</strong><strong>)</strong> (<em>hideProgressBar</em>)</p></li>
+<li><p><strong>(</strong><strong>dict</strong><strong>)</strong> (<em>cdsodatacli_conf</em>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cdsodatacli.download.download_list_product_sequential">
+<span class="sig-prename descclassname"><span class="pre">cdsodatacli.download.</span></span><span class="sig-name descname"><span class="pre">download_list_product_sequential</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">list_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">list_safename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outputdir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hideProgressBar</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cdsodatacli_conf_file</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cdsodatacli.download.download_list_product_sequential" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>Odata</strong> (<em>list_id</em><em> (</em><em>list</em><em>) of </em><em>string could be hash</em><em> (</em><em>eg a1e74573-aa77-55d6-a08d-7b6612761819</em><em>) </em><em>provided by CDS</em>)</p></li>
+<li><p><strong>S1A_IW_GRDH_1SDV_20221013T065030_20221013T0650</strong><strong>...</strong><strong>SAFE</strong><strong>)</strong> (<em>list_safename</em><em> (</em><em>list</em><em>) of </em><em>string basename</em><em> of </em><em>SAFE product</em><em> (</em><em>eg.</em>)</p></li>
+<li><p><strong>stored</strong> (<em>outputdir</em><em> (</em><em>str</em><em>) </em><em>path where product will be</em>)</p></li>
+<li><p><strong>(</strong><strong>bool</strong><strong>)</strong> (<em>hideProgressBar</em>)</p></li>
+<li><p><strong>(</strong><strong>str</strong><strong>)</strong> (<em>cdsodatacli_conf_file</em>)</p></li>
+<li><p><strong>(</strong><strong>str</strong><strong>)</strong></p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cdsodatacli.download.download_list_product_multithread_v4">
+<span class="sig-prename descclassname"><span class="pre">cdsodatacli.download.</span></span><span class="sig-name descname"><span class="pre">download_list_product_multithread_v4</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outputdir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">account_group</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hideprogressbar</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">check_on_disk</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cdsodatacli_conf_file</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cdsodatacli.download.download_list_product_multithread_v4" title="Link to this definition"></a></dt>
+<dd><dl class="simple">
+<dt>v4 is working as deamon like v3 (while loop) multi account round-robin</dt><dd><p>and token semaphore files but using S3 endpoint to download each product</p>
+</dd>
+</dl>
+<p>In this method is working for a group of account with one or many account.
+Each account can run 4 parallel sessions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>(</strong><strong>pd.DataFrame</strong><strong>)</strong> (<em>inputdf</em>)</p></li>
+<li><p><strong>(</strong><strong>str</strong><strong>)</strong> (<em>cdsodatacli_conf_file</em>)</p></li>
+<li><p><strong>(</strong><strong>str</strong><strong>)</strong></p></li>
+<li><p><strong>(</strong><strong>bool</strong><strong>)</strong> (<em>check_on_disk</em>)</p></li>
+<li><p><strong>(</strong><strong>bool</strong><strong>)</strong></p></li>
+<li><p><strong>(</strong><strong>str</strong><strong>)</strong></p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>df2 (pd.DataFrame)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function" id="module-cdsodatacli.utils">
+<dt class="sig sig-object py" id="cdsodatacli.utils.get_conf">
+<span class="sig-prename descclassname"><span class="pre">cdsodatacli.utils.</span></span><span class="sig-name descname"><span class="pre">get_conf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path_config_file</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cdsodatacli.utils.get_conf" title="Link to this definition"></a></dt>
+<dd><p>Load configuration from localconfig.yml or config.yml in cdsodatacli package directory.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>path_config_file</strong> (<em>str</em><em>, </em><em>optional</em>) – Full path to the configuration YAML file. Defaults to None.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Configuration parameters loaded from the YAML file.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cdsodatacli.utils.check_safe_in_outputdir">
+<span class="sig-prename descclassname"><span class="pre">cdsodatacli.utils.</span></span><span class="sig-name descname"><span class="pre">check_safe_in_outputdir</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">outputdir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">safename</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cdsodatacli.utils.check_safe_in_outputdir" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>basename</strong> (<em>safename</em><em> (</em><em>str</em><em>)</em>)</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>present_in_outputdir (bool)</strong></p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>True -&gt; the product is already in the spool dir</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cdsodatacli.utils.check_safe_in_spool">
+<span class="sig-prename descclassname"><span class="pre">cdsodatacli.utils.</span></span><span class="sig-name descname"><span class="pre">check_safe_in_spool</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">safename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">conf</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cdsodatacli.utils.check_safe_in_spool" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>basename</strong> (<em>safename</em><em> (</em><em>str</em><em>)</em>)</p></li>
+<li><p><strong>package</strong> (<em>conf</em><em> (</em><em>dict</em><em>) </em><em>configuration dictionary</em><em> of </em><em>cdsodatacli</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>present_in_spool (bool)</strong></p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>True -&gt; the product is already in the spool dir</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cdsodatacli.utils.WhichArchiveDir">
+<span class="sig-prename descclassname"><span class="pre">cdsodatacli.utils.</span></span><span class="sig-name descname"><span class="pre">WhichArchiveDir</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">safe</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">conf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">archive_type</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cdsodatacli.utils.WhichArchiveDir" title="Link to this definition"></a></dt>
+<dd><p>Determine the archive directory path for a given safe based on its naming convention.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>safe</strong> (<em>str</em>) – safe base name</p></li>
+<li><p><strong>conf</strong> (<em>dict</em>)</p></li>
+<li><p><strong>archive_type</strong> (<em>str</em>) – type of archive directory to use from conf (e.g., ‘datawork’, ‘scale’)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>full path of the archive directory where the safe should be stored</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>gooddir (str)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cdsodatacli.utils.check_safe_in_archive">
+<span class="sig-prename descclassname"><span class="pre">cdsodatacli.utils.</span></span><span class="sig-name descname"><span class="pre">check_safe_in_archive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">safename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">conf</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cdsodatacli.utils.check_safe_in_archive" title="Link to this definition"></a></dt>
+<dd><p>Check if a given safe is already present in the different archive directories.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>(</strong><strong>str</strong><strong>)</strong> (<em>safename</em>)</p></li>
+<li><p><strong>package</strong> (<em>conf</em><em> (</em><em>dict</em><em>) </em><em>configuration dictionary</em><em> of </em><em>cdsodatacli</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>present_in_archive (bool)</strong></p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>True -&gt; the product is already in the archive dir. False -&gt; not present.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cdsodatacli.utils.convert_json_opensearch_query_to_listing_safe_4_dowload">
+<span class="sig-prename descclassname"><span class="pre">cdsodatacli.utils.</span></span><span class="sig-name descname"><span class="pre">convert_json_opensearch_query_to_listing_safe_4_dowload</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">json_path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cdsodatacli.utils.convert_json_opensearch_query_to_listing_safe_4_dowload" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>str</strong> (<em>json_path</em>)</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>output_txt str</strong></p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>listing with 2 columns: id,safename</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cdsodatacli.utils.convert_json_odata_query_to_listing_safe_4_download">
+<span class="sig-prename descclassname"><span class="pre">cdsodatacli.utils.</span></span><span class="sig-name descname"><span class="pre">convert_json_odata_query_to_listing_safe_4_download</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">json_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cdsodatacli.utils.convert_json_odata_query_to_listing_safe_4_download" title="Link to this definition"></a></dt>
+<dd><p>Convert an OData Products JSON response into a 2-column listing (id, safename)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>json_path</strong> (<em>str</em>) – Full path of the OData JSON file</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>output_txt</strong> – Text file with 2 columns: id,safename (no header)</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function" id="module-cdsodatacli.s3_temporary_access_token">
+<dt class="sig sig-object py" id="cdsodatacli.s3_temporary_access_token._get_fresh_s3_client">
+<span class="sig-prename descclassname"><span class="pre">cdsodatacli.s3_temporary_access_token.</span></span><span class="sig-name descname"><span class="pre">_get_fresh_s3_client</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">conf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">headers</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cdsodatacli.s3_temporary_access_token._get_fresh_s3_client" title="Link to this definition"></a></dt>
+<dd><p>Create a S3 resources (boto3 client) and S3 temporary credentials.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>conf</strong> (<em>dict</em>) – Configuration dictionary containing S3 endpoint, region, and bucket information.</p></li>
+<li><p><strong>headers</strong> (<em>dict</em>) – Headers containing the Bearer token for authentication.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A tuple containing the S3 temporary credentials and the boto3 S3 resource object.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="examples/id_query_usage.html" class="btn btn-neutral float-left" title="How to use ‘id_query’ ?" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Ifremer LOPS/SIAM.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

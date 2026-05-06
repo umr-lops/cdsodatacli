@@ -1,0 +1,85 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "0",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "\"\"\"\n",
+    "started 6 nov 2023\n",
+    "A Grouazel, based on JR Miadana dev\n",
+    "\"\"\""
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "1",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import datetime\n",
+    "import shapely\n",
+    "import geopandas as gpd\n",
+    "import cdsodatacli"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "2",
+   "metadata": {},
+   "source": [
+    "# define a GeoDataFrame"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "3",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "gdf = gpd.GeoDataFrame({\n",
+    "        \"start_datetime\" : [ datetime.datetime(2022,10,2,0) ,  datetime.datetime(2022,10,13,0) ],\n",
+    "        \"end_datetime\"   : [ datetime.datetime(2022,10,2,21),  datetime.datetime(2022,10,13,18) ],\n",
+    "        \"geometry\"   : [ shapely.wkt.loads(\"POINT (-7.5 53)\"),  shapely.wkt.loads(\"POLYGON ((-12 35, -5 35, -5 45, -12 45, -12 35))\")],\n",
+    "        \"collection\"  : [ \"SENTINEL-1\", \"SENTINEL-2\"],\n",
+    "        \"name\"        : [ None, None],\n",
+    "        \"sensormode\"  : [ None, None],\n",
+    "        \"producttype\" : [ None, None],\n",
+    "        \"Attributes\"  : [ None, None],\n",
+    "        \"id_query\"    : ['S1example','S2polygon'],\n",
+    "    })\n",
+    "\n",
+    "collected_data_norm = cdsodatacli.query.fetch_data(gdf, min_sea_percent=20)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "4",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "collected_data_norm.head()"
+   ]
+  }
+ ],
+ "metadata": {
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

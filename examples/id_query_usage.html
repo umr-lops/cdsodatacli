@@ -1,0 +1,725 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How to use ‘id_query’ ? &mdash; cdsodatacli  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/cdsodatacli.css?v=ff59c8f8" />
+      <link rel="stylesheet" type="text/css" href="../_static/jupyter-sphinx.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/thebelab.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/thebelab-helper.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/npm/@jupyter-widgets/html-manager@^1.0.1/dist/embed-amd.js"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+      <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="methods descriptions" href="../basic_api.html" />
+    <link rel="prev" title="define a GeoDataFrame" href="basic_usage.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            cdsodatacli
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../installing.html">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../installing.html#conda-install">conda install</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installing.html#docker-image-building">docker image building</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installing.html#update-cdsodatacli-to-the-latest-version">Update cdsodatacli to the latest version</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Usage</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../usage.html">Do a query through CDSE Odata API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#download-a-listing-of-product">Download a listing of product</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../usage.html#single-threaded-download-with-a-given-user-login">1. Single-threaded download with a given user/login</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../usage.html#multi-threaded-download-with-multiple-users-accounts">2. Multi-threaded download with multiple users/accounts</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#get-cdse-odata-ids-for-a-list-of-products">Get CDSE Odata IDs for a list of products</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#get-equivalent-s1-product-types">Get equivalent S1 product types</a></li>
+<li class="toctree-l1"><a class="reference internal" href="basic_usage.html">define a GeoDataFrame</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">How to use ‘id_query’ ?</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#we-can-check-that-product-IDs-are-exatcly-the-same">we can check that product IDs are exatcly the same</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../basic_api.html">methods descriptions</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.query.fetch_data"><code class="docutils literal notranslate"><span class="pre">fetch_data()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.download.download_list_product"><code class="docutils literal notranslate"><span class="pre">download_list_product()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.download.download_list_product_sequential"><code class="docutils literal notranslate"><span class="pre">download_list_product_sequential()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.download.download_list_product_multithread_v4"><code class="docutils literal notranslate"><span class="pre">download_list_product_multithread_v4()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.utils.get_conf"><code class="docutils literal notranslate"><span class="pre">get_conf()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.utils.check_safe_in_outputdir"><code class="docutils literal notranslate"><span class="pre">check_safe_in_outputdir()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.utils.check_safe_in_spool"><code class="docutils literal notranslate"><span class="pre">check_safe_in_spool()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.utils.WhichArchiveDir"><code class="docutils literal notranslate"><span class="pre">WhichArchiveDir()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.utils.check_safe_in_archive"><code class="docutils literal notranslate"><span class="pre">check_safe_in_archive()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.utils.convert_json_opensearch_query_to_listing_safe_4_dowload"><code class="docutils literal notranslate"><span class="pre">convert_json_opensearch_query_to_listing_safe_4_dowload()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.utils.convert_json_odata_query_to_listing_safe_4_download"><code class="docutils literal notranslate"><span class="pre">convert_json_odata_query_to_listing_safe_4_download()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.s3_temporary_access_token._get_fresh_s3_client"><code class="docutils literal notranslate"><span class="pre">_get_fresh_s3_client()</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">cdsodatacli</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">How to use ‘id_query’ ?</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="How-to-use-'id_query'-?">
+<h1>How to use ‘id_query’ ?<a class="headerlink" href="#How-to-use-'id_query'-?" title="Link to this heading"></a></h1>
+<p>the ‘id_query’ is used in the Geo Pandas DataFrame as a key to distinguish different requests passed through the same GeoDataFrame.</p>
+<p>Exact same query given twice with distinct ‘id_query’ will result in excact same results but stored twice in the output DataFrame.</p>
+<p>The ‘id_query’ is also stored in the output DataFrame as ‘id_original_query’.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">geopandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gpd</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">cdsodatacli.query</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qr</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">example</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    define a query with 2 identical sets of parameters except &#39;id_query&#39;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">gdf_multi_id</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;start_datetime&quot;</span><span class="p">:</span> <span class="p">[</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">datetime64</span><span class="p">(</span><span class="s2">&quot;2022-05-03 00:00:00&quot;</span><span class="p">),</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">datetime64</span><span class="p">(</span><span class="s2">&quot;2022-05-03 00:00:00&quot;</span><span class="p">),</span>
+            <span class="p">],</span>
+            <span class="s2">&quot;end_datetime&quot;</span><span class="p">:</span> <span class="p">[</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">datetime64</span><span class="p">(</span><span class="s2">&quot;2022-05-03 00:02:00&quot;</span><span class="p">),</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">datetime64</span><span class="p">(</span><span class="s2">&quot;2022-05-03 00:02:00&quot;</span><span class="p">),</span>
+            <span class="p">],</span>
+            <span class="s2">&quot;geometry&quot;</span><span class="p">:</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span>
+            <span class="s2">&quot;collection&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;SENTINEL-2&quot;</span><span class="p">,</span> <span class="s2">&quot;SENTINEL-2&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span>
+            <span class="s2">&quot;sensormode&quot;</span><span class="p">:</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span>
+            <span class="s2">&quot;producttype&quot;</span><span class="p">:</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span>
+            <span class="s2">&quot;Attributes&quot;</span><span class="p">:</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span>
+            <span class="s2">&quot;id_query&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;test1&quot;</span><span class="p">,</span> <span class="s2">&quot;test2&quot;</span><span class="p">],</span>
+        <span class="p">}</span>
+    <span class="p">)</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">qr</span><span class="o">.</span><span class="n">fetch_data</span><span class="p">(</span><span class="n">gdf</span><span class="o">=</span><span class="n">gdf_multi_id</span><span class="p">,</span> <span class="n">top</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
+    <span class="c1"># check that a product is present twice with different id_original_query</span>
+    <span class="n">counts</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;id_original_query&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">value_counts</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">result</span><span class="p">,</span><span class="n">counts</span>
+<br/></pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">result</span><span class="p">,</span><span class="n">counts</span> <span class="o">=</span> <span class="n">example</span><span class="p">()</span>
+<span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">counts</span><span class="p">[</span><span class="n">counts</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">isin</span><span class="p">([</span><span class="s2">&quot;test1&quot;</span><span class="p">,</span> <span class="s2">&quot;test2&quot;</span><span class="p">]))</span>
+<span class="n">result</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>@odata.mediaContentType</th>
+      <th>Id</th>
+      <th>Name</th>
+      <th>ContentType</th>
+      <th>ContentLength</th>
+      <th>OriginDate</th>
+      <th>PublicationDate</th>
+      <th>ModificationDate</th>
+      <th>Online</th>
+      <th>EvictionDate</th>
+      <th>S3Path</th>
+      <th>Checksum</th>
+      <th>ContentDate</th>
+      <th>Footprint</th>
+      <th>GeoFootprint</th>
+      <th>Attributes</th>
+      <th>id_original_query</th>
+      <th>geometry</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>application/octet-stream</td>
+      <td>7b561bb5-bb5c-476a-ac51-d361cace788d</td>
+      <td>S2B_MSIL2A_20220503T000139_N0510_R016_T11XML_2...</td>
+      <td>application/octet-stream</td>
+      <td>905950656</td>
+      <td>2024-10-22T03:57:01.163000Z</td>
+      <td>2024-11-30T10:52:42.448541Z</td>
+      <td>2024-11-30T10:52:58.857924Z</td>
+      <td>True</td>
+      <td>9999-12-31T23:59:59.999999Z</td>
+      <td>/eodata/Sentinel-2/MSI/L2A_N0500/2022/05/03/S2...</td>
+      <td>[{'Value': '8dc89dabd44eb3869de612042a6a427d',...</td>
+      <td>{'Start': '2022-05-03T00:01:39.024000Z', 'End'...</td>
+      <td>geography'SRID=4326;POLYGON ((-123.37811606469...</td>
+      <td>{'type': 'Polygon', 'coordinates': [[[-123.378...</td>
+      <td>[{'@odata.type': '#OData.CSC.StringAttribute',...</td>
+      <td>test1</td>
+      <td>POLYGON ((-123.37812 81.90748, -122.69284 80.9...</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>application/octet-stream</td>
+      <td>f05036fd-66ee-42bb-a12f-92b319f4c7fb</td>
+      <td>S2B_MSIL2A_20220503T000139_N0510_R016_T08XNR_2...</td>
+      <td>application/octet-stream</td>
+      <td>906648145</td>
+      <td>2024-10-22T03:56:59.617000Z</td>
+      <td>2024-11-30T10:52:13.209895Z</td>
+      <td>2024-11-30T10:52:24.656867Z</td>
+      <td>True</td>
+      <td>9999-12-31T23:59:59.999999Z</td>
+      <td>/eodata/Sentinel-2/MSI/L2A_N0500/2022/05/03/S2...</td>
+      <td>[{'Value': '8e855e16387253f7aca2fcf38b0d85fb',...</td>
+      <td>{'Start': '2022-05-03T00:01:39.024000Z', 'End'...</td>
+      <td>geography'SRID=4326;POLYGON ((-135.00128035426...</td>
+      <td>{'type': 'Polygon', 'coordinates': [[[-135.001...</td>
+      <td>[{'@odata.type': '#OData.CSC.StringAttribute',...</td>
+      <td>test1</td>
+      <td>POLYGON ((-135.00128 81.95692, -135.00114 80.9...</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>application/octet-stream</td>
+      <td>b2f271b3-0217-4dcd-93b3-29ceb81b78f1</td>
+      <td>S2B_MSIL1C_20220503T000139_N0510_R016_T07XEL_2...</td>
+      <td>application/octet-stream</td>
+      <td>739061869</td>
+      <td>2024-10-22T03:56:56.046000Z</td>
+      <td>2024-11-30T10:51:43.843079Z</td>
+      <td>2024-11-30T10:51:54.844138Z</td>
+      <td>True</td>
+      <td>9999-12-31T23:59:59.999999Z</td>
+      <td>/eodata/Sentinel-2/MSI/L1C_N0500/2022/05/03/S2...</td>
+      <td>[{'Value': 'f514d8376518117f2e345263982d4ec1',...</td>
+      <td>{'Start': '2022-05-03T00:01:39.024000Z', 'End'...</td>
+      <td>geography'SRID=4326;POLYGON ((-140.96097336164...</td>
+      <td>{'type': 'Polygon', 'coordinates': [[[-140.960...</td>
+      <td>[{'@odata.type': '#OData.CSC.StringAttribute',...</td>
+      <td>test1</td>
+      <td>POLYGON ((-140.96097 80.97292, -134.75703 80.9...</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>application/octet-stream</td>
+      <td>9501c4d2-4315-4033-8fc0-6ffdb6ed0a8a</td>
+      <td>S2B_MSIL2A_20220503T000139_N0510_R016_T10XER_2...</td>
+      <td>application/octet-stream</td>
+      <td>906168896</td>
+      <td>2024-10-22T03:57:00.756000Z</td>
+      <td>2024-11-30T10:51:41.950143Z</td>
+      <td>2024-11-30T10:51:53.955437Z</td>
+      <td>True</td>
+      <td>9999-12-31T23:59:59.999999Z</td>
+      <td>/eodata/Sentinel-2/MSI/L2A_N0500/2022/05/03/S2...</td>
+      <td>[{'Value': '6ee6c35e7a4fb8ad3913279ad053d32a',...</td>
+      <td>{'Start': '2022-05-03T00:01:39.024000Z', 'End'...</td>
+      <td>geography'SRID=4326;POLYGON ((-123.00128035426...</td>
+      <td>{'type': 'Polygon', 'coordinates': [[[-123.001...</td>
+      <td>[{'@odata.type': '#OData.CSC.StringAttribute',...</td>
+      <td>test1</td>
+      <td>POLYGON ((-123.00128 81.95692, -123.00114 80.9...</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>application/octet-stream</td>
+      <td>6b7817c3-a120-4c1b-9d00-672249307e85</td>
+      <td>S2B_MSIL2A_20220503T000139_N0510_R016_T07XEL_2...</td>
+      <td>application/octet-stream</td>
+      <td>899169465</td>
+      <td>2024-10-22T03:56:59.076000Z</td>
+      <td>2024-11-30T10:51:11.639296Z</td>
+      <td>2024-11-30T10:51:22.361116Z</td>
+      <td>True</td>
+      <td>9999-12-31T23:59:59.999999Z</td>
+      <td>/eodata/Sentinel-2/MSI/L2A_N0500/2022/05/03/S2...</td>
+      <td>[{'Value': 'a54d86f0a52c6588bcc1fd581a8d2b42',...</td>
+      <td>{'Start': '2022-05-03T00:01:39.024000Z', 'End'...</td>
+      <td>geography'SRID=4326;POLYGON ((-140.96097336164...</td>
+      <td>{'type': 'Polygon', 'coordinates': [[[-140.960...</td>
+      <td>[{'@odata.type': '#OData.CSC.StringAttribute',...</td>
+      <td>test1</td>
+      <td>POLYGON ((-140.96097 80.97292, -134.75703 80.9...</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th>151</th>
+      <td>application/octet-stream</td>
+      <td>cc29e73b-56b3-4a48-bce6-268785ee7d34</td>
+      <td>S2B_MSIL1C_20220503T000139_N0510_R016_T06XWR_2...</td>
+      <td>application/octet-stream</td>
+      <td>201206381</td>
+      <td>2024-10-22T03:56:55.563000Z</td>
+      <td>2024-11-30T10:45:08.042394Z</td>
+      <td>2024-11-30T10:45:13.163135Z</td>
+      <td>True</td>
+      <td>9999-12-31T23:59:59.999999Z</td>
+      <td>/eodata/Sentinel-2/MSI/L1C_N0500/2022/05/03/S2...</td>
+      <td>[{'Value': '8faec36c74e72f561fb34c5dd91d7219',...</td>
+      <td>{'Start': '2022-05-03T00:01:39.024000Z', 'End'...</td>
+      <td>geography'SRID=4326;POLYGON ((-140.77883895807...</td>
+      <td>{'type': 'Polygon', 'coordinates': [[[-140.778...</td>
+      <td>[{'@odata.type': '#OData.CSC.StringAttribute',...</td>
+      <td>test2</td>
+      <td>POLYGON ((-140.77884 80.92048, -140.75703 80.9...</td>
+    </tr>
+    <tr>
+      <th>152</th>
+      <td>application/octet-stream</td>
+      <td>7832c103-0838-49a2-bb80-6c932cab908d</td>
+      <td>S2B_MSIL1C_20220503T000139_N0510_R016_T11XMJ_2...</td>
+      <td>application/octet-stream</td>
+      <td>65098736</td>
+      <td>2024-10-22T03:56:57.926000Z</td>
+      <td>2024-11-30T10:45:07.858114Z</td>
+      <td>2024-11-30T10:45:11.861222Z</td>
+      <td>True</td>
+      <td>9999-12-31T23:59:59.999999Z</td>
+      <td>/eodata/Sentinel-2/MSI/L1C_N0500/2022/05/03/S2...</td>
+      <td>[{'Value': 'beb4e8fd14b8bb124ef0109753c9c85d',...</td>
+      <td>{'Start': '2022-05-03T00:01:39.024000Z', 'End'...</td>
+      <td>geography'SRID=4326;POLYGON ((-116.48997853732...</td>
+      <td>{'type': 'Polygon', 'coordinates': [[[-116.489...</td>
+      <td>[{'@odata.type': '#OData.CSC.StringAttribute',...</td>
+      <td>test2</td>
+      <td>POLYGON ((-116.48998 80.12639, -116.48817 80.1...</td>
+    </tr>
+    <tr>
+      <th>153</th>
+      <td>application/octet-stream</td>
+      <td>ba0acd60-ae9a-4282-8a5f-a313fe8cfdcf</td>
+      <td>S2B_MSIL1C_20220503T000139_N0510_R016_T10XEP_2...</td>
+      <td>application/octet-stream</td>
+      <td>76120489</td>
+      <td>2024-10-22T03:56:57.524000Z</td>
+      <td>2024-11-30T10:45:07.824853Z</td>
+      <td>2024-11-30T10:45:11.755815Z</td>
+      <td>True</td>
+      <td>9999-12-31T23:59:59.999999Z</td>
+      <td>/eodata/Sentinel-2/MSI/L1C_N0500/2022/05/03/S2...</td>
+      <td>[{'Value': 'bf216267943adf61f51b6f858ab6192e',...</td>
+      <td>{'Start': '2022-05-03T00:01:39.024000Z', 'End'...</td>
+      <td>geography'SRID=4326;POLYGON ((-117.28586000606...</td>
+      <td>{'type': 'Polygon', 'coordinates': [[[-117.285...</td>
+      <td>[{'@odata.type': '#OData.CSC.StringAttribute',...</td>
+      <td>test2</td>
+      <td>POLYGON ((-117.28586 80.11698, -123.00105 80.1...</td>
+    </tr>
+    <tr>
+      <th>154</th>
+      <td>application/octet-stream</td>
+      <td>0714ebc9-4b3e-416d-a6c3-bb51ce28e5c4</td>
+      <td>S2B_MSIL1C_20220503T000139_N0510_R016_T06XWS_2...</td>
+      <td>application/octet-stream</td>
+      <td>16311928</td>
+      <td>2024-10-22T03:56:55.646000Z</td>
+      <td>2024-11-30T10:45:07.313818Z</td>
+      <td>2024-11-30T10:45:11.288750Z</td>
+      <td>True</td>
+      <td>9999-12-31T23:59:59.999999Z</td>
+      <td>/eodata/Sentinel-2/MSI/L1C_N0500/2022/05/03/S2...</td>
+      <td>[{'Value': 'c30810846f52a8cefd4512b63348be5f',...</td>
+      <td>{'Start': '2022-05-03T00:01:39.024000Z', 'End'...</td>
+      <td>geography'SRID=4326;POLYGON ((-141.78746379933...</td>
+      <td>{'type': 'Polygon', 'coordinates': [[[-141.787...</td>
+      <td>[{'@odata.type': '#OData.CSC.StringAttribute',...</td>
+      <td>test2</td>
+      <td>POLYGON ((-141.78746 81.82497, -140.08085 81.8...</td>
+    </tr>
+    <tr>
+      <th>155</th>
+      <td>application/octet-stream</td>
+      <td>877b73c7-da3a-4f64-b46b-a8c8d8050fb2</td>
+      <td>S2B_MSIL1C_20220503T000139_N0510_R016_T07XDK_2...</td>
+      <td>application/octet-stream</td>
+      <td>17579643</td>
+      <td>2024-10-22T03:56:55.731000Z</td>
+      <td>2024-11-30T10:45:07.375601Z</td>
+      <td>2024-11-30T10:45:10.435212Z</td>
+      <td>True</td>
+      <td>9999-12-31T23:59:59.999999Z</td>
+      <td>/eodata/Sentinel-2/MSI/L1C_N0500/2022/05/03/S2...</td>
+      <td>[{'Value': '165d1a5730c67da3238fa28c9c7f1076',...</td>
+      <td>{'Start': '2022-05-03T00:01:39.024000Z', 'End'...</td>
+      <td>geography'SRID=4326;POLYGON ((-140.45053600549...</td>
+      <td>{'type': 'Polygon', 'coordinates': [[[-140.450...</td>
+      <td>[{'@odata.type': '#OData.CSC.StringAttribute',...</td>
+      <td>test2</td>
+      <td>POLYGON ((-140.45054 80.82657, -140.43739 81.0...</td>
+    </tr>
+  </tbody>
+</table>
+<p>156 rows × 18 columns</p>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">counts</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+id_original_query
+test1    78
+test2    78
+Name: count, dtype: int64
+</pre></div></div>
+</div>
+<section id="we-can-check-that-product-IDs-are-exatcly-the-same">
+<h2>we can check that product IDs are exatcly the same<a class="headerlink" href="#we-can-check-that-product-IDs-are-exatcly-the-same" title="Link to this heading"></a></h2>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">cpt_common</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="n">cpt_uncommon</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="n">total</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="k">for</span> <span class="n">uu</span> <span class="ow">in</span> <span class="n">result</span><span class="p">[</span><span class="n">result</span><span class="p">[</span><span class="s1">&#39;id_original_query&#39;</span><span class="p">]</span><span class="o">==</span><span class="s1">&#39;test1&#39;</span><span class="p">][</span><span class="s1">&#39;Id&#39;</span><span class="p">]:</span>
+    <span class="n">total</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="n">is_comon</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="k">for</span> <span class="n">vv</span> <span class="ow">in</span> <span class="n">result</span><span class="p">[</span><span class="n">result</span><span class="p">[</span><span class="s1">&#39;id_original_query&#39;</span><span class="p">]</span><span class="o">==</span><span class="s1">&#39;test2&#39;</span><span class="p">][</span><span class="s1">&#39;Id&#39;</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="n">uu</span><span class="o">==</span><span class="n">vv</span><span class="p">:</span>
+            <span class="c1"># print(&#39;bingo&#39;)</span>
+            <span class="n">is_comon</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="k">if</span> <span class="n">is_comon</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="n">cpt_common</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">cpt_uncommon</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="c1"># print(uu)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;cpt_common&#39;</span><span class="p">,</span><span class="n">cpt_common</span><span class="p">,</span><span class="s1">&#39;/&#39;</span><span class="p">,</span><span class="n">total</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;cpt_uncommon&#39;</span><span class="p">,</span><span class="n">cpt_uncommon</span><span class="p">,</span><span class="s1">&#39;/&#39;</span><span class="p">,</span><span class="n">total</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+cpt_common 78 / 78
+cpt_uncommon 0 / 78
+</pre></div></div>
+</div>
+<p>doing the same query with a single ‘id_query’ returns a DataFrame with 78 lines instead of 156</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">gdf_unique_id</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;start_datetime&quot;</span><span class="p">:</span> <span class="p">[</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">datetime64</span><span class="p">(</span><span class="s2">&quot;2022-05-03 00:00:00&quot;</span><span class="p">),</span>
+            <span class="p">],</span>
+            <span class="s2">&quot;end_datetime&quot;</span><span class="p">:</span> <span class="p">[</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">datetime64</span><span class="p">(</span><span class="s2">&quot;2022-05-03 00:02:00&quot;</span><span class="p">),</span>
+            <span class="p">],</span>
+            <span class="s2">&quot;geometry&quot;</span><span class="p">:</span> <span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="s2">&quot;collection&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;SENTINEL-2&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="s2">&quot;sensormode&quot;</span><span class="p">:</span> <span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="s2">&quot;producttype&quot;</span><span class="p">:</span> <span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="s2">&quot;Attributes&quot;</span><span class="p">:</span> <span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+            <span class="s2">&quot;id_query&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;test1&quot;</span><span class="p">],</span>
+        <span class="p">}</span>
+    <span class="p">)</span>
+<span class="n">result_2</span> <span class="o">=</span> <span class="n">qr</span><span class="o">.</span><span class="n">fetch_data</span><span class="p">(</span><span class="n">gdf</span><span class="o">=</span><span class="n">gdf_unique_id</span><span class="p">,</span> <span class="n">top</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
+<span class="n">result_2</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>@odata.mediaContentType</th>
+      <th>Id</th>
+      <th>Name</th>
+      <th>ContentType</th>
+      <th>ContentLength</th>
+      <th>OriginDate</th>
+      <th>PublicationDate</th>
+      <th>ModificationDate</th>
+      <th>Online</th>
+      <th>EvictionDate</th>
+      <th>S3Path</th>
+      <th>Checksum</th>
+      <th>ContentDate</th>
+      <th>Footprint</th>
+      <th>GeoFootprint</th>
+      <th>Attributes</th>
+      <th>id_original_query</th>
+      <th>geometry</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>77</th>
+      <td>application/octet-stream</td>
+      <td>7b561bb5-bb5c-476a-ac51-d361cace788d</td>
+      <td>S2B_MSIL2A_20220503T000139_N0510_R016_T11XML_2...</td>
+      <td>application/octet-stream</td>
+      <td>905950656</td>
+      <td>2024-10-22T03:57:01.163000Z</td>
+      <td>2024-11-30T10:52:42.448541Z</td>
+      <td>2024-11-30T10:52:58.857924Z</td>
+      <td>True</td>
+      <td>9999-12-31T23:59:59.999999Z</td>
+      <td>/eodata/Sentinel-2/MSI/L2A_N0500/2022/05/03/S2...</td>
+      <td>[{'Value': '8dc89dabd44eb3869de612042a6a427d',...</td>
+      <td>{'Start': '2022-05-03T00:01:39.024000Z', 'End'...</td>
+      <td>geography'SRID=4326;POLYGON ((-123.37811606469...</td>
+      <td>{'type': 'Polygon', 'coordinates': [[[-123.378...</td>
+      <td>[{'@odata.type': '#OData.CSC.StringAttribute',...</td>
+      <td>test1</td>
+      <td>POLYGON ((-123.37812 81.90748, -122.69284 80.9...</td>
+    </tr>
+    <tr>
+      <th>24</th>
+      <td>application/octet-stream</td>
+      <td>f05036fd-66ee-42bb-a12f-92b319f4c7fb</td>
+      <td>S2B_MSIL2A_20220503T000139_N0510_R016_T08XNR_2...</td>
+      <td>application/octet-stream</td>
+      <td>906648145</td>
+      <td>2024-10-22T03:56:59.617000Z</td>
+      <td>2024-11-30T10:52:13.209895Z</td>
+      <td>2024-11-30T10:52:24.656867Z</td>
+      <td>True</td>
+      <td>9999-12-31T23:59:59.999999Z</td>
+      <td>/eodata/Sentinel-2/MSI/L2A_N0500/2022/05/03/S2...</td>
+      <td>[{'Value': '8e855e16387253f7aca2fcf38b0d85fb',...</td>
+      <td>{'Start': '2022-05-03T00:01:39.024000Z', 'End'...</td>
+      <td>geography'SRID=4326;POLYGON ((-135.00128035426...</td>
+      <td>{'type': 'Polygon', 'coordinates': [[[-135.001...</td>
+      <td>[{'@odata.type': '#OData.CSC.StringAttribute',...</td>
+      <td>test1</td>
+      <td>POLYGON ((-135.00128 81.95692, -135.00114 80.9...</td>
+    </tr>
+    <tr>
+      <th>76</th>
+      <td>application/octet-stream</td>
+      <td>b2f271b3-0217-4dcd-93b3-29ceb81b78f1</td>
+      <td>S2B_MSIL1C_20220503T000139_N0510_R016_T07XEL_2...</td>
+      <td>application/octet-stream</td>
+      <td>739061869</td>
+      <td>2024-10-22T03:56:56.046000Z</td>
+      <td>2024-11-30T10:51:43.843079Z</td>
+      <td>2024-11-30T10:51:54.844138Z</td>
+      <td>True</td>
+      <td>9999-12-31T23:59:59.999999Z</td>
+      <td>/eodata/Sentinel-2/MSI/L1C_N0500/2022/05/03/S2...</td>
+      <td>[{'Value': 'f514d8376518117f2e345263982d4ec1',...</td>
+      <td>{'Start': '2022-05-03T00:01:39.024000Z', 'End'...</td>
+      <td>geography'SRID=4326;POLYGON ((-140.96097336164...</td>
+      <td>{'type': 'Polygon', 'coordinates': [[[-140.960...</td>
+      <td>[{'@odata.type': '#OData.CSC.StringAttribute',...</td>
+      <td>test1</td>
+      <td>POLYGON ((-140.96097 80.97292, -134.75703 80.9...</td>
+    </tr>
+    <tr>
+      <th>75</th>
+      <td>application/octet-stream</td>
+      <td>9501c4d2-4315-4033-8fc0-6ffdb6ed0a8a</td>
+      <td>S2B_MSIL2A_20220503T000139_N0510_R016_T10XER_2...</td>
+      <td>application/octet-stream</td>
+      <td>906168896</td>
+      <td>2024-10-22T03:57:00.756000Z</td>
+      <td>2024-11-30T10:51:41.950143Z</td>
+      <td>2024-11-30T10:51:53.955437Z</td>
+      <td>True</td>
+      <td>9999-12-31T23:59:59.999999Z</td>
+      <td>/eodata/Sentinel-2/MSI/L2A_N0500/2022/05/03/S2...</td>
+      <td>[{'Value': '6ee6c35e7a4fb8ad3913279ad053d32a',...</td>
+      <td>{'Start': '2022-05-03T00:01:39.024000Z', 'End'...</td>
+      <td>geography'SRID=4326;POLYGON ((-123.00128035426...</td>
+      <td>{'type': 'Polygon', 'coordinates': [[[-123.001...</td>
+      <td>[{'@odata.type': '#OData.CSC.StringAttribute',...</td>
+      <td>test1</td>
+      <td>POLYGON ((-123.00128 81.95692, -123.00114 80.9...</td>
+    </tr>
+    <tr>
+      <th>0</th>
+      <td>application/octet-stream</td>
+      <td>6b7817c3-a120-4c1b-9d00-672249307e85</td>
+      <td>S2B_MSIL2A_20220503T000139_N0510_R016_T07XEL_2...</td>
+      <td>application/octet-stream</td>
+      <td>899169465</td>
+      <td>2024-10-22T03:56:59.076000Z</td>
+      <td>2024-11-30T10:51:11.639296Z</td>
+      <td>2024-11-30T10:51:22.361116Z</td>
+      <td>True</td>
+      <td>9999-12-31T23:59:59.999999Z</td>
+      <td>/eodata/Sentinel-2/MSI/L2A_N0500/2022/05/03/S2...</td>
+      <td>[{'Value': 'a54d86f0a52c6588bcc1fd581a8d2b42',...</td>
+      <td>{'Start': '2022-05-03T00:01:39.024000Z', 'End'...</td>
+      <td>geography'SRID=4326;POLYGON ((-140.96097336164...</td>
+      <td>{'type': 'Polygon', 'coordinates': [[[-140.960...</td>
+      <td>[{'@odata.type': '#OData.CSC.StringAttribute',...</td>
+      <td>test1</td>
+      <td>POLYGON ((-140.96097 80.97292, -134.75703 80.9...</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+<p>When there is multiple “id_query”, the input GeoDataFrame is split/group-by into smaller GeoDataFrame with identical “id_query”.</p>
+<p>Setting carefully the “id_query” column in the input GeoDataFrame is important because it impacts the number of queries and the output returned.</p>
+<p>In most of the case the ‘id_query’ column can be filled with a unique value, but for some cases, for instance when co-locating a set of moored buoys with Sentinel products, the user needs the exhaustive list of Sentinel products per location and he also needs to be able to separate the results per location (i.e. buoys).</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="basic_usage.html" class="btn btn-neutral float-left" title="define a GeoDataFrame" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../basic_api.html" class="btn btn-neutral float-right" title="methods descriptions" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Ifremer LOPS/SIAM.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

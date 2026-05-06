@@ -1,0 +1,391 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>define a GeoDataFrame &mdash; cdsodatacli  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/cdsodatacli.css?v=ff59c8f8" />
+      <link rel="stylesheet" type="text/css" href="../_static/jupyter-sphinx.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/thebelab.css" />
+      <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/thebelab-helper.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/npm/@jupyter-widgets/html-manager@^1.0.1/dist/embed-amd.js"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+      <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="How to use ‘id_query’ ?" href="id_query_usage.html" />
+    <link rel="prev" title="Do a query through CDSE Odata API" href="../usage.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            cdsodatacli
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../installing.html">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../installing.html#conda-install">conda install</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installing.html#docker-image-building">docker image building</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installing.html#update-cdsodatacli-to-the-latest-version">Update cdsodatacli to the latest version</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Usage</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../usage.html">Do a query through CDSE Odata API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#download-a-listing-of-product">Download a listing of product</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../usage.html#single-threaded-download-with-a-given-user-login">1. Single-threaded download with a given user/login</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../usage.html#multi-threaded-download-with-multiple-users-accounts">2. Multi-threaded download with multiple users/accounts</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#get-cdse-odata-ids-for-a-list-of-products">Get CDSE Odata IDs for a list of products</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../usage.html#get-equivalent-s1-product-types">Get equivalent S1 product types</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">define a GeoDataFrame</a></li>
+<li class="toctree-l1"><a class="reference internal" href="id_query_usage.html">How to use ‘id_query’ ?</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="id_query_usage.html#we-can-check-that-product-IDs-are-exatcly-the-same">we can check that product IDs are exatcly the same</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../basic_api.html">methods descriptions</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.query.fetch_data"><code class="docutils literal notranslate"><span class="pre">fetch_data()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.download.download_list_product"><code class="docutils literal notranslate"><span class="pre">download_list_product()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.download.download_list_product_sequential"><code class="docutils literal notranslate"><span class="pre">download_list_product_sequential()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.download.download_list_product_multithread_v4"><code class="docutils literal notranslate"><span class="pre">download_list_product_multithread_v4()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.utils.get_conf"><code class="docutils literal notranslate"><span class="pre">get_conf()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.utils.check_safe_in_outputdir"><code class="docutils literal notranslate"><span class="pre">check_safe_in_outputdir()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.utils.check_safe_in_spool"><code class="docutils literal notranslate"><span class="pre">check_safe_in_spool()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.utils.WhichArchiveDir"><code class="docutils literal notranslate"><span class="pre">WhichArchiveDir()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.utils.check_safe_in_archive"><code class="docutils literal notranslate"><span class="pre">check_safe_in_archive()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.utils.convert_json_opensearch_query_to_listing_safe_4_dowload"><code class="docutils literal notranslate"><span class="pre">convert_json_opensearch_query_to_listing_safe_4_dowload()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.utils.convert_json_odata_query_to_listing_safe_4_download"><code class="docutils literal notranslate"><span class="pre">convert_json_odata_query_to_listing_safe_4_download()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../basic_api.html#cdsodatacli.s3_temporary_access_token._get_fresh_s3_client"><code class="docutils literal notranslate"><span class="pre">_get_fresh_s3_client()</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">cdsodatacli</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">define a GeoDataFrame</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">started 6 nov 2023</span>
+<span class="sd">A Grouazel, based on JR Miadana dev</span>
+<span class="sd">&quot;&quot;&quot;</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+&#39;\nstarted 6 nov 2023\nA Grouazel, based on JR Miadana dev\n&#39;
+</pre></div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">datetime</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">shapely</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">geopandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gpd</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">cdsodatacli</span>
+</pre></div>
+</div>
+</div>
+<section id="define-a-GeoDataFrame">
+<h1>define a GeoDataFrame<a class="headerlink" href="#define-a-GeoDataFrame" title="Link to this heading"></a></h1>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">({</span>
+        <span class="s2">&quot;start_datetime&quot;</span> <span class="p">:</span> <span class="p">[</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="p">(</span><span class="mi">2022</span><span class="p">,</span><span class="mi">10</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">0</span><span class="p">)</span> <span class="p">,</span>  <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="p">(</span><span class="mi">2022</span><span class="p">,</span><span class="mi">10</span><span class="p">,</span><span class="mi">13</span><span class="p">,</span><span class="mi">0</span><span class="p">)</span> <span class="p">],</span>
+        <span class="s2">&quot;end_datetime&quot;</span>   <span class="p">:</span> <span class="p">[</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="p">(</span><span class="mi">2022</span><span class="p">,</span><span class="mi">10</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">21</span><span class="p">),</span>  <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="p">(</span><span class="mi">2022</span><span class="p">,</span><span class="mi">10</span><span class="p">,</span><span class="mi">13</span><span class="p">,</span><span class="mi">18</span><span class="p">)</span> <span class="p">],</span>
+        <span class="s2">&quot;geometry&quot;</span>   <span class="p">:</span> <span class="p">[</span> <span class="n">shapely</span><span class="o">.</span><span class="n">wkt</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="s2">&quot;POINT (-7.5 53)&quot;</span><span class="p">),</span>  <span class="n">shapely</span><span class="o">.</span><span class="n">wkt</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="s2">&quot;POLYGON ((-12 35, -5 35, -5 45, -12 45, -12 35))&quot;</span><span class="p">)],</span>
+        <span class="s2">&quot;collection&quot;</span>  <span class="p">:</span> <span class="p">[</span> <span class="s2">&quot;SENTINEL-1&quot;</span><span class="p">,</span> <span class="s2">&quot;SENTINEL-2&quot;</span><span class="p">],</span>
+        <span class="s2">&quot;name&quot;</span>        <span class="p">:</span> <span class="p">[</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span>
+        <span class="s2">&quot;sensormode&quot;</span>  <span class="p">:</span> <span class="p">[</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span>
+        <span class="s2">&quot;producttype&quot;</span> <span class="p">:</span> <span class="p">[</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span>
+        <span class="s2">&quot;Attributes&quot;</span>  <span class="p">:</span> <span class="p">[</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span>
+        <span class="s2">&quot;id_query&quot;</span>    <span class="p">:</span> <span class="p">[</span><span class="s1">&#39;S1example&#39;</span><span class="p">,</span><span class="s1">&#39;S2polygon&#39;</span><span class="p">],</span>
+    <span class="p">})</span>
+
+<span class="n">collected_data_norm</span> <span class="o">=</span> <span class="n">cdsodatacli</span><span class="o">.</span><span class="n">query</span><span class="o">.</span><span class="n">fetch_data</span><span class="p">(</span><span class="n">gdf</span><span class="p">,</span> <span class="n">min_sea_percent</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+Downloading file &#39;ne_110m_land.zip&#39; from &#39;https://naciscdn.org/naturalearth/110m/physical/ne_110m_land.zip&#39; to &#39;/home/runner/.cache/geodatasets&#39;.
+/home/runner/work/cdsodatacli/cdsodatacli/cdsodatacli/query.py:914: UserWarning: Geometry is in a geographic CRS. Results from &#39;area&#39; are likely incorrect. Use &#39;GeoSeries.to_crs()&#39; to re-project geometries to a projected CRS before this operation.
+
+  collected_data.geometry.area
+/home/runner/work/cdsodatacli/cdsodatacli/cdsodatacli/query.py:915: UserWarning: Geometry is in a geographic CRS. Results from &#39;area&#39; are likely incorrect. Use &#39;GeoSeries.to_crs()&#39; to re-project geometries to a projected CRS before this operation.
+
+  - collected_data.geometry.intersection(earth.unary_union).area
+/home/runner/work/cdsodatacli/cdsodatacli/cdsodatacli/query.py:917: UserWarning: Geometry is in a geographic CRS. Results from &#39;area&#39; are likely incorrect. Use &#39;GeoSeries.to_crs()&#39; to re-project geometries to a projected CRS before this operation.
+
+  / collected_data.geometry.area
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">collected_data_norm</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>@odata.mediaContentType</th>
+      <th>Id</th>
+      <th>Name</th>
+      <th>ContentType</th>
+      <th>ContentLength</th>
+      <th>OriginDate</th>
+      <th>PublicationDate</th>
+      <th>ModificationDate</th>
+      <th>Online</th>
+      <th>EvictionDate</th>
+      <th>S3Path</th>
+      <th>Checksum</th>
+      <th>ContentDate</th>
+      <th>Footprint</th>
+      <th>GeoFootprint</th>
+      <th>Attributes</th>
+      <th>id_original_query</th>
+      <th>geometry</th>
+      <th>sea_percent</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>91</th>
+      <td>application/octet-stream</td>
+      <td>036c7c34-dcd5-4e50-b1c1-c48a229dbc37</td>
+      <td>S2A_MSIL2A_20221013T111011_N0510_R137_T29SQU_2...</td>
+      <td>application/octet-stream</td>
+      <td>1073335509</td>
+      <td>2025-03-21T20:48:29.526000Z</td>
+      <td>2025-04-05T21:12:29.865181Z</td>
+      <td>2025-04-05T21:12:29.865181Z</td>
+      <td>True</td>
+      <td>9999-12-31T23:59:59.999999Z</td>
+      <td>/eodata/Sentinel-2/MSI/L2A_N0500/2022/10/13/S2...</td>
+      <td>[{'Value': 'e00637d4e1bf8b1b0ece0c3c80142e19',...</td>
+      <td>{'Start': '2022-10-13T11:10:11.024000Z', 'End'...</td>
+      <td>geography'SRID=4326;POLYGON ((-6.8028975671597...</td>
+      <td>{'type': 'Polygon', 'coordinates': [[[-6.80289...</td>
+      <td>[{'@odata.type': '#OData.CSC.StringAttribute',...</td>
+      <td>S2polygon</td>
+      <td>POLYGON ((-6.8029 35.22313, -6.82894 34.2337, ...</td>
+      <td>24.846154</td>
+    </tr>
+    <tr>
+      <th>89</th>
+      <td>application/octet-stream</td>
+      <td>f5e9137d-2bc6-4c1b-b6d5-1a0e50444cc1</td>
+      <td>S2A_MSIL2A_20221013T111011_N0510_R137_T30TUP_2...</td>
+      <td>application/octet-stream</td>
+      <td>853795556</td>
+      <td>2025-03-21T20:48:30.542000Z</td>
+      <td>2025-04-05T21:12:20.047719Z</td>
+      <td>2025-04-05T21:12:20.047719Z</td>
+      <td>True</td>
+      <td>9999-12-31T23:59:59.999999Z</td>
+      <td>/eodata/Sentinel-2/MSI/L2A_N0500/2022/10/13/S2...</td>
+      <td>[{'Value': '5c470b724593095c62dfb8b37a0abd08',...</td>
+      <td>{'Start': '2022-10-13T11:10:11.024000Z', 'End'...</td>
+      <td>geography'SRID=4326;POLYGON ((-5.5040714070962...</td>
+      <td>{'type': 'Polygon', 'coordinates': [[[-5.50407...</td>
+      <td>[{'@odata.type': '#OData.CSC.StringAttribute',...</td>
+      <td>S2polygon</td>
+      <td>POLYGON ((-5.50407 44.22596, -5.46323 43.23826...</td>
+      <td>76.801415</td>
+    </tr>
+    <tr>
+      <th>45</th>
+      <td>application/octet-stream</td>
+      <td>ce9592ff-6e87-46d7-82d9-ae4ac8a53b7f</td>
+      <td>S2A_MSIL2A_20221013T111011_N0510_R137_T30TUQ_2...</td>
+      <td>application/octet-stream</td>
+      <td>805327544</td>
+      <td>2025-03-21T20:48:30.573000Z</td>
+      <td>2025-04-05T21:11:22.035914Z</td>
+      <td>2025-04-05T21:11:22.035914Z</td>
+      <td>True</td>
+      <td>9999-12-31T23:59:59.999999Z</td>
+      <td>/eodata/Sentinel-2/MSI/L2A_N0500/2022/10/13/S2...</td>
+      <td>[{'Value': '7d2ac3cd44f2a6adb1665e9fe609883c',...</td>
+      <td>{'Start': '2022-10-13T11:10:11.024000Z', 'End'...</td>
+      <td>geography'SRID=4326;POLYGON ((-5.5312609072621...</td>
+      <td>{'type': 'Polygon', 'coordinates': [[[-5.53126...</td>
+      <td>[{'@odata.type': '#OData.CSC.StringAttribute',...</td>
+      <td>S2polygon</td>
+      <td>POLYGON ((-5.53126 44.85138, -5.50035 44.138, ...</td>
+      <td>100.000000</td>
+    </tr>
+    <tr>
+      <th>43</th>
+      <td>application/octet-stream</td>
+      <td>51c6817b-bd79-4f51-8e52-494ed4133414</td>
+      <td>S2A_MSIL2A_20221013T111011_N0510_R137_T29TQK_2...</td>
+      <td>application/octet-stream</td>
+      <td>327227168</td>
+      <td>2025-03-21T20:48:29.821000Z</td>
+      <td>2025-04-05T21:09:19.827827Z</td>
+      <td>2025-04-05T21:09:19.827827Z</td>
+      <td>True</td>
+      <td>9999-12-31T23:59:59.999999Z</td>
+      <td>/eodata/Sentinel-2/MSI/L2A_N0500/2022/10/13/S2...</td>
+      <td>[{'Value': '0366fec8a1410e70f362d7e8603fd712',...</td>
+      <td>{'Start': '2022-10-13T11:10:11.024000Z', 'End'...</td>
+      <td>geography'SRID=4326;POLYGON ((-5.7777125094904...</td>
+      <td>{'type': 'Polygon', 'coordinates': [[[-5.77771...</td>
+      <td>[{'@odata.type': '#OData.CSC.StringAttribute',...</td>
+      <td>S2polygon</td>
+      <td>POLYGON ((-5.77771 44.11785, -5.13001 44.09977...</td>
+      <td>100.000000</td>
+    </tr>
+    <tr>
+      <th>47</th>
+      <td>application/octet-stream</td>
+      <td>aabb05a6-f728-4ee8-baad-9865d7faa020</td>
+      <td>S2A_MSIL2A_20221013T111011_N0510_R137_T29SQA_2...</td>
+      <td>application/octet-stream</td>
+      <td>1044396139</td>
+      <td>2025-03-21T20:48:29.314000Z</td>
+      <td>2025-04-05T21:09:19.354210Z</td>
+      <td>2025-04-05T21:09:19.354210Z</td>
+      <td>True</td>
+      <td>9999-12-31T23:59:59.999999Z</td>
+      <td>/eodata/Sentinel-2/MSI/L2A_N0500/2022/10/13/S2...</td>
+      <td>[{'Value': 'dc68bc5266be6608f87c2ce2b0d44849',...</td>
+      <td>{'Start': '2022-10-13T11:10:11.024000Z', 'End'...</td>
+      <td>geography'SRID=4326;POLYGON ((-6.7520694569753...</td>
+      <td>{'type': 'Polygon', 'coordinates': [[[-6.75206...</td>
+      <td>[{'@odata.type': '#OData.CSC.StringAttribute',...</td>
+      <td>S2polygon</td>
+      <td>POLYGON ((-6.75207 37.02528, -6.78053 36.03618...</td>
+      <td>39.204398</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../usage.html" class="btn btn-neutral float-left" title="Do a query through CDSE Odata API" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="id_query_usage.html" class="btn btn-neutral float-right" title="How to use ‘id_query’ ?" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Ifremer LOPS/SIAM.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

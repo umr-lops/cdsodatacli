@@ -1,0 +1,165 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Search &mdash; cdsodatacli  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/cdsodatacli.css?v=ff59c8f8" />
+      <link rel="stylesheet" type="text/css" href="_static/jupyter-sphinx.css" />
+      <link rel="stylesheet" type="text/css" href="_static/thebelab.css" />
+
+  
+    
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="_static/thebelab-helper.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/npm/@jupyter-widgets/html-manager@^1.0.1/dist/embed-amd.js"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <script src="_static/searchtools.js"></script>
+    <script src="_static/language_data.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="#" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            cdsodatacli
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="#" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installing.html">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="installing.html#conda-install">conda install</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installing.html#docker-image-building">docker image building</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installing.html#update-cdsodatacli-to-the-latest-version">Update cdsodatacli to the latest version</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Usage</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Do a query through CDSE Odata API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#download-a-listing-of-product">Download a listing of product</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="usage.html#single-threaded-download-with-a-given-user-login">1. Single-threaded download with a given user/login</a></li>
+<li class="toctree-l2"><a class="reference internal" href="usage.html#multi-threaded-download-with-multiple-users-accounts">2. Multi-threaded download with multiple users/accounts</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#get-cdse-odata-ids-for-a-list-of-products">Get CDSE Odata IDs for a list of products</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html#get-equivalent-s1-product-types">Get equivalent S1 product types</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/basic_usage.html">define a GeoDataFrame</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples/id_query_usage.html">How to use ‘id_query’ ?</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="examples/id_query_usage.html#we-can-check-that-product-IDs-are-exatcly-the-same">we can check that product IDs are exatcly the same</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="basic_api.html">methods descriptions</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="basic_api.html#cdsodatacli.query.fetch_data"><code class="docutils literal notranslate"><span class="pre">fetch_data()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_api.html#cdsodatacli.download.download_list_product"><code class="docutils literal notranslate"><span class="pre">download_list_product()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_api.html#cdsodatacli.download.download_list_product_sequential"><code class="docutils literal notranslate"><span class="pre">download_list_product_sequential()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_api.html#cdsodatacli.download.download_list_product_multithread_v4"><code class="docutils literal notranslate"><span class="pre">download_list_product_multithread_v4()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_api.html#cdsodatacli.utils.get_conf"><code class="docutils literal notranslate"><span class="pre">get_conf()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_api.html#cdsodatacli.utils.check_safe_in_outputdir"><code class="docutils literal notranslate"><span class="pre">check_safe_in_outputdir()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_api.html#cdsodatacli.utils.check_safe_in_spool"><code class="docutils literal notranslate"><span class="pre">check_safe_in_spool()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_api.html#cdsodatacli.utils.WhichArchiveDir"><code class="docutils literal notranslate"><span class="pre">WhichArchiveDir()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_api.html#cdsodatacli.utils.check_safe_in_archive"><code class="docutils literal notranslate"><span class="pre">check_safe_in_archive()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_api.html#cdsodatacli.utils.convert_json_opensearch_query_to_listing_safe_4_dowload"><code class="docutils literal notranslate"><span class="pre">convert_json_opensearch_query_to_listing_safe_4_dowload()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_api.html#cdsodatacli.utils.convert_json_odata_query_to_listing_safe_4_download"><code class="docutils literal notranslate"><span class="pre">convert_json_odata_query_to_listing_safe_4_download()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="basic_api.html#cdsodatacli.s3_temporary_access_token._get_fresh_s3_client"><code class="docutils literal notranslate"><span class="pre">_get_fresh_s3_client()</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">cdsodatacli</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Search</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <noscript>
+  <div id="fallback" class="admonition warning">
+    <p class="last">
+      Please activate JavaScript to enable the search functionality.
+    </p>
+  </div>
+  </noscript>
+
+  
+  <div id="search-results">
+  
+  </div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Ifremer LOPS/SIAM.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+  <script>
+    jQuery(function() { Search.loadIndex("searchindex.js"); });
+  </script>
+  
+  <script id="searchindexloader"></script>
+   
+
+
+</body>
+</html>
