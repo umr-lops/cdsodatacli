@@ -7,3 +7,4 @@ dependencies:
   - ipython
   - sphinx-rtd-theme
   - nbsphinx
+  - jupyter_sphinx
