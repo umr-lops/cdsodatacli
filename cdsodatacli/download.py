@@ -281,20 +281,20 @@ def cds_s3_download_one_product(
         logger.error("S3 error while downloading %s: %s", output_filepath, e)
         status_meaning = "S3Error"
         elapsed_time = time.time() - t0
+        logger.debug('%s',traceback.format_exc())
         if os.path.exists(output_filepath_tmp):
             os.remove(output_filepath_tmp)
-    if s3_credentials is not None:
-        # Delete the temporary S3 credentials
-        delete_response = requests.delete(
-            f"https://s3-keys-manager.cloudferro.com/api/user/credentials/access_id/{s3_credentials['access_id']}",
-            headers=header,
-        )
-        if delete_response.status_code == 204:
-            logger.debug("Temporary S3 credentials deleted successfully.")
-        else:
-            logger.error(
-                f"Failed to delete temporary S3 credentials. Status code: {delete_response.status_code}"
-            )
+    finally:
+        if s3_credentials and "access_id" in s3_credentials:
+            try:
+                requests.delete(
+                    f"https://s3-keys-manager.cloudferro.com/api/user/credentials/access_id/{s3_credentials['access_id']}",
+                    headers=header,
+                    timeout=10
+                )
+                logger.debug("Deleted temp S3 creds: %s...", s3_credentials['access_id'][:8])
+            except Exception as e:
+                logger.warning("Failed to delete temp S3 credentials: %s", e)
 
     logger.debug("time to download this product: %1.1f sec", elapsed_time)
     logger.debug("average download speed: %1.1f Mo/sec", speed)
