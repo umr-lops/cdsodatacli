@@ -19,7 +19,7 @@
 import cdsodatacli
 
 project = "cdsodatacli"
-copyright = "2023, Ifremer LOPS/SIAM"
+copyright = "2026, Ifremer LOPS/SIAM"
 author = "Jean Renaud Miadana, Antoine Grouazel"
 version = cdsodatacli.__version__
 # root_doc='ATBD' # defaut 'index'
