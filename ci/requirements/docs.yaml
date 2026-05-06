@@ -6,3 +6,4 @@ dependencies:
   - sphinx>=4
   - ipython
   - sphinx-rtd-theme
+  - nbsphinx
