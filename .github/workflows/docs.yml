@@ -12,20 +12,18 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up conda
+        uses: conda-incubator/setup-miniconda@v3
         with:
+          environment-file: docs.yaml # or cdsodatacli-docs.yml
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .[docs]  # Adjust based on your setup.py/pyproject.toml
-          pip install sphinx
+      - name: Install package
+        run: pip install -e .[docs]
 
       - name: Build Sphinx docs
         run: |
-          cd docs  # Adjust path to your docs directory
+          cd docs
           sphinx-build -b html . _build/html
 
       - name: Deploy to GitHub Pages
