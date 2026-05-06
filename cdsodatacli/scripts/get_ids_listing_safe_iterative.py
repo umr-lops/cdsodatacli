@@ -2,6 +2,7 @@ import numpy as np
 import logging
 
 import cdsodatacli.download as dl
+from cdsodatacli.utils import get_conf
 import pandas as pd
 import tempfile
 
@@ -18,11 +19,13 @@ def entrypoint():
         logging.info(
             "No email/password provided, using cdsodatacli default behavior for authentication."
         )
+    conf = get_conf(args.cdsodatacli_conf_file)
     add_ids_to_listing_iterative(
         input_listing=args.input_listing,
         output_listing=args.output_listing,
         email=args.email,
         password=args.password,
+        conf=conf,
     )
 
 
@@ -100,7 +103,7 @@ def entrypoint():
 
 
 def add_ids_to_listing_iterative(
-    input_listing, output_listing=None, email=None, password=None
+    input_listing, output_listing=None, email=None, password=None, conf=None
 ):
     """
     This method aim as a wrapper for add_missing_cdse_hash_ids_in_listing(),
@@ -112,6 +115,7 @@ def add_ids_to_listing_iterative(
     :param output_listing: str where to store SAFE+ID [optional, default is input_listing+'.ids']
     :param email: str email of the CDSE account to use for queries [optional, default None -> use cdsodatacli default behavior]
     :param password: str password of the CDSE account to use for queries [optional, default None -> use cdsodatacli default behavior]
+    :param conf: dict configuration of the lib cdsodatacli [optional, default None -> use cdsodatacli default behavior]
 
     Return:
         output_listing: str: listing containing lines SAFE+ID
@@ -151,7 +155,11 @@ def add_ids_to_listing_iterative(
 
         # Appel à l'API via cdsodatacli
         dfres = dl.add_missing_cdse_hash_ids_in_listing(
-            listing_path=tmplisting, display_tqdm=True, email=email, password=password
+            listing_path=tmplisting,
+            display_tqdm=True,
+            email=email,
+            password=password,
+            conf=conf,
         )
 
         # --- CORRECTION ICI ---
@@ -265,6 +273,12 @@ def parse_args():
         required=False,
         default=None,
         help="password of the CDSE account to use for queries [optional, default None -> use cdsodatacli default behavior]",
+    )
+    parser.add_argument(
+        "--cdsodatacli_conf_file",
+        required=True,
+        default=None,
+        help="path to the cdsodatacli configuration file .yml",
     )
 
     args = parser.parse_args()

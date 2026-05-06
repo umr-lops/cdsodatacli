@@ -7,3 +7,4 @@ tqdm
 pyyaml
 cartopy
 python-dotenv
+boto3

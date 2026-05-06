@@ -4,5 +4,7 @@ channels:
 dependencies:
   - python=3.11
   - sphinx>=4
-  - sphinx_book_theme
   - ipython
+  - sphinx-rtd-theme
+  - nbsphinx
+  - jupyter_sphinx
