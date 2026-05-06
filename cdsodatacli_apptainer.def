@@ -1,0 +1,108 @@
+# =============================================================================
+# Apptainer definition for cdsodatacli
+#
+# Build (production, default):
+#   apptainer build cdsodatacli.sif apptainer.def
+#
+# Build (development, editable install):
+#   apptainer build --build-arg BUILD_STAGE=development cdsodatacli.sif apptainer.def
+#
+# Run:
+#   apptainer run cdsodatacli.sif
+#   apptainer exec cdsodatacli.sif python -m cdsodatacli ...
+# =============================================================================
+
+Bootstrap: docker
+From: python:3.12-slim
+
+%arguments
+    # Accepted values: "production" | "development"
+    BUILD_STAGE=production
+
+%labels
+    Maintainer      cdsodatacli
+    Python          3.12
+    BuildStage      {{ BUILD_STAGE }}
+
+%environment
+    export PYTHONUNBUFFERED=1
+    export PATH="/opt/cdsodatacli/bin:$PATH"
+    export PYTHONPATH="/opt/cdsodatacli/lib/python3.12/site-packages:$PYTHONPATH"
+
+%files
+    # Copy project files into the image at build time.
+    # Apptainer resolves paths relative to the directory where the .def file lives.
+    requirements.txt    /opt/build/requirements.txt
+    .                   /opt/build/src
+
+%post
+    set -e
+
+    # -------------------------------------------------------------------------
+    # 1. System dependencies
+    # -------------------------------------------------------------------------
+    apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        git \
+        curl \
+        wget \
+    && rm -rf /var/lib/apt/lists/*
+
+    # -------------------------------------------------------------------------
+    # 2. Dedicated install prefix (world-readable, no /app permission issues)
+    #    Apptainer containers run as the calling user, so we install into
+    #    /opt/cdsodatacli which is owned by root at build time and remains
+    #    readable by any user at runtime.
+    # -------------------------------------------------------------------------
+    INSTALL_PREFIX=/opt/cdsodatacli
+    mkdir -p "${INSTALL_PREFIX}"
+
+    # -------------------------------------------------------------------------
+    # 3. Upgrade pip toolchain
+    # -------------------------------------------------------------------------
+    python -m pip install --upgrade pip setuptools wheel
+
+    # -------------------------------------------------------------------------
+    # 4. Install Python dependencies from requirements.txt
+    # -------------------------------------------------------------------------
+    python -m pip install --no-cache-dir \
+        --prefix="${INSTALL_PREFIX}" \
+        -r /opt/build/requirements.txt
+
+    # -------------------------------------------------------------------------
+    # 5. Install the package itself (editable vs. regular depending on stage)
+    # -------------------------------------------------------------------------
+    cd /opt/build/src
+
+    if [ "{{ BUILD_STAGE }}" = "development" ]; then
+        echo ">>> Installing in DEVELOPMENT (editable) mode"
+        # Editable installs write a .pth file; we keep the source in /opt/build/src
+        # and make it world-readable so any user can import it.
+        python -m pip install --no-cache-dir \
+            --prefix="${INSTALL_PREFIX}" \
+            -e .
+        chmod -R a+rX /opt/build/src
+    else
+        echo ">>> Installing in PRODUCTION mode"
+        python -m pip install --no-cache-dir \
+            --prefix="${INSTALL_PREFIX}" \
+            .
+        # Source is no longer needed — remove it to reduce image size
+        # and avoid leaking code (mirrors the Dockerfile `rm -rf /app`).
+        rm -rf /opt/build
+    fi
+
+    # -------------------------------------------------------------------------
+    # 6. Fix permissions on the install prefix so any UID can use it
+    #    (important: Apptainer often runs as the host user, not root)
+    # -------------------------------------------------------------------------
+    chmod -R a+rX "${INSTALL_PREFIX}"
+
+%runscript
+    # Default entry point: delegate to whatever is passed on the command line.
+    exec python "$@"
+
+%test
+    # Minimal smoke-test executed by `apptainer test cdsodatacli.sif`
+    python --version
+    python -c "import cdsodatacli; print('cdsodatacli imported successfully')"
