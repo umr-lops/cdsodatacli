@@ -233,14 +233,14 @@ def cds_s3_download_one_product(
 
         total_bytes = sum(obj.size for obj in objects)
         total_mb = total_bytes / 1e6
-        logging.debug("Total size to download: %.1f Mo", total_mb)
+        logger.debug("Total size to download: %.1f Mo", total_mb)
 
         # For a zipped single-file product, download into tmp then move
         # For a .SAFE folder (multi-file), download each file in place
         if len(objects) == 1:
             obj = objects[0]
-            logging.info("object key: %s, size: %.1f Mo", obj.key, obj.size / 1e6)
-            logging.debug(
+            logger.info("object key: %s, size: %.1f Mo", obj.key, obj.size / 1e6)
+            logger.debug(
                 "Downloading single object %s -> %s", obj.key, output_filepath_tmp
             )
             bucket.download_file(obj.key, output_filepath_tmp)
@@ -254,7 +254,7 @@ def cds_s3_download_one_product(
                 os.chmod(output_filepath, mode=0o0775)
                 status_meaning = "Downloaded"
             except Exception as e:
-                logging.error("Failed to move %s: %s", output_filepath_tmp, e)
+                logger.error("Failed to move %s: %s", output_filepath_tmp, e)
                 if os.path.exists(output_filepath_tmp):
                     os.remove(output_filepath_tmp)
                 status_meaning = "MoveError"
@@ -266,7 +266,7 @@ def cds_s3_download_one_product(
                 local_file = os.path.join(output_filepath, relative_key)
                 os.makedirs(os.path.dirname(local_file), exist_ok=True)
                 if not obj.key.endswith("/"):  # skip folder pseudo-objects
-                    logging.debug("Downloading %s -> %s", obj.key, local_file)
+                    logger.debug("Downloading %s -> %s", obj.key, local_file)
                     bucket.download_file(obj.key, local_file)
 
             elapsed_time = time.time() - t0
@@ -274,11 +274,11 @@ def cds_s3_download_one_product(
             status_meaning = "Downloaded"
 
     except FileNotFoundError as e:
-        logging.error("S3 product not found: %s", e)
+        logger.error("S3 product not found: %s", e)
         status_meaning = "NotFound"
         elapsed_time = time.time() - t0
     except (BotoCoreError, ClientError) as e:
-        logging.error("S3 error while downloading %s: %s", output_filepath, e)
+        logger.error("S3 error while downloading %s: %s", output_filepath, e)
         status_meaning = "S3Error"
         elapsed_time = time.time() - t0
         if os.path.exists(output_filepath_tmp):
@@ -296,8 +296,8 @@ def cds_s3_download_one_product(
                 f"Failed to delete temporary S3 credentials. Status code: {delete_response.status_code}"
             )
 
-    logging.debug("time to download this product: %1.1f sec", elapsed_time)
-    logging.debug("average download speed: %1.1f Mo/sec", speed)
+    logger.debug("time to download this product: %1.1f sec", elapsed_time)
+    logger.debug("average download speed: %1.1f Mo/sec", speed)
     return speed, elapsed_time, total_mb, status_meaning, safename_base
 
 
@@ -1226,7 +1226,7 @@ def download_list_product_multithread_v4(
     assert len(inputdf["S3Path"]) == len(inputdf["safename"])
     if "status" not in inputdf.columns:
         inputdf["status"] = np.zeros(len(inputdf["safename"]))
-    logging.info("check_on_disk : %s", check_on_disk)
+    logger.info("check_on_disk : %s", check_on_disk)
     cpt = defaultdict(int)
     cpt["products_in_initial_listing"] = len(inputdf["S3Path"])
     conf = get_conf(path_config_file=cdsodatacli_conf_file)
@@ -1249,7 +1249,7 @@ def download_list_product_multithread_v4(
         extension="",
     )
     t_start_download = time.time()
-    logging.info("%s", cpt)
+    logger.info("%s", cpt)
     while_loop = 0
     blacklist = []
     running_futures = set()
@@ -1269,7 +1269,7 @@ def download_list_product_multithread_v4(
                 f"loop={while_loop} | OK={cpt['successful_download']} | ERR={sum(v for k,v in cpt.items() if k.startswith('status_') and k != 'status_OK')} | todo={len(subset_to_treat)} | //={len(running_futures)}"
             )
             if len(subset_to_treat) == 0:
-                logging.info(
+                logger.info(
                     "All the products have been treated (success or error).Nothing to do, exiting loop"
                 )
                 break
@@ -1281,7 +1281,7 @@ def download_list_product_multithread_v4(
                 logins_group=account_group,
             )
             urls_index = list(df_prod_downloadable.index)
-            logging.debug(
+            logger.debug(
                 "while_loop : %s, prod. to treat: %s, %s",
                 while_loop,
                 len(subset_to_treat),
@@ -1289,7 +1289,7 @@ def download_list_product_multithread_v4(
             )
             # if len(df_prod_downloadable) == 0:
             if len(df_prod_downloadable) == 0:
-                logging.debug("no session available wait a bit")
+                logger.debug("no session available wait a bit")
                 time.sleep(5)
                 continue
             errors_per_account = defaultdict(int)
@@ -1300,51 +1300,18 @@ def download_list_product_multithread_v4(
             # 1) Submit as many futures as possible
             while urls_index and len(running_futures) < max_parallelism_seek:
                 url_one_index = urls_index.pop(0)
-                # id_product = subset_to_treat['id'].iloc[url_one_index]
-                # safename_base = subset_to_treat["safe"].iloc[url_one_index]
-                # safename_base = subset_to_treat["safe"].loc[url_one_index]  # label-based
+
                 safename_base = df_prod_downloadable["safe"].loc[url_one_index]
                 logintobeused = df_prod_downloadable["login"].loc[url_one_index]
                 assert isinstance(safename_base, str)
                 if safename_base in currently_downloading:
-                    logging.debug("skipping %s already being downloaded", safename_base)
+                    logger.debug("skipping %s already being downloaded", safename_base)
                     continue
-                # (
-                # access_token,
-                # date_generation_access_token,
-                # login,
-                # path_semaphore_token,
-                # ) = get_bearer_access_token(
-                #     conf=conf, specific_account=acount_email,
-                #     account_group=None
-                # )
-                # headers = {"Authorization": "Bearer %s" % access_token}
-                # session.headers.update(headers)
-                # url_product = cdsodatacli_conf_file["URL_download"] % id_product
-                # output_path = subset_to_treat['output_path'].iloc[url_one_index]
-                # future = executor.submit(download, url)
-                # session = df_prod_downloadable["session"].iloc[url_one_index]
-                # header = df_prod_downloadable["header"].iloc[url_one_index]
-                # url_product = df_prod_downloadable["url"].iloc[url_one_index]
-                # output_path = df_prod_downloadable["output_path"].iloc[url_one_index]
 
-                # Corrected lines inside download_list_product_multithread_v3
-                # session = df_prod_downloadable["session"].loc[url_one_index]
                 header = df_prod_downloadable["header"].loc[url_one_index]
-                # url_product = df_prod_downloadable["url"].loc[url_one_index]
                 output_path = df_prod_downloadable["output_path"].loc[url_one_index]
                 s3path = df_prod_downloadable["S3Path"].loc[url_one_index]
-                # path_semaphore_token = df_prod_downloadable["token_semaphore"].loc[
-                #     url_one_index
-                # ]  # Added .loc
 
-                # session = df_prod_downloadable["session"].loc[url_one_index]
-                # header = df_prod_downloadable["header"].loc[url_one_index]
-                # url_product = df_prod_downloadable["url"].loc[url_one_index]
-                # output_path = df_prod_downloadable["output_path"].loc[url_one_index]
-                # path_semaphore_token = df_prod_downloadable["token_semaphore"][
-                #     url_one_index
-                # ]
                 future = executor.submit(
                     cds_s3_download_one_product,
                     s3path,
@@ -1375,19 +1342,16 @@ def download_list_product_multithread_v4(
                 login_used = info.get("login", "unknown")
                 try:
                     # process result
-                    # speed,elapsed_time,total_mb, status_meaning, safename_base
                     (
                         speed,
                         elapsed_time,
                         total_mb,
                         status_meaning,
                         safename_base,
-                        # semaphore_token_file,
                     ) = future.result()
-                    # future_to_info.pop(future, None)
                 except Exception:
 
-                    logging.error(
+                    logger.error(
                         "Unhandled exception for %s: %s",
                         safename_base,
                         traceback.format_exc(),
@@ -1396,7 +1360,7 @@ def download_list_product_multithread_v4(
                     pbar.update(1)
                     continue
 
-                logging.debug("remove session semaphore for %s", login_used)
+                logger.debug("remove session semaphore for %s", login_used)
                 remove_semaphore_session_file(
                     session_dir=conf["active_session_directory"],
                     safename=safename_base,
@@ -1407,7 +1371,7 @@ def download_list_product_multithread_v4(
                 #     cpt["interrupted"] += 1
                 #     raise ("keyboard interrupt")
                 # except:
-                #     logging.error("traceback : %s", traceback.format_exc())
+                #     logger.error("traceback : %s", traceback.format_exc())
                 #     speed = np.nan
                 #     status_meaning = "DownloadError"
                 if status_meaning == "OK" or status_meaning == "Downloaded":
@@ -1419,7 +1383,7 @@ def download_list_product_multithread_v4(
                 else:
                     df2.loc[(df2["safe"] == safename_base), "status"] = -1
                     errors_per_account[login_used] += 1
-                    logging.info(
+                    logger.info(
                         "error found for %s meaning %s", login_used, status_meaning
                     )
                     # df2["status"][df2["safe"] == safename_base] = -1 # download in error
@@ -1435,11 +1399,11 @@ def download_list_product_multithread_v4(
             for acco in errors_per_account:
                 if errors_per_account[acco] >= MAX_SESSION_PER_ACCOUNT:
                     blacklist.append(acco)
-                    logging.info("%s black listed for next loops", acco)
+                    logger.info("%s black listed for next loops", acco)
     elapsed_time = time.time() - t_start_download
-    logging.info("download over in %f seconds", elapsed_time)
-    logging.info("counter: %s", cpt)
-    logging.info("maximum parallelism reached : %i", max_parallel_download)
+    logger.info("download over in %f seconds", elapsed_time)
+    logger.info("counter: %s", cpt)
+    logger.info("maximum parallelism reached : %i", max_parallel_download)
     # safety remove active session, all reamining because of error
     remove_semaphore_session_file(
         session_dir=conf["active_session_directory"],
@@ -1448,19 +1412,19 @@ def download_list_product_multithread_v4(
     )
 
     if len(all_speeds) > 0:
-        logging.info(
+        logger.info(
             "average download speed %1.1f Mo/s (stdev: %1.1f Mo/s)",
             np.mean(all_speeds),
             np.std(all_speeds),
         )
     if len(all_elapsed_time) > 0:
-        logging.info(
+        logger.info(
             "average elapsed time %1.1f s (stdev: %1.1f s)",
             np.mean(all_elapsed_time),
             np.std(all_elapsed_time),
         )
     if len(all_total_mb) > 0:
-        logging.info(
+        logger.info(
             "cumulated size %1.1f Go (average: %1.1f Go)",
             np.sum(all_total_mb) / 1024,
             np.mean(all_total_mb) / 1024,

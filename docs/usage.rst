@@ -34,13 +34,52 @@ For a download with a given login/password, you can use the command line tool `d
 
 2. Multi-threaded download with multiple users/accounts
 -------------------------------------------------------
-For a multi-threaded download with multiple users/accounts, you can use the command line tool `downloadMuliThreadMultiUser`:
+For a multi-threaded download with multiple users/accounts, you can use the command line tool `downloadMultiThreadMultiUserV3`:
 
 .. code-block:: bash
 
-    downloadMuliThreadMultiUser -h
+    downloadMultiThreadMultiUserV3 -h
+        usage: downloadMultiThreadMultiUserV3 [-h] [--verbose] [--forcedownload] [--logingroup LOGINGROUP] [--listing LISTING] --outputdir OUTPUTDIR [--cdsodatacli_conf_file CDSODATACLI_CONF_FILE]
+                                            [--download-backend {zipper,s3endpoint}]
+
+        download deamon CDSE
+
+        options:
+        -h, --help            show this help message and exit
+        --verbose
+        --forcedownload       True -> no test of existence of the products in spool and archive directories.
+        --logingroup LOGINGROUP
+                                name of the group of CDSE account in the localconfig.yml [default=logins]
+        --listing LISTING     path of the listing of products to download containing (Id,safename) lines
+        --outputdir OUTPUTDIR
+                                pathwhere product will be stored
+        --cdsodatacli_conf_file CDSODATACLI_CONF_FILE
+                                path to the cdsodatacli configuration file .yml [optional, default is localconfig.yml then config.yml]
+        --download-backend {zipper,s3endpoint}
+                                backend to use for downloading products, 'zipper' will use the legacy zipper API, 's3endpoint' will use direct S3 endpoint access (default: 's3endpoint')
 
 
+There are two download backends: "zipper" or "s3endpoint" available through `cdsodatacli`.
+The "s3endpoint" download backend is strongly recommended, it gives download speed up to 32 Mo/s while "zipper" is closer to
+
+Here is a table of download speed to compare the 2 backends, on tests performed in 2026:
+
++------------+------------+--------------------------------------+---------------------------+
+|            | backend    | average download speed (Mo/s)        | total duration (seconds)  |
++============+============+======================================+===========================+
+| 2 IW OCN   | s3endpoint | 10.4 Mo/s (stdev: 0.5 Mo/s)          | 10.0                      |
++------------+------------+--------------------------------------+---------------------------+
+| 3 IW SLC   | s3endpoint | 32.1 Mo/s (stdev: 15.1 Mo/s)         | 524.287501                |
++------------+------------+--------------------------------------+---------------------------+
+| 2 IW OCN   | zipper     | 5.9 Mo/s (stdev: 1.3 Mo/s)           | 23.04                     |
++------------+------------+--------------------------------------+---------------------------+
+| 3 IW SLC   | zipper     | 4.2 Mo/s (stdev: 2.5 Mo/s)           | 2896.931142               |
++------------+------------+--------------------------------------+---------------------------+
+
+.. note::
+    5X faster downloads for S3!
+
+In addition, with "s3endpoint" backend, the products are already uncompressed at the end of the download.
 
 Get CDSE Odata IDs for a list of products
 =========================================
