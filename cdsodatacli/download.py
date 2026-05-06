@@ -970,7 +970,7 @@ def download_list_product_multithread_v3(
     -------
         df2 (pd.DataFrame):
     """
-    
+
     assert len(inputdf["id"]) == len(inputdf["safename"])
     if "status" not in inputdf.columns:
         inputdf["status"] = np.zeros(len(inputdf["safename"]))
@@ -985,8 +985,11 @@ def download_list_product_multithread_v3(
 
     force_download = not check_on_disk
     df2, cpt = filter_product_already_present(
-        cpt, inputdf.rename(columns={"safename": "safe"}),
-          outputdir, force_download=force_download, cdsodatacli_conf=conf
+        cpt,
+        inputdf.rename(columns={"safename": "safe"}),
+        outputdir,
+        force_download=force_download,
+        cdsodatacli_conf=conf,
     )
     t_start_download = time.time()
     logger.info("%s", cpt)

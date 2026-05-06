@@ -12,10 +12,8 @@ import threading
 import pytest
 import numpy as np
 import pandas as pd
-from collections import defaultdict
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 from botocore.exceptions import BotoCoreError, ClientError
-from requests.exceptions import ConnectionError, Timeout
 
 
 # ---------------------------------------------------------------------------
@@ -49,6 +47,7 @@ FAKE_CREDENTIALS = {"access_id": FAKE_ACCESS_ID}
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def make_s3_object(key, size=1_000_000):
     """Return a MagicMock mimicking a boto3 S3 ObjectSummary."""
     obj = MagicMock()
@@ -74,8 +73,13 @@ def make_s3_client_mocks(objects):
     return FAKE_CREDENTIALS, mock_s3_resource
 
 
-def make_s3_result(safename=FAKE_SAFENAME, status="Downloaded",
-                   speed=50.0, elapsed=20.0, total_mb=500.0):
+def make_s3_result(
+    safename=FAKE_SAFENAME,
+    status="Downloaded",
+    speed=50.0,
+    elapsed=20.0,
+    total_mb=500.0,
+):
     """Return a tuple matching cds_s3_download_one_product's return signature."""
     return speed, elapsed, total_mb, status, safename
 
@@ -84,38 +88,39 @@ def make_inputdf(safenames, s3paths=None, statuses=None):
     """Build a minimal inputdf as download_list_product_multithread_v4 expects."""
     n = len(safenames)
     if s3paths is None:
-        s3paths = [
-            f"Sentinel-1/SAR/GRD/2022/05/03/{s}.SAFE" for s in safenames
-        ]
+        s3paths = [f"Sentinel-1/SAR/GRD/2022/05/03/{s}.SAFE" for s in safenames]
     if statuses is None:
         statuses = np.zeros(n)
-    return pd.DataFrame({
-        "safename": safenames,
-        "S3Path": s3paths,
-        "id": [f"id-{i}" for i in range(n)],
-        "status": statuses,
-    })
+    return pd.DataFrame(
+        {
+            "safename": safenames,
+            "S3Path": s3paths,
+            "id": [f"id-{i}" for i in range(n)],
+            "status": statuses,
+        }
+    )
 
 
 def make_downloadable_df(safenames, s3paths=None):
     """Simulate the output of get_sessions_download_available for v4."""
     n = len(safenames)
     if s3paths is None:
-        s3paths = [
-            f"Sentinel-1/SAR/GRD/2022/05/03/{s}.SAFE" for s in safenames
-        ]
-    return pd.DataFrame({
-        "safe": safenames,
-        "header": [FAKE_HEADER for _ in range(n)],
-        "output_path": [f"/fake/spool/{s}" for s in safenames],
-        "S3Path": s3paths,
-        "login": ["user1@example.fr"] * n,
-    })
+        s3paths = [f"Sentinel-1/SAR/GRD/2022/05/03/{s}.SAFE" for s in safenames]
+    return pd.DataFrame(
+        {
+            "safe": safenames,
+            "header": [FAKE_HEADER for _ in range(n)],
+            "output_path": [f"/fake/spool/{s}" for s in safenames],
+            "S3Path": s3paths,
+            "login": ["user1@example.fr"] * n,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Fixtures (autouse)
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def patch_conf():
@@ -139,13 +144,13 @@ def patch_tqdm():
 def patch_filter():
     """Default: all products need downloading (status=0)."""
     with patch("cdsodatacli.download.filter_product_already_present") as mock:
-        def _default(cpt, df, outputdir, force_download, cdsodatacli_conf,
-                     extension=""):
+
+        def _default(
+            cpt, df, outputdir, force_download, cdsodatacli_conf, extension=""
+        ):
             cpt["product_absent_from_local_disks"] = len(df)
             result = df.copy()
-            result["outputpath"] = [
-                f"/fake/spool/{s}" for s in result["safe"]
-            ]
+            result["outputpath"] = [f"/fake/spool/{s}" for s in result["safe"]]
             return result, cpt
 
         mock.side_effect = _default
@@ -175,6 +180,7 @@ from cdsodatacli.download import (  # noqa: E402
 # Part 1 — cds_s3_download_one_product unit tests
 # ===========================================================================
 
+
 class TestCdsS3DownloadOneProductSuccess:
     """Happy path: single-object product downloads and moves correctly."""
 
@@ -186,8 +192,10 @@ class TestCdsS3DownloadOneProductSuccess:
         conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
 
         with (
-            patch("cdsodatacli.download._get_fresh_s3_client",
-                  return_value=(creds, s3_resource)),
+            patch(
+                "cdsodatacli.download._get_fresh_s3_client",
+                return_value=(creds, s3_resource),
+            ),
             patch("shutil.copy2"),
             patch("os.remove"),
             patch("os.chmod"),
@@ -206,8 +214,10 @@ class TestCdsS3DownloadOneProductSuccess:
         conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
 
         with (
-            patch("cdsodatacli.download._get_fresh_s3_client",
-                  return_value=(creds, s3_resource)),
+            patch(
+                "cdsodatacli.download._get_fresh_s3_client",
+                return_value=(creds, s3_resource),
+            ),
             patch("shutil.copy2"),
             patch("os.remove"),
             patch("os.chmod"),
@@ -226,8 +236,10 @@ class TestCdsS3DownloadOneProductSuccess:
         conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
 
         with (
-            patch("cdsodatacli.download._get_fresh_s3_client",
-                  return_value=(creds, s3_resource)),
+            patch(
+                "cdsodatacli.download._get_fresh_s3_client",
+                return_value=(creds, s3_resource),
+            ),
             patch("shutil.copy2"),
             patch("os.remove"),
             patch("os.chmod"),
@@ -247,8 +259,10 @@ class TestCdsS3DownloadOneProductSuccess:
         conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
 
         with (
-            patch("cdsodatacli.download._get_fresh_s3_client",
-                  return_value=(creds, s3_resource)),
+            patch(
+                "cdsodatacli.download._get_fresh_s3_client",
+                return_value=(creds, s3_resource),
+            ),
             patch("shutil.copy2"),
             patch("os.remove"),
             patch("os.chmod"),
@@ -271,8 +285,10 @@ class TestCdsS3DownloadOneProductSuccess:
         expected_tmp = os.path.join(str(tmp_path), f"{FAKE_SAFENAME}.zip.tmp")
 
         with (
-            patch("cdsodatacli.download._get_fresh_s3_client",
-                  return_value=(creds, s3_resource)),
+            patch(
+                "cdsodatacli.download._get_fresh_s3_client",
+                return_value=(creds, s3_resource),
+            ),
             patch("shutil.copy2") as mock_copy,
             patch("os.remove"),
             patch("os.chmod"),
@@ -289,8 +305,10 @@ class TestCdsS3DownloadOneProductSuccess:
         conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
 
         with (
-            patch("cdsodatacli.download._get_fresh_s3_client",
-                  return_value=(creds, s3_resource)),
+            patch(
+                "cdsodatacli.download._get_fresh_s3_client",
+                return_value=(creds, s3_resource),
+            ),
             patch("shutil.copy2"),
             patch("os.remove"),
             patch("os.chmod"),
@@ -308,10 +326,12 @@ class TestCdsS3DownloadMultiFile:
     def test_multifile_status_downloaded(self, tmp_path):
         objects = [
             make_s3_object(f"{FAKE_S3_PATH}/manifest.safe", size=1_000),
-            make_s3_object(f"{FAKE_S3_PATH}/measurement/s1a-iw-grd-vv.tiff",
-                           size=300_000_000),
-            make_s3_object(f"{FAKE_S3_PATH}/measurement/s1a-iw-grd-vh.tiff",
-                           size=200_000_000),
+            make_s3_object(
+                f"{FAKE_S3_PATH}/measurement/s1a-iw-grd-vv.tiff", size=300_000_000
+            ),
+            make_s3_object(
+                f"{FAKE_S3_PATH}/measurement/s1a-iw-grd-vh.tiff", size=200_000_000
+            ),
         ]
         creds, s3_resource = make_s3_client_mocks(objects)
 
@@ -319,8 +339,10 @@ class TestCdsS3DownloadMultiFile:
         conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
 
         with (
-            patch("cdsodatacli.download._get_fresh_s3_client",
-                  return_value=(creds, s3_resource)),
+            patch(
+                "cdsodatacli.download._get_fresh_s3_client",
+                return_value=(creds, s3_resource),
+            ),
             patch("os.makedirs"),
         ):
             speed, elapsed, total_mb, status, safename = cds_s3_download_one_product(
@@ -341,8 +363,10 @@ class TestCdsS3DownloadMultiFile:
         conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
 
         with (
-            patch("cdsodatacli.download._get_fresh_s3_client",
-                  return_value=(creds, s3_resource)),
+            patch(
+                "cdsodatacli.download._get_fresh_s3_client",
+                return_value=(creds, s3_resource),
+            ),
             patch("os.makedirs"),
         ):
             cds_s3_download_one_product(FAKE_S3_PATH, FAKE_HEADER, output, conf)
@@ -361,8 +385,10 @@ class TestCdsS3DownloadErrors:
         output = str(tmp_path / f"{FAKE_SAFENAME}.zip")
         conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
 
-        with patch("cdsodatacli.download._get_fresh_s3_client",
-                   return_value=(creds, s3_resource)):
+        with patch(
+            "cdsodatacli.download._get_fresh_s3_client",
+            return_value=(creds, s3_resource),
+        ):
             _, _, _, status, _ = cds_s3_download_one_product(
                 FAKE_S3_PATH, FAKE_HEADER, output, conf
             )
@@ -378,8 +404,10 @@ class TestCdsS3DownloadErrors:
         output = str(tmp_path / f"{FAKE_SAFENAME}.zip")
         conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
 
-        with patch("cdsodatacli.download._get_fresh_s3_client",
-                   return_value=(creds, s3_resource)):
+        with patch(
+            "cdsodatacli.download._get_fresh_s3_client",
+            return_value=(creds, s3_resource),
+        ):
             _, _, _, status, _ = cds_s3_download_one_product(
                 FAKE_S3_PATH, FAKE_HEADER, output, conf
             )
@@ -393,8 +421,10 @@ class TestCdsS3DownloadErrors:
         output = str(tmp_path / f"{FAKE_SAFENAME}.zip")
         conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
 
-        with patch("cdsodatacli.download._get_fresh_s3_client",
-                   return_value=(creds, s3_resource)):
+        with patch(
+            "cdsodatacli.download._get_fresh_s3_client",
+            return_value=(creds, s3_resource),
+        ):
             _, _, _, status, _ = cds_s3_download_one_product(
                 FAKE_S3_PATH, FAKE_HEADER, output, conf
             )
@@ -421,8 +451,10 @@ class TestCdsS3DownloadErrors:
         # Create a dummy .tmp to simulate partial download
         open(tmp_file, "w").close()
 
-        with patch("cdsodatacli.download._get_fresh_s3_client",
-                   return_value=(creds, s3_resource)):
+        with patch(
+            "cdsodatacli.download._get_fresh_s3_client",
+            return_value=(creds, s3_resource),
+        ):
             cds_s3_download_one_product(FAKE_S3_PATH, FAKE_HEADER, output, conf)
 
         assert not os.path.exists(tmp_file), ".tmp file should have been cleaned up"
@@ -435,8 +467,10 @@ class TestCdsS3DownloadErrors:
         conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
 
         with (
-            patch("cdsodatacli.download._get_fresh_s3_client",
-                  return_value=(creds, s3_resource)),
+            patch(
+                "cdsodatacli.download._get_fresh_s3_client",
+                return_value=(creds, s3_resource),
+            ),
             patch("shutil.copy2", side_effect=OSError("disk full")),
             patch("os.remove"),
         ):
@@ -453,8 +487,10 @@ class TestCdsS3DownloadErrors:
         output = str(tmp_path / f"{FAKE_SAFENAME}.zip")
         conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
 
-        with patch("cdsodatacli.download._get_fresh_s3_client",
-                   return_value=(creds, s3_resource)):
+        with patch(
+            "cdsodatacli.download._get_fresh_s3_client",
+            return_value=(creds, s3_resource),
+        ):
             cds_s3_download_one_product(FAKE_S3_PATH, FAKE_HEADER, output, conf)
 
         assert patch_requests_delete.call_count == 1
@@ -464,17 +500,20 @@ class TestCdsS3DownloadErrors:
 # Part 2 — download_list_product_multithread_v4 integration tests
 # ===========================================================================
 
+
 class TestV4InputValidation:
     """Input contracts."""
 
     def test_mismatched_lengths_raise(self):
         # S3Path column absent — KeyError fires inside the function before
         # any network call is made, satisfying the input-contract test.
-        df = pd.DataFrame({
-            "safename": ["SAFE_A", "SAFE_B"],
-            "id": ["id0", "id1"],
-            # "S3Path" intentionally absent
-        })
+        df = pd.DataFrame(
+            {
+                "safename": ["SAFE_A", "SAFE_B"],
+                "id": ["id0", "id1"],
+                # "S3Path" intentionally absent
+            }
+        )
         with pytest.raises((AssertionError, KeyError)):
             download_list_product_multithread_v4(
                 df, "/fake/out", account_group="logins"
@@ -483,15 +522,18 @@ class TestV4InputValidation:
     def test_status_column_created_if_absent(self, patch_filter):
         """If inputdf has no 'status' column, v4 must add it silently."""
         safenames = ["SAFE_A"]
-        df = pd.DataFrame({
-            "safename": safenames,
-            "S3Path": ["Sentinel-1/SAR/GRD/2022/05/03/SAFE_A.SAFE"],
-            "id": ["id0"],
-            # no 'status' column
-        })
+        df = pd.DataFrame(
+            {
+                "safename": safenames,
+                "S3Path": ["Sentinel-1/SAR/GRD/2022/05/03/SAFE_A.SAFE"],
+                "id": ["id0"],
+                # no 'status' column
+            }
+        )
 
-        def _all_done(cpt, df_in, outputdir, force_download, cdsodatacli_conf,
-                      extension=""):
+        def _all_done(
+            cpt, df_in, outputdir, force_download, cdsodatacli_conf, extension=""
+        ):
             # return empty so the while loop exits immediately
             empty = df_in.iloc[:0].copy()
             return empty, cpt
@@ -513,10 +555,14 @@ class TestV4AllSuccessful:
         inputdf = make_inputdf(safenames)
 
         with (
-            patch("cdsodatacli.download.get_sessions_download_available",
-                  return_value=make_downloadable_df(safenames)),
-            patch("cdsodatacli.download.cds_s3_download_one_product",
-                  side_effect=[make_s3_result(s) for s in safenames]),
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.cds_s3_download_one_product",
+                side_effect=[make_s3_result(s) for s in safenames],
+            ),
         ):
             result = download_list_product_multithread_v4(
                 inputdf, "/fake/out", account_group="logins"
@@ -533,10 +579,14 @@ class TestV4AllSuccessful:
             return make_s3_result(safename)
 
         with (
-            patch("cdsodatacli.download.get_sessions_download_available",
-                  return_value=make_downloadable_df(safenames)),
-            patch("cdsodatacli.download.cds_s3_download_one_product",
-                  side_effect=mock_s3_worker),
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.cds_s3_download_one_product",
+                side_effect=mock_s3_worker,
+            ),
         ):
             result = download_list_product_multithread_v4(
                 inputdf, "/fake/out", account_group="logins"
@@ -550,10 +600,14 @@ class TestV4AllSuccessful:
         inputdf = make_inputdf(safenames)
 
         with (
-            patch("cdsodatacli.download.get_sessions_download_available",
-                  return_value=make_downloadable_df(safenames)),
-            patch("cdsodatacli.download.cds_s3_download_one_product",
-                  return_value=make_s3_result("SAFE_A", status="OK")),
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.cds_s3_download_one_product",
+                return_value=make_s3_result("SAFE_A", status="OK"),
+            ),
         ):
             result = download_list_product_multithread_v4(
                 inputdf, "/fake/out", account_group="logins"
@@ -570,11 +624,16 @@ class TestV4DownloadErrors:
         inputdf = make_inputdf(safenames)
 
         with (
-            patch("cdsodatacli.download.get_sessions_download_available",
-                  return_value=make_downloadable_df(safenames)),
-            patch("cdsodatacli.download.cds_s3_download_one_product",
-                  return_value=make_s3_result("SAFE_MISSING", status="NotFound",
-                                              speed=np.nan)),
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.cds_s3_download_one_product",
+                return_value=make_s3_result(
+                    "SAFE_MISSING", status="NotFound", speed=np.nan
+                ),
+            ),
         ):
             result = download_list_product_multithread_v4(
                 inputdf, "/fake/out", account_group="logins"
@@ -587,11 +646,14 @@ class TestV4DownloadErrors:
         inputdf = make_inputdf(safenames)
 
         with (
-            patch("cdsodatacli.download.get_sessions_download_available",
-                  return_value=make_downloadable_df(safenames)),
-            patch("cdsodatacli.download.cds_s3_download_one_product",
-                  return_value=make_s3_result("SAFE_ERR", status="S3Error",
-                                              speed=np.nan)),
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.cds_s3_download_one_product",
+                return_value=make_s3_result("SAFE_ERR", status="S3Error", speed=np.nan),
+            ),
         ):
             result = download_list_product_multithread_v4(
                 inputdf, "/fake/out", account_group="logins"
@@ -604,10 +666,14 @@ class TestV4DownloadErrors:
         inputdf = make_inputdf(safenames)
 
         with (
-            patch("cdsodatacli.download.get_sessions_download_available",
-                  return_value=make_downloadable_df(safenames)),
-            patch("cdsodatacli.download.cds_s3_download_one_product",
-                  side_effect=RuntimeError("unexpected crash")),
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.cds_s3_download_one_product",
+                side_effect=RuntimeError("unexpected crash"),
+            ),
         ):
             result = download_list_product_multithread_v4(
                 inputdf, "/fake/out", account_group="logins"
@@ -630,10 +696,13 @@ class TestV4DownloadErrors:
             return make_s3_result(safename)
 
         with (
-            patch("cdsodatacli.download.get_sessions_download_available",
-                  side_effect=sessions_side_effect),
-            patch("cdsodatacli.download.cds_s3_download_one_product",
-                  side_effect=worker),
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                side_effect=sessions_side_effect,
+            ),
+            patch(
+                "cdsodatacli.download.cds_s3_download_one_product", side_effect=worker
+            ),
         ):
             result = download_list_product_multithread_v4(
                 inputdf, "/fake/out", account_group="logins"
@@ -652,10 +721,14 @@ class TestV4DownloadErrors:
             return make_s3_result(safename, status="S3Error", speed=np.nan)
 
         with (
-            patch("cdsodatacli.download.get_sessions_download_available",
-                  return_value=make_downloadable_df(safenames)),
-            patch("cdsodatacli.download.cds_s3_download_one_product",
-                  side_effect=failing_worker),
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.cds_s3_download_one_product",
+                side_effect=failing_worker,
+            ),
         ):
             result = download_list_product_multithread_v4(
                 inputdf, "/fake/out", account_group="logins"
@@ -677,10 +750,14 @@ class TestV4NoDuplicateDownload:
             return make_s3_result("SAFE_A")
 
         with (
-            patch("cdsodatacli.download.get_sessions_download_available",
-                  return_value=make_downloadable_df(safenames)),
-            patch("cdsodatacli.download.cds_s3_download_one_product",
-                  side_effect=tracking_worker),
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.cds_s3_download_one_product",
+                side_effect=tracking_worker,
+            ),
         ):
             download_list_product_multithread_v4(
                 inputdf, "/fake/out", account_group="logins"
@@ -693,8 +770,9 @@ class TestV4AllAlreadyPresent:
     """All products already on disk — nothing to download."""
 
     def test_empty_df2_skips_sessions(self, patch_filter):
-        def _all_archived(cpt, df_in, outputdir, force_download,
-                          cdsodatacli_conf, extension=""):
+        def _all_archived(
+            cpt, df_in, outputdir, force_download, cdsodatacli_conf, extension=""
+        ):
             cpt["archived_product"] = len(df_in)
             empty = df_in.iloc[:0].copy()
             return empty, cpt
@@ -727,10 +805,14 @@ class TestV4NoSession:
             return make_s3_result(os.path.basename(output_path))
 
         with (
-            patch("cdsodatacli.download.get_sessions_download_available",
-                  side_effect=sessions_side_effect),
-            patch("cdsodatacli.download.cds_s3_download_one_product",
-                  side_effect=s3_worker),
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                side_effect=sessions_side_effect,
+            ),
+            patch(
+                "cdsodatacli.download.cds_s3_download_one_product",
+                side_effect=s3_worker,
+            ),
             patch("cdsodatacli.download.time.sleep") as mock_sleep,
         ):
             download_list_product_multithread_v4(
@@ -754,10 +836,14 @@ class TestV4NoSession:
             return make_s3_result(os.path.basename(output_path))
 
         with (
-            patch("cdsodatacli.download.get_sessions_download_available",
-                  side_effect=sessions_side_effect),
-            patch("cdsodatacli.download.cds_s3_download_one_product",
-                  side_effect=s3_worker),
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                side_effect=sessions_side_effect,
+            ),
+            patch(
+                "cdsodatacli.download.cds_s3_download_one_product",
+                side_effect=s3_worker,
+            ),
             patch("cdsodatacli.download.time.sleep") as mock_sleep,
         ):
             download_list_product_multithread_v4(
@@ -775,8 +861,9 @@ class TestV4FilterCalledWithExtensionEmpty:
         safenames = ["SAFE_A"]
         inputdf = make_inputdf(safenames)
 
-        def _capture(cpt, df_in, outputdir, force_download,
-                     cdsodatacli_conf, extension=""):
+        def _capture(
+            cpt, df_in, outputdir, force_download, cdsodatacli_conf, extension=""
+        ):
             _capture.extension_used = extension
             empty = df_in.iloc[:0].copy()
             return empty, cpt
@@ -812,10 +899,14 @@ class TestV4Concurrency:
             return make_s3_result(safename)
 
         with (
-            patch("cdsodatacli.download.get_sessions_download_available",
-                  return_value=make_downloadable_df(safenames)),
-            patch("cdsodatacli.download.cds_s3_download_one_product",
-                  side_effect=concurrent_worker),
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.cds_s3_download_one_product",
+                side_effect=concurrent_worker,
+            ),
         ):
             result = download_list_product_multithread_v4(
                 inputdf, "/fake/out", account_group="logins"
@@ -852,10 +943,14 @@ class TestV4Concurrency:
             return make_s3_result("SAFE_SLOW")
 
         with (
-            patch("cdsodatacli.download.get_sessions_download_available",
-                  return_value=make_downloadable_df(safenames)),
-            patch("cdsodatacli.download.cds_s3_download_one_product",
-                  side_effect=slow_worker),
+            patch(
+                "cdsodatacli.download.get_sessions_download_available",
+                return_value=make_downloadable_df(safenames),
+            ),
+            patch(
+                "cdsodatacli.download.cds_s3_download_one_product",
+                side_effect=slow_worker,
+            ),
         ):
             download_list_product_multithread_v4(
                 inputdf, "/fake/out", account_group="logins"

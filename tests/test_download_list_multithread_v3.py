@@ -51,11 +51,13 @@ def make_inputdf(safenames, ids=None, statuses=None):
         ids = [f"id-{i}" for i in range(n)]
     if statuses is None:
         statuses = np.zeros(n)
-    return pd.DataFrame({
-        "safename": safenames,
-        "id": ids,
-        "status": statuses,
-    })
+    return pd.DataFrame(
+        {
+            "safename": safenames,
+            "id": ids,
+            "status": statuses,
+        }
+    )
 
 
 def make_future_result(safename, status="OK", speed=10.0):
@@ -66,31 +68,36 @@ def make_future_result(safename, status="OK", speed=10.0):
 def make_df2(safenames):
     """Build a minimal df2 as filter_product_already_present would return."""
     n = len(safenames)
-    return pd.DataFrame({
-        "safe": safenames,
-        "status": np.zeros(n),
-        "id": [f"id-{i}" for i in range(n)],
-        "login": FAKE_LOGIN,
-        "outputpath": [f"/fake/out/{s}.zip" for s in safenames],
-    })
+    return pd.DataFrame(
+        {
+            "safe": safenames,
+            "status": np.zeros(n),
+            "id": [f"id-{i}" for i in range(n)],
+            "login": FAKE_LOGIN,
+            "outputpath": [f"/fake/out/{s}.zip" for s in safenames],
+        }
+    )
 
 
 def make_downloadable_df(safenames):
     """Simulate the output of get_sessions_download_available."""
     n = len(safenames)
-    return pd.DataFrame({
-        "safe": safenames,
-        "session": [MagicMock() for _ in range(n)],
-        "header": [{"Authorization": "Bearer tok"} for _ in range(n)],
-        "url": [f"https://fake.cdse/{s}" for s in safenames],
-        "login": FAKE_LOGIN,
-        "output_path": [f"/fake/out/{s}.zip" for s in safenames],
-    })
+    return pd.DataFrame(
+        {
+            "safe": safenames,
+            "session": [MagicMock() for _ in range(n)],
+            "header": [{"Authorization": "Bearer tok"} for _ in range(n)],
+            "url": [f"https://fake.cdse/{s}" for s in safenames],
+            "login": FAKE_LOGIN,
+            "output_path": [f"/fake/out/{s}.zip" for s in safenames],
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def patch_conf():
@@ -197,10 +204,12 @@ class TestInputValidation:
     def test_mismatched_safe_id_lengths_raise(self):
         """inputdf missing required column triggers KeyError/AssertionError
         before any network call is made."""
-        df = pd.DataFrame({
-            "safename": ["SAFE_A", "SAFE_B"],
-            # "id" intentionally absent — function must raise before network calls
-        })
+        df = pd.DataFrame(
+            {
+                "safename": ["SAFE_A", "SAFE_B"],
+                # "id" intentionally absent — function must raise before network calls
+            }
+        )
         with pytest.raises((AssertionError, KeyError)):
             download_list_product_multithread_v3(
                 inputdf=df,
@@ -210,14 +219,17 @@ class TestInputValidation:
 
     def test_status_column_created_if_absent(self, patch_filter):
         """If inputdf has no 'status' column, v3 must add it silently."""
-        df = pd.DataFrame({
-            "safename": ["SAFE_A"],
-            "id": ["id0"],
-            # no 'status' column
-        })
+        df = pd.DataFrame(
+            {
+                "safename": ["SAFE_A"],
+                "id": ["id0"],
+                # no 'status' column
+            }
+        )
 
-        def _all_done(cpt, df_in, outputdir, force_download, cdsodatacli_conf,
-                      **kwargs):
+        def _all_done(
+            cpt, df_in, outputdir, force_download, cdsodatacli_conf, **kwargs
+        ):
             empty = df_in.iloc[:0].copy()
             return empty, cpt
 
@@ -246,8 +258,9 @@ class TestDownloadError:
         def worker_side_effect(session, header, url, output_path, **kw):
             safename = os.path.basename(output_path).replace(".zip", "")
             if safename == "SAFE_FAIL":
-                return make_future_result("SAFE_FAIL", status="Unauthorized",
-                                          speed=np.nan)
+                return make_future_result(
+                    "SAFE_FAIL", status="Unauthorized", speed=np.nan
+                )
             return make_future_result(safename)
 
         with (
@@ -363,8 +376,9 @@ class TestAllAlreadyPresent:
     """All products already on disk — nothing to download."""
 
     def test_empty_df2_returns_immediately(self, patch_filter):
-        def _all_archived(cpt, df, outputdir, force_download, cdsodatacli_conf,
-                           **kwargs):
+        def _all_archived(
+            cpt, df, outputdir, force_download, cdsodatacli_conf, **kwargs
+        ):
             cpt["archived_product"] = len(df)
             empty = pd.DataFrame({"safe": [], "status": [], "id": []})
             return empty, cpt
@@ -443,6 +457,7 @@ class TestRaceCondition:
         def _release():
             time.sleep(0.2)
             barrier.set()
+
         threading.Thread(target=_release, daemon=True).start()
 
         def slow_worker(session, header, url, output_path, **kw):
