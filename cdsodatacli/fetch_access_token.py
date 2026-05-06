@@ -114,25 +114,15 @@ def get_bearer_access_token(
         )
 
         # clean expired tokens for all logins
-        for logintest in list(ACTIVE_ACCESS_TOKEN.keys()):
-            valid_tokens = []
-            for entry in ACTIVE_ACCESS_TOKEN[logintest]:
-                age = (
-                    datetime.datetime.today() - entry["access-token-creation-date"]
-                ).total_seconds()
-                if age > MAX_VALIDITY_ACCESS_TOKEN:
-                    logger.debug(
-                        "removing expired token for %s (age=%ds)", logintest, age
-                    )
-                    # expired -> do NOT keep it
-                    ACTIVE_ACCESS_TOKEN[logintest].remove(entry)
-                else:
-                    valid_tokens.append(entry)  # still valid -> keep it
-            ACTIVE_ACCESS_TOKEN[logintest] = valid_tokens
-            if not ACTIVE_ACCESS_TOKEN[logintest]:
-                del ACTIVE_ACCESS_TOKEN[
-                    logintest
-                ]  # remove login key if no valid tokens left
+        with _token_cache_lock:
+            for logintest in list(ACTIVE_ACCESS_TOKEN.keys()):
+                cutoff = datetime.datetime.now() - datetime.timedelta(seconds=MAX_VALIDITY_ACCESS_TOKEN)
+                ACTIVE_ACCESS_TOKEN[logintest] = [
+                    entry for entry in ACTIVE_ACCESS_TOKEN[logintest]
+                    if entry["access-token-creation-date"] > cutoff
+                ]
+                if not ACTIVE_ACCESS_TOKEN[logintest]:
+                    del ACTIVE_ACCESS_TOKEN[logintest]
 
     return token, date_generation, login
 
