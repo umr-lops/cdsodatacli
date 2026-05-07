@@ -113,16 +113,17 @@ def get_bearer_access_token(
             }
         )
 
-        # clean expired tokens for all logins
-        with _token_cache_lock:
-            for logintest in list(ACTIVE_ACCESS_TOKEN.keys()):
-                cutoff = datetime.datetime.now() - datetime.timedelta(seconds=MAX_VALIDITY_ACCESS_TOKEN)
-                ACTIVE_ACCESS_TOKEN[logintest] = [
-                    entry for entry in ACTIVE_ACCESS_TOKEN[logintest]
-                    if entry["access-token-creation-date"] > cutoff
-                ]
-                if not ACTIVE_ACCESS_TOKEN[logintest]:
-                    del ACTIVE_ACCESS_TOKEN[logintest]
+        # clean expired tokens for all logins — no nested lock needed
+        for logintest in list(ACTIVE_ACCESS_TOKEN.keys()):
+            cutoff = datetime.datetime.now() - datetime.timedelta(
+                seconds=MAX_VALIDITY_ACCESS_TOKEN
+            )
+            ACTIVE_ACCESS_TOKEN[logintest] = [
+                entry for entry in ACTIVE_ACCESS_TOKEN[logintest]
+                if entry["access-token-creation-date"] > cutoff
+            ]
+            if not ACTIVE_ACCESS_TOKEN[logintest]:
+                del ACTIVE_ACCESS_TOKEN[logintest]
 
     return token, date_generation, login
 
@@ -150,7 +151,7 @@ def get_valid_access_token(login):
                 datetime.datetime.today() - entry["access-token-creation-date"]
             ).total_seconds()
             if (
-                age < MAX_VALIDITY_ACCESS_TOKEN - 30
+                age < MAX_VALIDITY_ACCESS_TOKEN - 60
             ):  # 30s safety margin, same as in get_bearer_access_token
                 logger.debug("valid token found in cache for %s (age=%ds)", login, age)
                 return entry["access-token"], entry["access-token-creation-date"]
