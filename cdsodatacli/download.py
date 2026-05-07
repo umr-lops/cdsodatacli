@@ -4,6 +4,7 @@ from tqdm import tqdm
 import datetime
 import time
 import os
+import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 import warnings
 import traceback
@@ -22,6 +23,8 @@ from cdsodatacli.session import (
     remove_semaphore_session_file,
     get_sessions_download_available,
     MAX_SESSION_PER_ACCOUNT,
+    get_sessions_download_available_s3,
+    release_s3_session_after_usage,
 )
 from cdsodatacli.query import fetch_data, WORLDPOLYGON
 from cdsodatacli.utils import (
@@ -171,7 +174,7 @@ def CDS_Odata_download_one_product_v2(
 
 def cds_s3_download_one_product(
     s3_path,
-    header,
+    s3_credentials,
     output_filepath,
     conf,
 ):
@@ -192,7 +195,7 @@ def cds_s3_download_one_product(
 
     Argument:
         s3_path (str): e.g. "Sentinel-1/SAR/GRD/2022/05/03/S1A_IW_GRDH_1SDV_20220503T000000.SAFE"
-        header (dict): HTTP headers to authenticate the S3 request, if needed (e.g. with temporary token)
+        s3_credentials (dict): with keys 's3-access-key' and 's3-secret'
         output_filepath (str): output full path when download is finished (not the pre-spool but the spool)
         conf (dict): configuration see details above
 
@@ -214,9 +217,9 @@ def cds_s3_download_one_product(
     output_filepath_tmp = os.path.join(
         conf["pre_spool"], os.path.basename(output_filepath) + ".tmp"
     )
-    s3_credentials = None
+    # s3_credentials = None
     try:
-        s3_credentials, s3_resources = _get_fresh_s3_client(conf, headers=header)
+        # s3_credentials, s3_resources = _get_fresh_s3_client(conf, headers=header)
         # s3 = boto3.resource(
         #     "s3",
         #     endpoint_url=conf["s3_endpoint"],
@@ -224,6 +227,13 @@ def cds_s3_download_one_product(
         #     aws_secret_access_key=conf["s3_secret_key"],
         #     region_name=conf.get("s3_region", "default"),
         # )
+        s3_resources = boto3.resource(
+        "s3",
+        endpoint_url=conf.get("s3_endpoint", "https://eodata.dataspace.copernicus.eu"),
+        aws_access_key_id=s3_credentials["s3-access-key"],
+        aws_secret_access_key=s3_credentials["s3-secret"],
+        region_name=conf.get("s3_region", "default"),
+    )
         bucket = s3_resources.Bucket(conf["s3_bucket"])
 
         # List all objects under the SAFE prefix
@@ -284,17 +294,6 @@ def cds_s3_download_one_product(
         logger.debug('%s',traceback.format_exc())
         if os.path.exists(output_filepath_tmp):
             os.remove(output_filepath_tmp)
-    finally:
-        if s3_credentials and "access_id" in s3_credentials:
-            try:
-                requests.delete(
-                    f"https://s3-keys-manager.cloudferro.com/api/user/credentials/access_id/{s3_credentials['access_id']}",
-                    headers=header,
-                    timeout=10
-                )
-                logger.debug("Deleted temp S3 creds: %s...", s3_credentials['access_id'][:8])
-            except Exception as e:
-                logger.warning("Failed to delete temp S3 credentials: %s", e)
 
     logger.debug("time to download this product: %1.1f sec", elapsed_time)
     logger.debug("average download speed: %1.1f Mo/sec", speed)
@@ -1034,7 +1033,7 @@ def download_list_product_multithread_v3(
             # if len(df_prod_downloadable) == 0:
             if len(df_prod_downloadable) == 0:
                 logger.debug("no session available wait a bit")
-                time.sleep(5)
+                time.sleep(5) # no session available wait a bit
                 continue
             errors_per_account = defaultdict(int)
 
@@ -1196,6 +1195,104 @@ def download_list_product_multithread_v3(
     return df2
 
 
+def format_active_sessions(active_s3_sessions_status):
+    """
+    Compact representation of S3 session usage.
+
+    Example:
+    antoine:[XX..] alexis:[....]
+    """
+    chunks = []
+
+    for login, sessions in active_s3_sessions_status.items():
+
+        # shorter login display
+        short_login = login.split("@")[0]
+
+        session_str = "".join(
+            # "X" if sessions[k] else "."
+            "●" if sessions[k] else "○"
+            for k in sorted(sessions)
+        )
+
+        chunks.append(f"{short_login}:[{session_str}]")
+
+    return " ".join(chunks)
+
+
+def process_completed_futures(done,future_to_info,df2,pbar,all_speeds,all_elapsed_time,all_total_mb,cpt,errors_per_account,blacklist,active_s3_sessions_status):
+    # 3) Handle completed downloads
+    for future in done:
+        info = future_to_info.pop(future, {})
+        safename_base = info.get("safename", "unknown")
+        login_used = info.get("login", "unknown")
+        s3_session_id_used = info.get("s3_session_id","unknown")
+        # release the session+account
+        active_s3_sessions_status = release_s3_session_after_usage(active_s3_sessions_status,login=login_used,
+                                    session_id=s3_session_id_used)
+        try:
+            # process result
+            (
+                speed,
+                elapsed_time,
+                total_mb,
+                status_meaning,
+                safename_base,
+            ) = future.result()
+        except Exception:
+
+            logger.error(
+                "Unhandled exception for %s: %s",
+                safename_base,
+                traceback.format_exc(),
+            )
+            df2.loc[(df2["safe"] == safename_base), "status"] = -1
+            pbar.update(1)
+            continue
+        # no more semaphore session file on disk, everything is in memory with thread lock
+        # it means that a given group of account cannot be used in multipe process at the same time
+        # logger.debug("remove session semaphore for %s", login_used)
+        # remove_semaphore_session_file(
+        #     session_dir=conf["active_session_directory"],
+        #     safename=safename_base,
+        #     login=login_used,
+        # )
+
+        # except KeyboardInterrupt:
+        #     cpt["interrupted"] += 1
+        #     raise ("keyboard interrupt")
+        # except:
+        #     logger.error("traceback : %s", traceback.format_exc())
+        #     speed = np.nan
+        #     status_meaning = "DownloadError"
+        if status_meaning == "OK" or status_meaning == "Downloaded":
+            df2.loc[(df2["safe"] == safename_base), "status"] = 1
+            all_speeds.append(speed)
+            all_elapsed_time.append(elapsed_time)
+            all_total_mb.append(total_mb)
+            cpt["successful_download"] += 1
+        else:
+            df2.loc[(df2["safe"] == safename_base), "status"] = -1
+            errors_per_account[login_used] += 1
+            logger.info(
+                "error found for %s meaning %s", login_used, status_meaning
+            )
+            # df2["status"][df2["safe"] == safename_base] = -1 # download in error
+        # if retries[safename_base] > MAX_RETRIES:
+        # df2.loc[(df2["safe"] == safename_base),"status"] = -1
+        cpt["status_%s" % status_meaning] += 1
+
+        pbar.update(1)
+
+        # except Exception as e:
+        #     # handle error
+        #     print("Download failed:", e)
+    for acco in errors_per_account:
+        if errors_per_account[acco] >= MAX_SESSION_PER_ACCOUNT:
+            blacklist.append(acco)
+            logger.info("%s black listed for next loops", acco)
+    return done,future_to_info,df2,pbar,all_speeds,all_elapsed_time,all_total_mb,cpt,errors_per_account,blacklist,active_s3_sessions_status
+
 def download_list_product_multithread_v4(
     inputdf,
     outputdir,
@@ -1209,6 +1306,17 @@ def download_list_product_multithread_v4(
       and token semaphore files but using S3 endpoint to download each product
     In this method is working for a group of account with one or many account.
     Each account can run 4 parallel sessions.
+    step 1: filter the dataframe containing the raw list of products to download -> remove duplicate and remove products already downloaded
+    step 2: create multiple threads to download in parallel (depends on number of account and sessions per account)
+    step 3: loop until all the products are treated
+    step 3.1: get an account (i.e. S3 credentials) for which one session is free/available for download
+    step 3.2: submit future downloads up to the current limit of available sessions 
+    step 3.3: wait for the first download thread/session to be finished
+    step 3.4: clean lock on the session to free the session
+    step 4: security lock cleaning (to avoid any orphan busy sessions at the end of the process)
+    step 5: print out the download speed and elapsed times.
+
+
 
     Parameters
     ----------
@@ -1223,13 +1331,29 @@ def download_list_product_multithread_v4(
     -------
         df2 (pd.DataFrame):
     """
+    conf = get_conf(path_config_file=cdsodatacli_conf_file)
+    # initialize a dict to report for the status of s3 sessions involved in the download
+    # note: it suppose a given group of logins is not used in multiple python-process at the same time
+    active_s3_sessions_status = {}
+    for account in conf[account_group]:
+            if isinstance(account, str):
+                account_tmp = account
+            elif isinstance(account, dict):
+                account_tmp = list(account)[0]
+            else:
+                raise ValueError(
+                    f"Unexpected format for account {account} in group {account_group}"
+                )
+            active_s3_sessions_status[account_tmp] = {
+                key: False for key in range(MAX_SESSION_PER_ACCOUNT)
+}
     assert len(inputdf["S3Path"]) == len(inputdf["safename"])
     if "status" not in inputdf.columns:
         inputdf["status"] = np.zeros(len(inputdf["safename"]))
     logger.info("check_on_disk : %s", check_on_disk)
     cpt = defaultdict(int)
     cpt["products_in_initial_listing"] = len(inputdf["S3Path"])
-    conf = get_conf(path_config_file=cdsodatacli_conf_file)
+    
     if hideprogressbar:
         os.environ["DISABLE_TQDM"] = "True"
     all_speeds = []
@@ -1261,155 +1385,119 @@ def download_list_product_multithread_v4(
     # token = get_access_token(email=specific_account, password=account_passwd)
     with (ThreadPoolExecutor(max_workers=max_parallelism_seek) as executor,):
 
-        while (df2["status"] == 0).any():
+        # while (df2["status"].isin([0, 2])).any(): # while there are untreated or in-flight products
+        while running_futures or (df2["status"] == 0).any(): # while there are untreated or in-flight products
 
             while_loop += 1
             subset_to_treat = df2[df2["status"] == 0]
+            session_view = format_active_sessions(active_s3_sessions_status)
+            # pbar.set_description(
+            #     f"loop={while_loop} | OK={cpt['successful_download']} | ERR={sum(v for k,v in cpt.items() if k.startswith('status_') and k != 'status_OK' and k != 'status_Downloaded')} | todo={len(subset_to_treat)} | //={len(running_futures)}"
+            # )
             pbar.set_description(
-                f"loop={while_loop} | OK={cpt['successful_download']} | ERR={sum(v for k,v in cpt.items() if k.startswith('status_') and k != 'status_OK' and k != 'status_Downloaded')} | todo={len(subset_to_treat)} | //={len(running_futures)}"
-            )
-            if len(subset_to_treat) == 0:
-                logger.info(
-                    "All the products have been treated (success or error).Nothing to do, exiting loop"
+                f"loop={while_loop} "
+                f"| OK={cpt['successful_download']} "
+                f"| ERR={sum(v for k,v in cpt.items() if k.startswith('status_') and k != 'status_OK' and k != 'status_Downloaded')} "
+                f"| todo={len(subset_to_treat)} "
+                f"| //={len(running_futures)} "
+                f"| {session_view}"
                 )
-                break
-            # get the 4 download session information that can be submit in //
-            df_prod_downloadable = get_sessions_download_available(
-                conf,
-                subset_to_treat,
-                blacklist=blacklist,
-                logins_group=account_group,
-            )
-            urls_index = list(df_prod_downloadable.index)
-            logger.debug(
-                "while_loop : %s, prod. to treat: %s, %s",
-                while_loop,
-                len(subset_to_treat),
-                cpt,
-            )
-            # if len(df_prod_downloadable) == 0:
-            if len(df_prod_downloadable) == 0:
-                logger.debug("no session available wait a bit")
-                time.sleep(5)
-                continue
-            errors_per_account = defaultdict(int)
 
-            currently_downloading = set(
-                info["safename"] for info in future_to_info.values()
-            )
-            # 1) Submit as many futures as possible
-            while urls_index and len(running_futures) < max_parallelism_seek:
-                url_one_index = urls_index.pop(0)
-
-                safename_base = df_prod_downloadable["safe"].loc[url_one_index]
-                logintobeused = df_prod_downloadable["login"].loc[url_one_index]
-                assert isinstance(safename_base, str)
-                if safename_base in currently_downloading:
-                    logger.debug("skipping %s already being downloaded", safename_base)
+            if len(subset_to_treat)>0: # submit part
+                df_products_ready_for_download,active_s3_sessions_status = get_sessions_download_available_s3(conf=conf,
+                                                active_s3_sessions_status=active_s3_sessions_status,
+                                                subset_to_treat= subset_to_treat,
+                                                    blacklist=blacklist, logins_group=account_group)
+            
+                urls_index = list(df_products_ready_for_download.index)
+                logger.debug(
+                    "while_loop : %s, prod. to treat: %s, %s",
+                    while_loop,
+                    len(subset_to_treat),
+                    cpt,
+                )
+                # if len(df_prod_downloadable) == 0:
+                if len(df_products_ready_for_download) == 0:
+                    logger.debug("no session available wait a bit")
+                    time.sleep(5)
                     continue
+                errors_per_account = defaultdict(int)
 
-                header = df_prod_downloadable["header"].loc[url_one_index]
-                output_path = df_prod_downloadable["output_path"].loc[url_one_index]
-                s3path = df_prod_downloadable["S3Path"].loc[url_one_index]
+                # currently_downloading = set(
+                #     info["safename"] for info in future_to_info.values()
+                # )
+                # 1) Submit as many futures as possible
+                # while urls_index and len(running_futures) < max_parallelism_seek:
+                # what constraint the number of submited download is not the max_parallelism but the number of
+                # actual product ready for download depending on number of free S3 sessions
+                while urls_index and len(running_futures) < len(df_products_ready_for_download["safe"]):  
+                    url_one_index = urls_index.pop(0)
 
-                future = executor.submit(
-                    cds_s3_download_one_product,
-                    s3path,
-                    header,
-                    output_path,
-                    conf=conf,
-                )
-                future_to_info[future] = {
-                    "safename": safename_base,
-                    "login": logintobeused,
-                    # "semaphore_token_file": path_semaphore_token,
-                }
-                currently_downloading.add(safename_base)  # mettre à jour immédiatement
-                # retries[safename_base] += 1
-                running_futures.add(future)
-            # small check to know what is the maximum download parallelism we can reach
-            if len(running_futures) > max_parallel_download:
-                max_parallel_download = len(running_futures)
-            # 2) Wait for at least one download to finish
+                    safename_base = df_products_ready_for_download["safe"].loc[url_one_index]
+                    logintobeused = df_products_ready_for_download["login"].loc[url_one_index]
+                    s3_session_id = df_products_ready_for_download['s3_session'].loc[url_one_index] # 0 1 2 or 3
+                    assert isinstance(safename_base, str)
+                    # if safename_base in currently_downloading:
+                        # logger.debug("skipping %s already being downloaded", safename_base)
+                        # active_s3_sessions_status = release_s3_session_after_usage(
+                        #     active_s3_sessions_status,
+                        #     login=logintobeused,
+                        #     session_id=s3_session_id,
+                        # )
+                        # continue
+
+                    # header = df_prod_downloadable["header"].loc[url_one_index]
+                    output_path = df_products_ready_for_download["output_path"].loc[url_one_index]
+                    s3path = df_products_ready_for_download["S3Path"].loc[url_one_index]
+                    s3_credentials= {
+                        's3-access-key':df_products_ready_for_download['s3_access_key'].loc[url_one_index],
+                        's3-secret':df_products_ready_for_download['s3_secret'].loc[url_one_index], 
+                                    }
+                    future = executor.submit(
+                        cds_s3_download_one_product,
+                        s3path,
+                        s3_credentials,
+                        output_path,
+                        conf=conf,
+                    )
+                    # update df2 status column to reflect the product that are being currently downloaded
+                    df2.loc[df2["safe"] == safename_base, "status"] = 2# in flight
+                    future_to_info[future] = {
+                        "safename": safename_base,
+                        "login": logintobeused,
+                        "s3_session_id": s3_session_id,
+                        # "semaphore_token_file": path_semaphore_token,
+                    }
+                    # currently_downloading.add(safename_base)  # mettre à jour immédiatement
+                    # retries[safename_base] += 1
+                    running_futures.add(future)
+                # small check to know what is the maximum download parallelism we can reach
+                # if len(running_futures) > max_parallel_download:
+                #     max_parallel_download = len(running_futures)
+                # 2) Wait for at least one download to finish
+
+            # at each loop wait for at least one download to finish and process completed (can have multiple at the same time)
             done, running_futures = wait(
                 running_futures, timeout=None, return_when=FIRST_COMPLETED
             )
 
-            # 3) Handle completed downloads
-            for future in done:
-                info = future_to_info.pop(future, {})
-                safename_base = info.get("safename", "unknown")
-                login_used = info.get("login", "unknown")
-                try:
-                    # process result
-                    (
-                        speed,
-                        elapsed_time,
-                        total_mb,
-                        status_meaning,
-                        safename_base,
-                    ) = future.result()
-                except Exception:
-
-                    logger.error(
-                        "Unhandled exception for %s: %s",
-                        safename_base,
-                        traceback.format_exc(),
-                    )
-                    df2.loc[(df2["safe"] == safename_base), "status"] = -1
-                    pbar.update(1)
-                    continue
-
-                logger.debug("remove session semaphore for %s", login_used)
-                remove_semaphore_session_file(
-                    session_dir=conf["active_session_directory"],
-                    safename=safename_base,
-                    login=login_used,
-                )
-
-                # except KeyboardInterrupt:
-                #     cpt["interrupted"] += 1
-                #     raise ("keyboard interrupt")
-                # except:
-                #     logger.error("traceback : %s", traceback.format_exc())
-                #     speed = np.nan
-                #     status_meaning = "DownloadError"
-                if status_meaning == "OK" or status_meaning == "Downloaded":
-                    df2.loc[(df2["safe"] == safename_base), "status"] = 1
-                    all_speeds.append(speed)
-                    all_elapsed_time.append(elapsed_time)
-                    all_total_mb.append(total_mb)
-                    cpt["successful_download"] += 1
-                else:
-                    df2.loc[(df2["safe"] == safename_base), "status"] = -1
-                    errors_per_account[login_used] += 1
-                    logger.info(
-                        "error found for %s meaning %s", login_used, status_meaning
-                    )
-                    # df2["status"][df2["safe"] == safename_base] = -1 # download in error
-                # if retries[safename_base] > MAX_RETRIES:
-                # df2.loc[(df2["safe"] == safename_base),"status"] = -1
-                cpt["status_%s" % status_meaning] += 1
-
-                pbar.update(1)
-
-                # except Exception as e:
-                #     # handle error
-                #     print("Download failed:", e)
-            for acco in errors_per_account:
-                if errors_per_account[acco] >= MAX_SESSION_PER_ACCOUNT:
-                    blacklist.append(acco)
-                    logger.info("%s black listed for next loops", acco)
+            # process completed futures here
+            done,future_to_info,df2,pbar,all_speeds,all_elapsed_time,all_total_mb\
+                ,cpt,errors_per_account,blacklist,active_s3_sessions_status = process_completed_futures(done,
+                future_to_info,df2,pbar,all_speeds,all_elapsed_time,
+                all_total_mb,cpt,errors_per_account,blacklist,active_s3_sessions_status)
     elapsed_time = time.time() - t_start_download
     logger.info("download over in %f seconds", elapsed_time)
     logger.info("counter: %s", cpt)
     logger.info("maximum parallelism reached : %i", max_parallel_download)
     # safety remove active session, all reamining because of error
-    remove_semaphore_session_file(
-        session_dir=conf["active_session_directory"],
-        safename=None,
-        login=None,
-    )
+    # remove_semaphore_session_file(
+    #     session_dir=conf["active_session_directory"],
+    #     safename=None,
+    #     login=None,
+    # )
+
+
 
     if len(all_speeds) > 0:
         logger.info(
@@ -1429,6 +1517,11 @@ def download_list_product_multithread_v4(
             np.sum(all_total_mb) / 1024,
             np.mean(all_total_mb) / 1024,
         )
+
+    # check that all sessions are inactive at the end of download
+    for login in active_s3_sessions_status:
+        for session in active_s3_sessions_status[login]:
+            assert active_s3_sessions_status[login][session] is False
     return df2
 
 
