@@ -84,7 +84,7 @@ def get_a_free_account(counts, blacklist=None):
 
 
 def get_a_free_s3_session(
-    active_s3_sessions_status, conf, account_group, blacklist=None
+    active_s3_sessions_status, conf, account_group, blacklist
 ):
     """
     there are only 2 methods that interact with active_s3_sessions_status memory variable: this one and release_s3_session_after_usage()
@@ -93,7 +93,7 @@ def get_a_free_s3_session(
         active_s3_sessions_status (dict):
         conf (dict): cdsodatacli configuration
         account_group (str): name of the group of logins
-        blacklist (list): [optional] list of logins temporarily black listed for downloads
+        blacklist (list):  list of logins temporarily black listed for downloads, can be empty
 
     Returns:
         active_s3_sessions_status (dict): updated
@@ -330,7 +330,7 @@ def get_sessions_download_available_s3(
     conf,
     active_s3_sessions_status,
     subset_to_treat,
-    blacklist=None,
+    blacklist,
     logins_group="logins",
 ):
     """
@@ -342,7 +342,7 @@ def get_sessions_download_available_s3(
         conf (dict) configuration dictionary of cdsodatacli package
         active_s3_sessions_status (dict): login:session_id(int):False->inactive True>-active (set to inactive at begining of a download)
         subset_to_treat (pandas.DatFrame)
-        blacklist (list): list of account not usable [default=None]
+        blacklist (list): list of account not usable
         logins_group (str): name of the group of CDSE accounts to use (can contain multiple accounts, it depends on the localconfig.yml)
 
 

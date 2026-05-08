@@ -970,7 +970,10 @@ def download_list_product_multithread_v3(
     -------
         df2 (pd.DataFrame):
     """
-
+    warnings.warn(
+    "download_list_product_multithread_v3() is deprecated and will be removed in a future version. please use download_list_product_multithread_v4",
+    DeprecationWarning
+    )
     assert len(inputdf["id"]) == len(inputdf["safename"])
     if "status" not in inputdf.columns:
         inputdf["status"] = np.zeros(len(inputdf["safename"]))
