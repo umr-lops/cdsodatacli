@@ -3,7 +3,6 @@ this script is now deprecated since S3 backend download is using long term S3 cr
 
 """
 
-
 import boto3
 import requests
 from cdsodatacli.fetch_access_token import get_bearer_access_token

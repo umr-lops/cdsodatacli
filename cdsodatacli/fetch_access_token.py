@@ -15,8 +15,7 @@ _token_cache_lock = threading.Lock()  # protect concurrent access from threads
 logger = logging.getLogger(__name__)
 
 
-
-def get_a_login_from_conf_file(conf,account_group):
+def get_a_login_from_conf_file(conf, account_group):
     if isinstance(conf[account_group], list):
         login = random.choice(
             [list(d.keys())[0] for d in conf[account_group] if isinstance(d, dict)]
@@ -30,7 +29,8 @@ def get_a_login_from_conf_file(conf,account_group):
         )
     return login
 
-def get_a_credentials_from_conf_file(conf,account_group,login):
+
+def get_a_credentials_from_conf_file(conf, account_group, login):
     """
     Arguments:
         conf (dict):
@@ -42,14 +42,15 @@ def get_a_credentials_from_conf_file(conf,account_group,login):
     """
     if isinstance(conf[account_group], list):
         idx = next(i for i, d in enumerate(conf[account_group]) if login in d)
-        credentials = conf[account_group][idx][login]#['cdse-psswd']
+        credentials = conf[account_group][idx][login]  # ['cdse-psswd']
     elif isinstance(conf[account_group], dict):
-        credentials = conf[account_group][login]#['cdse-psswd']
+        credentials = conf[account_group][login]  # ['cdse-psswd']
     else:
         raise ValueError(
             f"Unexpected format for account group {account_group} in config file"
         )
     return credentials
+
 
 def get_bearer_access_token(
     conf, specific_account=None, specific_psswd=None, account_group="logins"
@@ -73,13 +74,15 @@ def get_bearer_access_token(
         login (str): account used
     """
     if specific_account is None:
-        get_a_login_from_conf_file(conf=conf,account_group=account_group)
+        get_a_login_from_conf_file(conf=conf, account_group=account_group)
     else:
         login = specific_account
 
     if specific_psswd is None:
-        credentials = get_a_credentials_from_conf_file(conf=conf,account_group=account_group,login=login)
-        passwd = credentials['cdse-psswd']
+        credentials = get_a_credentials_from_conf_file(
+            conf=conf, account_group=account_group, login=login
+        )
+        passwd = credentials["cdse-psswd"]
     else:
         passwd = specific_psswd
     logger.debug(
@@ -138,11 +141,12 @@ def get_bearer_access_token(
                 seconds=MAX_VALIDITY_ACCESS_TOKEN
             )
             ACTIVE_ACCESS_TOKEN[logintest] = [
-                entry for entry in ACTIVE_ACCESS_TOKEN[logintest]
+                entry
+                for entry in ACTIVE_ACCESS_TOKEN[logintest]
                 if entry["access-token-creation-date"] > cutoff
             ]
             if not ACTIVE_ACCESS_TOKEN[logintest]:
-                logger.debug('clean active access token for: %s',logintest)
+                logger.debug("clean active access token for: %s", logintest)
                 del ACTIVE_ACCESS_TOKEN[logintest]
 
     return token, date_generation, login
