@@ -83,9 +83,7 @@ def get_a_free_account(counts, blacklist=None):
     return candidate, counts
 
 
-def get_a_free_s3_session(
-    active_s3_sessions_status, conf, account_group, blacklist
-):
+def get_a_free_s3_session(active_s3_sessions_status, conf, account_group, blacklist):
     """
     there are only 2 methods that interact with active_s3_sessions_status memory variable: this one and release_s3_session_after_usage()
 
