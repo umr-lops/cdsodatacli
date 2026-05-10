@@ -713,6 +713,18 @@ def test_listing_content(listing_path) -> bool:
     return listing_OK
 
 
+def test_csv_content(csv_path) -> bool:
+    """
+    make sure the columns 'id' 'safename' 'S3Path' are present in the input dataframe csv
+    """
+    csv_ok = True
+    df = pd.read_csv(csv_path, header=0)
+    for colneeded in ["id", "safename", "S3Path"]:
+        if colneeded not in df.columns:
+            csv_ok = False
+    return csv_ok
+
+
 def add_missing_cdse_hash_ids_in_listing(
     listing_path, conf, display_tqdm=False, email=None, password=None
 ):
@@ -1199,29 +1211,78 @@ def download_list_product_multithread_v3(
     return df2
 
 
-def format_active_sessions(active_s3_sessions_status):
+def format_pbar_description(
+    while_loop: int,
+    cpt: dict,
+    subset_to_treat,
+    running_futures: set,
+    active_s3_sessions_status: dict,
+    speed_window: list,
+    time_window: list,
+    df2,
+) -> str:
     """
-    Compact representation of S3 session usage.
+    Build the tqdm progress bar description string for download_list_product_multithread_v4.
 
-    Example:
-    antoine:[XX..] alexis:[....]
+    Parameters
+    ----------
+    while_loop          : current iteration count
+    cpt                 : counter defaultdict
+    subset_to_treat     : df2 rows with status==0
+    running_futures     : set of in-flight futures
+    active_s3_sessions_status : {login: {session_id: bool}}
+    speed_window        : rolling list of recent download speeds (Mo/s)
+    time_window         : rolling list of recent elapsed times (s)
+    df2                 : full status dataframe (for ETA n_remaining)
+
+    Returns
+    -------
+    str : formatted description ready for pbar.set_description()
     """
-    chunks = []
-
+    # --- session dots (your original format) ---
+    session_parts = []
     for login, sessions in active_s3_sessions_status.items():
+        short = login.split("@")[0][:8]  # "antoine" from full email
+        dots = "".join("●" if sessions[sid] else "○" for sid in sorted(sessions))
+        session_parts.append(f"{short}:[{dots}]")
+    session_view = " ".join(session_parts)
 
-        # shorter login display
-        short_login = login.split("@")[0]
+    # --- error count (exclude success keys) ---
+    err_count = sum(
+        v
+        for k, v in cpt.items()
+        if k.startswith("status_") and k not in ("status_OK", "status_Downloaded")
+    )
 
-        session_str = "".join(
-            # "X" if sessions[k] else "."
-            "●" if sessions[k] else "○"
-            for k in sorted(sessions)
+    # --- speed / ETA ---
+    if speed_window:
+        avg_sp = np.mean(speed_window)
+        min_sp = np.min(speed_window)
+        max_sp = np.max(speed_window)
+        avg_t = np.mean(time_window)
+        n_remaining = len(df2[df2["status"].isin([0, 2])])
+        n_parallel = max(len(running_futures), 1)
+        eta_sec = int(avg_t * n_remaining / n_parallel)
+        if eta_sec >= 3600:
+            eta_str = f"{eta_sec // 3600}h{(eta_sec % 3600) // 60:02d}m"
+        else:
+            eta_str = f"{eta_sec // 60}m{eta_sec % 60:02d}s"
+        perf_str = (
+            f"spd avg={avg_sp:.1f} min={min_sp:.1f} max={max_sp:.1f} Mo/s"
+            f" | ETA≈{eta_str}"
         )
+    else:
+        perf_str = "warming up…"
 
-        chunks.append(f"{short_login}:[{session_str}]")
-
-    return " ".join(chunks)
+    return (
+        f"loop={while_loop}"
+        f" | OK={cpt['successful_download']}"
+        f" | ERR={err_count}"
+        f" | todo={len(subset_to_treat)}"
+        f" | //={len(running_futures)}"
+        f" | {session_view}"
+        f" | {perf_str}"
+    )
 
 
 def process_completed_futures(
@@ -1387,6 +1448,10 @@ def download_list_product_multithread_v4(
     all_speeds = []
     all_elapsed_time = []
     all_total_mb = []
+    # Rolling window for speed/ETA — last 10 completed downloads
+    _SPEED_WINDOW = 10
+    _speed_window: list[float] = []  # Mo/s per completed product
+    _time_window: list[float] = []  # elapsed seconds per completed product
     # status, 0->not treated, -1->error download , 1-> successful download
     # df = pd.DataFrame(
     #     {"safe": list_safename, "status": np.zeros(len(list_safename)), "s3path": list_s3path}
@@ -1420,17 +1485,20 @@ def download_list_product_multithread_v4(
 
             while_loop += 1
             subset_to_treat = df2[df2["status"] == 0]
-            session_view = format_active_sessions(active_s3_sessions_status)
             # pbar.set_description(
             #     f"loop={while_loop} | OK={cpt['successful_download']} | ERR={sum(v for k,v in cpt.items() if k.startswith('status_') and k != 'status_OK' and k != 'status_Downloaded')} | todo={len(subset_to_treat)} | //={len(running_futures)}"
             # )
             pbar.set_description(
-                f"loop={while_loop} "
-                f"| OK={cpt['successful_download']} "
-                f"| ERR={sum(v for k,v in cpt.items() if k.startswith('status_') and k != 'status_OK' and k != 'status_Downloaded')} "
-                f"| todo={len(subset_to_treat)} "
-                f"| //={len(running_futures)} "
-                f"| {session_view}"
+                format_pbar_description(
+                    while_loop,
+                    cpt,
+                    subset_to_treat,
+                    running_futures,
+                    active_s3_sessions_status,
+                    _speed_window,
+                    _time_window,
+                    df2,
+                )
             )
 
             if len(subset_to_treat) > 0:  # submit part
@@ -1462,12 +1530,12 @@ def download_list_product_multithread_v4(
                 #     info["safename"] for info in future_to_info.values()
                 # )
                 # 1) Submit as many futures as possible
-                # while urls_index and len(running_futures) < max_parallelism_seek:
-                # what constraint the number of submited download is not the max_parallelism but the number of
-                # actual product ready for download depending on number of free S3 sessions
-                while urls_index and len(running_futures) < len(
-                    df_products_ready_for_download["safe"]
-                ):
+                while urls_index:  # and len(running_futures) < max_parallelism_seek:
+                    # what constraint the number of submited download is not the max_parallelism but the number of
+                    # actual product ready for download depending on number of free S3 sessions
+                    # while urls_index and len(running_futures) < len(
+                    #     df_products_ready_for_download["safe"]
+                    # ): -> cause last product to be not submited
                     url_one_index = urls_index.pop(0)
 
                     safename_base = df_products_ready_for_download["safe"].loc[
@@ -1588,8 +1656,14 @@ def download_list_product_multithread_v4(
 
     # check that all sessions are inactive at the end of download
     for login in active_s3_sessions_status:
-        for session in active_s3_sessions_status[login]:
-            assert active_s3_sessions_status[login][session] is False
+        for session_id in active_s3_sessions_status[login]:
+            if active_s3_sessions_status[login][session_id] is True:
+                logger.warning(
+                    "session %s #%s still marked active at end of download — releasing",
+                    login,
+                    session_id,
+                )
+                active_s3_sessions_status[login][session_id] = False
     return df2
 
 

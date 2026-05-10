@@ -148,7 +148,7 @@ def release_s3_session_after_usage(active_s3_sessions_status, login, session_id)
     """
     with _session_s3_lock:
         active_s3_sessions_status[login][session_id] = False
-        logger.info("release S3 session %s #%s", login, session_id)
+        logger.debug("release S3 session %s #%s", login, session_id)
 
     return active_s3_sessions_status
 

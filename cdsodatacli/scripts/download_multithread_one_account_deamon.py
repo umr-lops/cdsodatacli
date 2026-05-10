@@ -15,6 +15,7 @@ from cdsodatacli.download import (
     download_list_product_multithread_v3,
     download_list_product_multithread_v4,
     test_listing_content,
+    test_csv_content,
     add_missing_cdse_hash_ids_in_listing,
 )
 from cdsodatacli.utils import get_conf
@@ -108,8 +109,11 @@ def entrypoint():
         first_var = "id"
     else:
         first_var = "S3Path"
-    if test_listing_content(listing_path=listing):
-
+    if listing.endswith(".csv"):
+        test_format_input_ok = test_csv_content(listing)
+    else:
+        test_format_input_ok = test_listing_content(listing_path=listing)
+    if test_format_input_ok:
         inputdf = pd.read_csv(listing, delimiter=",")  # header is mandatory
     else:
         inputdf = add_missing_cdse_hash_ids_in_listing(listing_path=listing, conf=conf)
