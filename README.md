@@ -27,10 +27,33 @@ odata client for Copernicus Data Space catalog
 cp config.yml localconfig.yml
 ```
 
-- edit the localconfig.yml to set your own path for output directories and CDSE accounts
+- edit the localconfig.yml to set your own path for output directories and CDSE accounts (including S3 credentials)
 
 ```bash
  vi  localconfig.yml
+
+```
+
+content of the configuration file to adapt is typically like this:
+
+```yaml
+example_group_of_logins:
+  dummy-email@foobar.com:
+    cdse-psswd: a-passord
+    s3-access-key: a-s3-key
+    s3-secret: a-s3-secret
+URL_identity: https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token
+URL_download: https://zipper.dataspace.copernicus.eu/odata/v1/Products(%s)/$value
+spools:
+  default: "./my_spool"
+pre_spool: "./sentinel1_cdse_pre_spool"
+archives:
+  default: "./my_archive"
+test_default_output_directory: "./my_tests"
+s3_endpoint: "https://eodata.dataspace.copernicus.eu"
+s3_bucket: "eodata"
+s3_region: "default"
+list_sar_unit_private_data: []
 ```
 
 ### step 2: do a query on CDSE Odata API
