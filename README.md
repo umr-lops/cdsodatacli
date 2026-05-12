@@ -53,6 +53,46 @@ downloadFromCDS -h
 
 ```bash
 pip install -U cdsodatacli
+
+```
+
+## Project Structure
+
+```
+.
+├── assets
+│   └── images
+│       └── coverage.svg
+├── cdsodatacli              # Main package directory
+│   ├── __init__.py
+│   ├── config.yml          # Default configuration
+│   ├── download.py         # Download logic
+│   ├── example.py
+│   ├── fetch_access_token.py
+│   ├── localconfig.yml     # Local configuration (to be created by user)
+│   ├── product_parser.py
+│   ├── query.py            # Query logic
+│   ├── s3_path.py
+│   ├── s3_temporary_access_token.py
+│   ├── session.py
+│   ├── utils.py
+│   └── scripts             # Helper and utility scripts
+│       ├── check_curl_query_with_specific_account.py
+│       ├── convert_json_odata_to_txt_listing.py
+│       ├── fetch_product_S1_worldwide.py
+│       └── ...
+├── docs                    # Documentation source
+│   ├── examples
+│   └── usage.rst
+├── tests                   # Unit and integration tests
+│   ├── API_OData_status_code_tests.py
+│   ├── test_authentication.py
+│   └── ...
+├── ci                      # Continuous Integration configs
+├── cdsodatacli_apptainer.def
+├── Dockerfile
+├── pyproject.toml
+└── README.md
 ```
 
 ## 🛡 License

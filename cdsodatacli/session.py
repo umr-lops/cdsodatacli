@@ -93,8 +93,7 @@ def get_sessions_download_available_s3(
     This method should return the list of available sessions for a group of CDSE accounts
     contrarily to get_sessions_download_available() it use thread locked in memory variable to list active sessions
 
-    Arguments
-
+    Arguments:
         conf (dict) configuration dictionary of cdsodatacli package
         active_s3_sessions_status (dict): login:session_id(int):False->inactive True>-active (set to inactive at begining of a download)
         subset_to_treat (pandas.DatFrame)
@@ -102,8 +101,9 @@ def get_sessions_download_available_s3(
         logins_group (str): name of the group of CDSE accounts to use (can contain multiple accounts, it depends on the localconfig.yml)
 
 
-    Returns
-
+    Returns:
+        df_products_ready_for_download (pandas.DataFrame): with columns 's3_session', 'login', 'S3Path', 'output_path', 'safe', 's3_access_key', 's3_secret'
+        active_s3_sessions_status (dict): updated with the sessions that are now set to active
 
     """
     df_products_ready_for_download = pd.DataFrame()
