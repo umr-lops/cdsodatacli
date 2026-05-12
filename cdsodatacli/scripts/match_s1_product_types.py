@@ -84,18 +84,21 @@ def find_product_for_safe(
         datatake_hex = parts[7]  # e.g. 05F692
 
         # Normalise target type: pad to 4 chars with trailing underscore if needed
-        # so "GRDH" stays "GRDH", "SLC_" stays "SLC_", etc.
         type_token = (
             target_type.rstrip("_").ljust(4, "_")
             if len(target_type) < 4
             else target_type
         )
 
+        # ── FIX APPLIED HERE ────────────────────────────────────────────────
+        # Added 'not contains(Name,'_COG')' to exclude COG products from results
         query_filter = (
             f"startswith(Name,'{platform}') and "
             f"contains(Name,'_{type_token}') and "
-            f"contains(Name,'{datatake_hex}')"
+            f"contains(Name,'{datatake_hex}') and "
+            f"not contains(Name,'_COG')"
         )
+        # ─────────────────────────────────────────────────────────────────────
 
         params = {"$filter": query_filter, "$top": 50}
 

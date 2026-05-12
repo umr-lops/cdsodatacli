@@ -13,7 +13,7 @@
 # =============================================================================
 
 Bootstrap: docker
-From: python:3.12-slim
+From: python:3.14-slim
 
 %arguments
     # Accepted values: "production" | "development"
@@ -21,13 +21,13 @@ From: python:3.12-slim
 
 %labels
     Maintainer      cdsodatacli
-    Python          3.12
+    Python          3.14
     BuildStage      {{ BUILD_STAGE }}
 
 %environment
     export PYTHONUNBUFFERED=1
     export PATH="/opt/cdsodatacli/bin:$PATH"
-    export PYTHONPATH="/opt/cdsodatacli/lib/python3.12/site-packages:$PYTHONPATH"
+    export PYTHONPATH="/opt/cdsodatacli/lib/python3.14/site-packages:$PYTHONPATH"
 
 %files
     # Copy project files into the image at build time.

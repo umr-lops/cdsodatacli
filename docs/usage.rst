@@ -34,12 +34,12 @@ For a download with a given login/password, you can use the command line tool `d
 
 2. Multi-threaded download with multiple users/accounts
 -------------------------------------------------------
-For a multi-threaded download with multiple users/accounts, you can use the command line tool `downloadMultiThreadMultiUserV3`:
+For a multi-threaded download with multiple users/accounts, you can use the command line tool `downloadMultiThreadMultiUserS3`:
 
 .. code-block:: bash
 
-    downloadMultiThreadMultiUserV3 -h
-        usage: downloadMultiThreadMultiUserV3 [-h] [--verbose] [--forcedownload] [--logingroup LOGINGROUP] [--listing LISTING] --outputdir OUTPUTDIR [--cdsodatacli_conf_file CDSODATACLI_CONF_FILE]
+    downloadMultiThreadMultiUserS3 -h
+        usage: downloadMultiThreadMultiUserS3 [-h] [--verbose] [--forcedownload] [--logingroup LOGINGROUP] [--listing LISTING] --outputdir OUTPUTDIR [--cdsodatacli_conf_file CDSODATACLI_CONF_FILE]
                                             [--download-backend {zipper,s3endpoint}]
 
         download deamon CDSE
@@ -55,12 +55,11 @@ For a multi-threaded download with multiple users/accounts, you can use the comm
                                 pathwhere product will be stored
         --cdsodatacli_conf_file CDSODATACLI_CONF_FILE
                                 path to the cdsodatacli configuration file .yml [optional, default is localconfig.yml then config.yml]
-        --download-backend {zipper,s3endpoint}
-                                backend to use for downloading products, 'zipper' will use the legacy zipper API, 's3endpoint' will use direct S3 endpoint access (default: 's3endpoint')
 
 
-There are two download backends: "zipper" or "s3endpoint" available through `cdsodatacli`.
-The "s3endpoint" download backend is strongly recommended, it gives download speed up to 32 Mo/s while "zipper" is closer to
+There are two download backends on CDSE: "zipper" or "s3endpoint".
+ We decided to remove the "zipper" backend in `cdsodatacli` because S3 provides better performances.
+The "s3endpoint" download backend gives download speed up to 32 Mo/s while "zipper" is closer to 12 Mo/s in average.
 
 Here is a table of download speed to compare the 2 backends, on tests performed in 2026:
 
@@ -77,7 +76,7 @@ Here is a table of download speed to compare the 2 backends, on tests performed 
 +------------+------------+--------------------------------------+---------------------------+
 
 .. note::
-    5X faster downloads for S3!
+    5X faster downloads for S3 in some cases!
 
 In addition, with "s3endpoint" backend, the products are already uncompressed at the end of the download.
 

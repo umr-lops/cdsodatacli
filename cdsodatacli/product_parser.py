@@ -57,6 +57,39 @@ class ExplodeSAFE(object):
             self.cycle_number = None
             self.relative_orbit_number = None
 
+        elif basename_safe[0:2] == "S2":
+            # S2A_MSIL1C_20170105T013442_N0204_R031_T53NMJ_20170105T013443.SAFE
+            self.safename = basename_safe
+            splitted = self.safename.replace(".SAFE", "").split("_")
+            # splitted: ['S2A', 'MSIL1C', '20170105T013442', 'N0204', 'R031', 'T53NMJ', '20170105T013443']
+
+            self.satellite = splitted[0]  # S2A / S2B / S2C
+            self.sensor = "MultiSpectralImager"
+            self.mode = None
+            self.kind = None
+            self.polarisation = None
+
+            self.product = splitted[1]  # MSIL1C or MSIL2A
+            self.level = self.product[3:]  # L1C or L2A (safer than split("L")[1])
+
+            self.startdate = datetime.datetime.strptime(splitted[2], "%Y%m%dT%H%M%S")
+            self.enddate = self.startdate  # S2 products are snapshots, no end date
+
+            self.processing_baseline = splitted[3]  # N0204
+            self.relative_orbit_number = int(splitted[4][1:])  # R031 -> 31
+            self.tile = splitted[5]  # T53NMJ (includes the T prefix)
+
+            self.production_date = datetime.datetime.strptime(
+                splitted[6], "%Y%m%dT%H%M%S"
+            )  # product discriminator date
+
+            self.duration = 0  # snapshot, no meaningful duration
+            self.absolute_orbit_number = None
+            self.mission_data_take = None
+            self.product_id = splitted[6]  # discriminator used as unique id
+            self.cycle_number = None
+            self.production_status = "operational"
+
         elif basename_safe[0:2] == "S3":
             self.safename = basename_safe
             splitos = self.safename.split("_")

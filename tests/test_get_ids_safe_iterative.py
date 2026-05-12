@@ -47,6 +47,11 @@ def test_add_ids_to_listing_iterative_full_success(
                 "S1A_IW_GRDH_1SDV_20220503T000002",
             ],
             "id": ["uuid0", "uuid1", "uuid2"],
+            "S3Path": [
+                "Sentinel-1/SAR/GRD/2022/05/03/S1A_IW_GRDH_1SDV_20220503T000000.SAFE",
+                "Sentinel-1/SAR/GRD/2022/05/03/S1A_IW_GRDH_1SDV_20220503T000001.SAFE",
+                "Sentinel-1/SAR/GRD/2022/05/03/S1A_IW_GRDH_1SDV_20220503T000002.SAFE",
+            ],
         }
     )
 
@@ -59,7 +64,7 @@ def test_add_ids_to_listing_iterative_full_success(
         )
 
         assert os.path.exists(result_file)
-        df_out = pd.read_csv(result_file, names=["id", "safename"])
+        df_out = pd.read_csv(result_file, header=0)
         assert len(df_out) == 3
         assert set(df_out["id"]) == {"uuid0", "uuid1", "uuid2"}
 
@@ -77,11 +82,21 @@ def test_add_ids_to_listing_iterative_multi_step(sample_listing, tmp_path, sampl
                 "S1A_IW_GRDH_1SDV_20220503T000001",
             ],
             "id": ["uuid0", "uuid1"],
+            "S3Path": [
+                "Sentinel-1/SAR/GRD/2022/05/03/S1A_IW_GRDH_1SDV_20220503T000000.SAFE",
+                "Sentinel-1/SAR/GRD/2022/05/03/S1A_IW_GRDH_1SDV_20220503T000001.SAFE",
+            ],
         }
     )
     # 2nd call returns the last ID
     mock_response_2 = pd.DataFrame(
-        {"safename": ["S1A_IW_GRDH_1SDV_20220503T000002"], "id": ["uuid2"]}
+        {
+            "safename": ["S1A_IW_GRDH_1SDV_20220503T000002"],
+            "id": ["uuid2"],
+            "S3Path": [
+                "Sentinel-1/SAR/GRD/2022/05/03/S1A_IW_GRDH_1SDV_20220503T000002.SAFE"
+            ],
+        }
     )
 
     with patch(
@@ -93,7 +108,7 @@ def test_add_ids_to_listing_iterative_multi_step(sample_listing, tmp_path, sampl
             sample_listing, output_path, conf=sample_conf
         )
 
-        df_out = pd.read_csv(result_file, names=["id", "safename"])
+        df_out = pd.read_csv(result_file, header=0)
         assert len(df_out) == 3
         assert not df_out["id"].isna().any()
         assert mocked_api.call_count == 2
@@ -105,7 +120,7 @@ def test_add_ids_to_listing_no_progress_break(sample_listing, tmp_path, sample_c
     output_path = str(tmp_path / "break_output.csv")
 
     # API consistently returns nothing
-    empty_df = pd.DataFrame(columns=["safename", "id"])
+    empty_df = pd.DataFrame(columns=["safename", "id", "S3Path"])
 
     with patch(
         "cdsodatacli.download.add_missing_cdse_hash_ids_in_listing",
@@ -115,7 +130,7 @@ def test_add_ids_to_listing_no_progress_break(sample_listing, tmp_path, sample_c
             sample_listing, output_path, conf=sample_conf
         )
 
-        df_out = pd.read_csv(result_file, names=["id", "safename"])
+        df_out = pd.read_csv(result_file, header=0)
         # IDs should be NaN because nothing was found, but the script should have finished
         assert df_out["id"].isna().all()
 
@@ -140,6 +155,10 @@ def test_add_ids_to_listing_duplicates_in_api(sample_listing, tmp_path, sample_c
                 "S1A_IW_GRDH_1SDV_20220503T000000",
             ],
             "id": ["uuid0", "uuid0"],
+            "S3Path": [
+                "Sentinel-1/SAR/GRD/2022/05/03/S1A_IW_GRDH_1SDV_20220503T000000.SAFE",
+                "Sentinel-1/SAR/GRD/2022/05/03/S1A_IW_GRDH_1SDV_20220503T000000.SAFE",
+            ],
         }
     )
 
@@ -150,7 +169,7 @@ def test_add_ids_to_listing_duplicates_in_api(sample_listing, tmp_path, sample_c
         result_file = add_ids_to_listing_iterative(
             sample_listing, output_path, conf=sample_conf
         )
-        df_out = pd.read_csv(result_file, names=["id", "safename"])
+        df_out = pd.read_csv(result_file, header=0)
 
         # Should still correspond to input length (3) even if API was weird
         assert len(df_out) == 3
@@ -165,6 +184,9 @@ def test_add_ids_to_listing_with_email_password(sample_listing, tmp_path, sample
         {
             "safename": ["S1A_IW_GRDH_1SDV_20220503T000000"],
             "id": ["uuid0"],
+            "S3Path": [
+                "Sentinel-1/SAR/GRD/2022/05/03/S1A_IW_GRDH_1SDV_20220503T000000.SAFE"
+            ],
         }
     )
 
@@ -187,4 +209,4 @@ def test_add_ids_to_listing_with_email_password(sample_listing, tmp_path, sample
         call_kwargs = mocked_api.call_args
         assert call_kwargs.kwargs.get("email") == "user@example.com"
         assert call_kwargs.kwargs.get("password") == "secret"
-        assert "conf" in call_kwargs.kwargs
+        assert call_kwargs.kwargs.get("conf") == sample_conf

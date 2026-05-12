@@ -1,8 +1,15 @@
-logins:
-  - user1@emailadrress.fr: passwd1
-  - user2@emailadrress.fr: passwd2
 default_login:
   user1@emailadrress.fr: passwd1
+
+logins:
+  dummy-email@foobar.com:
+    cdse-psswd: passwd1
+    s3-access-key: a-s3-key
+    s3-secret: a-s3-secret
+  user2@emailadrress.fr:
+    cdse-psswd: passwd2
+    s3-access-key: s3-key2
+    s3-secret: s3-secret2
 URL_identity: https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token
 URL_download: https://zipper.dataspace.copernicus.eu/odata/v1/Products(%s)/$value
 spools:
@@ -11,13 +18,9 @@ pre_spool: "./sentinel1_cdse_pre_spool"
 archives:
   default: "./my_archive"
 test_default_output_directory: "./my_tests"
-# token_directory: "./CDSE_odata_token_access"
-active_session_directory: "./CDSE_odata_active_sessions"
-s3_access_key: None # prefered solution it to use temporary S3 access token generate on the fly
-s3_secret_key: None
 s3_endpoint: "https://eodata.dataspace.copernicus.eu"
 s3_bucket: "eodata"
 s3_region: "default"
 list_sar_unit_private_data:
-  []
-  #- S1E
+  - S1E
+  - S1F

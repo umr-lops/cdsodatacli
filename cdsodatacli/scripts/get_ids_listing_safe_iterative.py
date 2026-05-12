@@ -107,6 +107,7 @@ def add_ids_to_listing_iterative(
 ):
     """
     This method aim as a wrapper for add_missing_cdse_hash_ids_in_listing(),
+    adds 'id' 'safename' and 'S3Path' in a csv
     Sometimes (condition not clear for now, too many request?) some URLs/queries return error
     Then thanks to iterative method like this one, we can save a SAFE+ids listing to avoid redoing it
     Particularly interesting for batch processing, when restarts are needed.
@@ -118,7 +119,7 @@ def add_ids_to_listing_iterative(
     :param conf: dict configuration of the lib cdsodatacli [optional, default None -> use cdsodatacli default behavior]
 
     Return:
-        output_listing: str: listing containing lines SAFE+ID
+        output_listing: str: path of a csv file containing columns 'id' 'safename' and 'S3Path'
     """
     if output_listing is None:
         output_listing = input_listing + ".ids"
@@ -176,6 +177,9 @@ def add_ids_to_listing_iterative(
         if "id_ref" in df_target.columns:
             df_target["id"] = df_target["id"].fillna(df_target["id_ref"])
             df_target = df_target.drop(columns="id_ref")
+        if "S3Path_ref" in df_target.columns:
+            df_target["S3Path"] = df_target["S3Path"].fillna(df_target["S3Path_ref"])
+            df_target = df_target.drop(columns="S3Path_ref")
 
         # Préparation du listing pour la prochaine itération (ceux qui restent NaN)
         # dfmissing = df_target[(df_target["id"].isna() == True)]
@@ -211,7 +215,7 @@ def add_ids_to_listing_iterative(
             tempfile.gettempdir(),
             "tmp_safe_id_listing_cdsodatacli_probably_incomplet.txt",
         )
-        df_target[["id", "safename"]].to_csv(
+        df_target[["id", "safename", "S3Path"]].to_csv(
             tmplisting_safeid, header=False, index=False
         )
         logging.info("save incomplet retrieval SAFE+IDs : %s", tmplisting_safeid)
@@ -233,8 +237,8 @@ def add_ids_to_listing_iterative(
     # -------------------------------------------------
 
     os.makedirs(os.path.dirname(output_listing), exist_ok=True)
-    df_target = df_target.reindex(columns=["id", "safename"])
-    df_target.to_csv(output_listing, header=False, index=False)
+    df_target = df_target.reindex(columns=["id", "safename", "S3Path"])
+    df_target.to_csv(output_listing, header=True, index=False)
 
     try:
         os.chmod(output_listing, 0o0644)
@@ -252,9 +256,8 @@ def parse_args():
     parser.add_argument("--verbose", action="store_true", default=False)
     parser.add_argument(
         "--output-listing",
-        help="output listing where the SAFE+id will be written"
-        " [optional, default is input-listing+'.ids']",
-        required=False,
+        help="output path where the csv containing SAFE+id+S3Path will be written",
+        required=True,
     )
     parser.add_argument(
         "--input-listing",

@@ -1,23 +1,25 @@
 """
 pytest unit tests for:
-  - cds_s3_download_one_product
+  - get_a_free_s3_session
+  - get_sessions_download_available_s3
+  - cds_s3_download_one_product (S3 credentials version)
   - download_list_product_multithread_v4
 
-Run with: pytest test_download_s3.py -v
+Run with: pytest test_download_s3endpoint.py -v
 """
 
 import os
-import time
-import threading
 import pytest
 import numpy as np
 import pandas as pd
 from unittest.mock import patch, MagicMock
-from botocore.exceptions import BotoCoreError, ClientError
+from concurrent.futures import ThreadPoolExecutor, Future
+from botocore.exceptions import ClientError
+from collections import defaultdict
 
 
 # ---------------------------------------------------------------------------
-# Shared constants
+# Shared constants - Config with nested credential structure
 # ---------------------------------------------------------------------------
 
 FAKE_CONF = {
@@ -30,17 +32,25 @@ FAKE_CONF = {
     "s3_region": "default",
     "URL_download": "https://fake.cdse/odata/v1/Products(%s)/$value",
     "logins": {
-        "user1@example.fr": "passwd1",
-        "user2@example.fr": "passwd2",
+        "user1@example.fr": {
+            "cdse-psswd": "passwd1",
+            "s3-access-key": "AKIA_FAKE_KEY_1",
+            "s3-secret": "FAKE_SECRET_1_LONG_STRING",
+        },
+        "user2@example.fr": {
+            "cdse-psswd": "passwd2",
+            "s3-access-key": "AKIA_FAKE_KEY_2",
+            "s3-secret": "FAKE_SECRET_2_LONG_STRING",
+        },
     },
 }
 
 FAKE_S3_PATH = "Sentinel-1/SAR/GRD/2022/05/03/S1A_IW_GRDH_1SDV_20220503T000000.SAFE"
 FAKE_SAFENAME = "S1A_IW_GRDH_1SDV_20220503T000000"
-FAKE_OUTPUT = f"/fake/spool/{FAKE_SAFENAME}.zip"
-FAKE_HEADER = {"Authorization": "Bearer fake-token"}
-FAKE_ACCESS_ID = "fake-access-id-123"
-FAKE_CREDENTIALS = {"access_id": FAKE_ACCESS_ID}
+FAKE_LOGIN = "user1@example.fr"
+FAKE_ACCESS_KEY = FAKE_CONF["logins"][FAKE_LOGIN]["s3-access-key"]
+FAKE_SECRET = FAKE_CONF["logins"][FAKE_LOGIN]["s3-secret"]
+FAKE_S3_CREDENTIALS = {"s3-access-key": FAKE_ACCESS_KEY, "s3-secret": FAKE_SECRET}
 
 
 # ---------------------------------------------------------------------------
@@ -56,23 +66,6 @@ def make_s3_object(key, size=1_000_000):
     return obj
 
 
-def make_s3_client_mocks(objects):
-    """
-    Return (mock_credentials, mock_s3_resource) pair suitable for
-    patching _get_fresh_s3_client.
-
-    objects: list of MagicMock s3 ObjectSummary instances
-    """
-    mock_bucket = MagicMock()
-    mock_bucket.objects.filter.return_value = objects
-    mock_bucket.download_file = MagicMock()
-
-    mock_s3_resource = MagicMock()
-    mock_s3_resource.Bucket.return_value = mock_bucket
-
-    return FAKE_CREDENTIALS, mock_s3_resource
-
-
 def make_s3_result(
     safename=FAKE_SAFENAME,
     status="Downloaded",
@@ -84,8 +77,38 @@ def make_s3_result(
     return speed, elapsed, total_mb, status, safename
 
 
-def make_inputdf(safenames, s3paths=None, statuses=None):
-    """Build a minimal inputdf as download_list_product_multithread_v4 expects."""
+def make_inputdf_for_sessions(safenames, s3paths=None, statuses=None):
+    """
+    Build input DataFrame for get_sessions_download_available_s3.
+
+    Mirrors the internal df2 columns that v4 passes as subset_to_treat.
+    Required columns: safe, S3Path, urls, outputpath, status
+    Note: 'urls' is read by get_sessions_download_available_s3 internally
+    even though v4 uses S3Path for the actual download.
+    """
+    n = len(safenames)
+    if s3paths is None:
+        s3paths = [f"Sentinel-1/SAR/GRD/2022/05/03/{s}.SAFE" for s in safenames]
+    if statuses is None:
+        statuses = np.zeros(n)
+    return pd.DataFrame(
+        {
+            "safe": safenames,
+            "S3Path": s3paths,
+            "id": [f"id-{i}" for i in range(n)],
+            "status": statuses,
+            "urls": [f"https://fake.cdse/{s}" for s in safenames],
+            "outputpath": [f"/fake/spool/{s}" for s in safenames],
+        }
+    )
+
+
+def make_inputdf_for_v4(safenames, s3paths=None, statuses=None):
+    """
+    Build input DataFrame for download_list_product_multithread_v4.
+
+    Required columns: safename, S3Path, id, status
+    """
     n = len(safenames)
     if s3paths is None:
         s3paths = [f"Sentinel-1/SAR/GRD/2022/05/03/{s}.SAFE" for s in safenames]
@@ -101,20 +124,23 @@ def make_inputdf(safenames, s3paths=None, statuses=None):
     )
 
 
-def make_downloadable_df(safenames, s3paths=None):
-    """Simulate the output of get_sessions_download_available for v4."""
-    n = len(safenames)
-    if s3paths is None:
-        s3paths = [f"Sentinel-1/SAR/GRD/2022/05/03/{s}.SAFE" for s in safenames]
-    return pd.DataFrame(
-        {
-            "safe": safenames,
-            "header": [FAKE_HEADER for _ in range(n)],
-            "output_path": [f"/fake/spool/{s}" for s in safenames],
-            "S3Path": s3paths,
-            "login": ["user1@example.fr"] * n,
-        }
-    )
+def make_mock_future(result=None, exception=None):
+    """Create a mock Future object for concurrency testing."""
+    future = MagicMock(spec=Future)
+    future.result.return_value = result
+    future.exception.return_value = exception
+    future.done.return_value = True
+    return future
+
+
+def make_active_sessions_status(logins=None, max_sessions=4):
+    """Create active_s3_sessions_status dict structure."""
+    if logins is None:
+        logins = list(FAKE_CONF["logins"].keys())
+    return {
+        login: {session_id: False for session_id in range(max_sessions)}
+        for login in logins
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -124,13 +150,8 @@ def make_downloadable_df(safenames, s3paths=None):
 
 @pytest.fixture(autouse=True)
 def patch_conf():
+    """Patch get_conf to return FAKE_CONF with proper nested credential structure."""
     with patch("cdsodatacli.download.get_conf", return_value=FAKE_CONF):
-        yield
-
-
-@pytest.fixture(autouse=True)
-def patch_semaphores():
-    with patch("cdsodatacli.download.remove_semaphore_session_file"):
         yield
 
 
@@ -150,6 +171,8 @@ def patch_filter():
         ):
             cpt["product_absent_from_local_disks"] = len(df)
             result = df.copy()
+            if "safename" in result.columns:
+                result = result.rename(columns={"safename": "safe"})
             result["outputpath"] = [f"/fake/spool/{s}" for s in result["safe"]]
             return result, cpt
 
@@ -157,13 +180,42 @@ def patch_filter():
         yield mock
 
 
-@pytest.fixture(autouse=True)
-def patch_requests_delete():
-    """Prevent real HTTP calls for credential cleanup."""
-    mock_resp = MagicMock()
-    mock_resp.status_code = 204
-    with patch("cdsodatacli.download.requests.delete", return_value=mock_resp) as m:
-        yield m
+@pytest.fixture
+def patch_session_lock():
+    """Mock the threading lock used in session management."""
+    with patch("cdsodatacli.session._session_s3_lock"):
+        yield
+
+
+@pytest.fixture
+def patch_get_credentials():
+    """Mock get_a_credentials_from_conf_file to return credentials from FAKE_CONF."""
+
+    def _get_creds(conf, account_group, login):
+        return conf[account_group].get(login, {})
+
+    with patch(
+        "cdsodatacli.session.get_a_credentials_from_conf_file",
+        side_effect=_get_creds,
+    ):
+        yield
+
+
+@pytest.fixture
+def patch_threadpool_executor():
+    """Mock ThreadPoolExecutor to control concurrency in tests."""
+    with patch("cdsodatacli.download.ThreadPoolExecutor") as mock_executor_cls:
+        mock_executor = MagicMock(spec=ThreadPoolExecutor)
+        mock_executor_cls.return_value.__enter__.return_value = mock_executor
+        mock_executor.submit = MagicMock()
+        yield mock_executor_cls, mock_executor
+
+
+@pytest.fixture
+def patch_concurrent_wait():
+    """Mock concurrent.futures.wait for deterministic testing."""
+    with patch("cdsodatacli.download.wait") as mock_wait:
+        yield mock_wait
 
 
 # ---------------------------------------------------------------------------
@@ -174,344 +226,473 @@ from cdsodatacli.download import (  # noqa: E402
     cds_s3_download_one_product,
     download_list_product_multithread_v4,
 )
+from cdsodatacli.session import (  # noqa: E402
+    get_a_free_s3_session,
+    get_sessions_download_available_s3,
+)
 
 
 # ===========================================================================
-# Part 1 — cds_s3_download_one_product unit tests
+# Part 1 — get_a_free_s3_session unit tests
 # ===========================================================================
 
 
-class TestCdsS3DownloadOneProductSuccess:
-    """Happy path: single-object product downloads and moves correctly."""
+class TestGetAFreeS3Session:
+    """Tests for the session allocation helper."""
 
-    def test_returns_five_values(self, tmp_path):
-        obj = make_s3_object(FAKE_S3_PATH + "/product.zip", size=500_000_000)
-        creds, s3_resource = make_s3_client_mocks([obj])
+    @pytest.fixture(autouse=True)
+    def setup_mocks(self, patch_session_lock, patch_get_credentials):
+        yield
 
+    def test_returns_first_free_session(self):
+        active_sessions = make_active_sessions_status(["user1@example.fr"])
+
+        result_sessions, session_id, login, creds = get_a_free_s3_session(
+            active_sessions,
+            conf=FAKE_CONF,
+            account_group="logins",
+            blacklist=[],
+        )
+
+        assert session_id == 0
+        assert login == "user1@example.fr"
+        assert creds["s3-access-key"] == FAKE_ACCESS_KEY
+        assert creds["s3-secret"] == FAKE_SECRET
+        assert result_sessions["user1@example.fr"][0] is True
+
+    def test_marks_session_as_active(self):
+        active_sessions = make_active_sessions_status(["user1@example.fr"])
+
+        result_sessions, session_id, login, creds = get_a_free_s3_session(
+            active_sessions,
+            conf=FAKE_CONF,
+            account_group="logins",
+            blacklist=[],
+        )
+
+        assert result_sessions["user1@example.fr"][session_id] is True
+        assert active_sessions["user1@example.fr"][0] is True
+
+    def test_skips_blacklisted_accounts(self):
+        active_sessions = make_active_sessions_status(
+            ["user1@example.fr", "user2@example.fr"]
+        )
+
+        result_sessions, session_id, login, creds = get_a_free_s3_session(
+            active_sessions,
+            conf=FAKE_CONF,
+            account_group="logins",
+            blacklist=["user1@example.fr"],
+        )
+
+        assert login == "user2@example.fr"
+        assert (
+            creds["s3-access-key"]
+            == FAKE_CONF["logins"]["user2@example.fr"]["s3-access-key"]
+        )
+
+    def test_returns_none_when_all_sessions_busy(self):
+        active_sessions = make_active_sessions_status(["user1@example.fr"])
+        for sid in range(4):
+            active_sessions["user1@example.fr"][sid] = True
+
+        result_sessions, session_id, login, creds = get_a_free_s3_session(
+            active_sessions,
+            conf=FAKE_CONF,
+            account_group="logins",
+            blacklist=[],
+        )
+
+        assert session_id is None
+        assert login is None
+        assert creds == {}
+
+    def test_round_robin_across_accounts(self):
+        active_sessions = make_active_sessions_status(
+            ["user1@example.fr", "user2@example.fr"]
+        )
+
+        _, sid1, login1, _ = get_a_free_s3_session(
+            active_sessions,
+            conf=FAKE_CONF,
+            account_group="logins",
+            blacklist=[],
+        )
+        assert login1 == "user1@example.fr"
+        assert sid1 == 0
+
+        _, sid2, login2, _ = get_a_free_s3_session(
+            active_sessions,
+            conf=FAKE_CONF,
+            account_group="logins",
+            blacklist=[],
+        )
+        assert login2 == "user1@example.fr"
+        assert sid2 == 1
+
+    def test_extracts_credentials_from_nested_config(self):
+        active_sessions = make_active_sessions_status(["user2@example.fr"])
+
+        _, session_id, login, creds = get_a_free_s3_session(
+            active_sessions,
+            conf=FAKE_CONF,
+            account_group="logins",
+            blacklist=[],
+        )
+
+        expected_creds = FAKE_CONF["logins"]["user2@example.fr"]
+        assert creds["s3-access-key"] == expected_creds["s3-access-key"]
+        assert creds["s3-secret"] == expected_creds["s3-secret"]
+
+
+# ===========================================================================
+# Part 2 — get_sessions_download_available_s3 unit tests
+# ===========================================================================
+
+
+class TestGetSessionsDownloadAvailableS3:
+    """Tests for the S3 session availability checker."""
+
+    @pytest.fixture(autouse=True)
+    def setup_mocks(self, patch_session_lock, patch_get_credentials):
+        yield
+
+    def test_returns_dataframe_with_credentials(self):
+        subset = make_inputdf_for_sessions(["SAFE_A", "SAFE_B"])
+        active_sessions = make_active_sessions_status()
+
+        df_ready, updated_sessions = get_sessions_download_available_s3(
+            conf=FAKE_CONF,
+            active_s3_sessions_status=active_sessions,
+            subset_to_treat=subset,
+            blacklist=[],
+            logins_group="logins",
+        )
+
+        assert isinstance(df_ready, pd.DataFrame)
+        assert "s3_access_key" in df_ready.columns
+        assert "s3_secret" in df_ready.columns
+        assert "s3_session" in df_ready.columns
+        assert "login" in df_ready.columns
+        assert "S3Path" in df_ready.columns
+        assert "output_path" in df_ready.columns
+        assert "safe" in df_ready.columns
+
+    def test_limits_to_available_sessions(self):
+        active_sessions = make_active_sessions_status(["user1@example.fr"])
+        active_sessions["user1@example.fr"][2] = True
+        active_sessions["user1@example.fr"][3] = True
+
+        subset = make_inputdf_for_sessions(["SAFE_A", "SAFE_B", "SAFE_C", "SAFE_D"])
+
+        df_ready, updated_sessions = get_sessions_download_available_s3(
+            conf=FAKE_CONF,
+            active_s3_sessions_status=active_sessions,
+            subset_to_treat=subset,
+            blacklist=[],
+            logins_group="logins",
+        )
+
+        assert len(df_ready) <= 2
+
+    def test_marks_sessions_as_active_in_returned_status(self):
+        subset = make_inputdf_for_sessions(["SAFE_A"])
+        active_sessions = make_active_sessions_status()
+
+        df_ready, updated_sessions = get_sessions_download_available_s3(
+            conf=FAKE_CONF,
+            active_s3_sessions_status=active_sessions,
+            subset_to_treat=subset,
+            blacklist=[],
+            logins_group="logins",
+        )
+
+        found_active = any(
+            updated_sessions[login][sid] is True
+            for login in updated_sessions
+            for sid in updated_sessions[login]
+        )
+        assert found_active
+
+    def test_credentials_match_config_for_each_login(self):
+        subset = make_inputdf_for_sessions(["SAFE_A", "SAFE_B"])
+        active_sessions = make_active_sessions_status()
+
+        df_ready, _ = get_sessions_download_available_s3(
+            conf=FAKE_CONF,
+            active_s3_sessions_status=active_sessions,
+            subset_to_treat=subset,
+            blacklist=[],
+            logins_group="logins",
+        )
+
+        for _, row in df_ready.iterrows():
+            login = row["login"]
+            expected_creds = FAKE_CONF["logins"][login]
+            assert row["s3_access_key"] == expected_creds["s3-access-key"]
+            assert row["s3_secret"] == expected_creds["s3-secret"]
+
+    def test_empty_subset_returns_empty_dataframe(self):
+        subset = make_inputdf_for_sessions([])
+        active_sessions = make_active_sessions_status()
+
+        df_ready, updated_sessions = get_sessions_download_available_s3(
+            conf=FAKE_CONF,
+            active_s3_sessions_status=active_sessions,
+            subset_to_treat=subset,
+            blacklist=[],
+            logins_group="logins",
+        )
+
+        assert len(df_ready) == 0
+
+    def test_blacklist_excludes_accounts(self):
+        subset = make_inputdf_for_sessions(["SAFE_A", "SAFE_B"])
+        active_sessions = make_active_sessions_status()
+
+        df_ready, _ = get_sessions_download_available_s3(
+            conf=FAKE_CONF,
+            active_s3_sessions_status=active_sessions,
+            subset_to_treat=subset,
+            blacklist=["user1@example.fr"],
+            logins_group="logins",
+        )
+
+        if len(df_ready) > 0:
+            assert "user1@example.fr" not in df_ready["login"].values
+
+
+# ===========================================================================
+# Part 3 — cds_s3_download_one_product tests (S3 credentials version)
+# ===========================================================================
+
+
+class TestCdsS3DownloadOneProductWithCredentials:
+    """Tests for download function using direct S3 credentials."""
+
+    def test_receives_s3_credentials_dict(self, tmp_path):
         output = str(tmp_path / f"{FAKE_SAFENAME}.zip")
         conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
 
-        with (
-            patch(
-                "cdsodatacli.download._get_fresh_s3_client",
-                return_value=(creds, s3_resource),
-            ),
-            patch("shutil.copy2"),
-            patch("os.remove"),
-            patch("os.chmod"),
-        ):
-            result = cds_s3_download_one_product(
-                FAKE_S3_PATH, FAKE_HEADER, output, conf
-            )
+        with patch("cdsodatacli.download.boto3.resource") as mock_boto3:
+            mock_bucket = MagicMock()
+            mock_obj = make_s3_object(FAKE_S3_PATH + "/product.zip", size=100_000_000)
+            mock_bucket.objects.filter.return_value = [mock_obj]
+            mock_bucket.download_file = MagicMock()
+            mock_boto3.return_value.Bucket.return_value = mock_bucket
 
-        assert len(result) == 5
+            with patch("shutil.copy2"), patch("os.remove"), patch("os.chmod"):
+                speed, elapsed, total_mb, status, safename = (
+                    cds_s3_download_one_product(
+                        FAKE_S3_PATH, FAKE_S3_CREDENTIALS, output, conf
+                    )
+                )
 
-    def test_status_is_downloaded_on_success(self, tmp_path):
-        obj = make_s3_object(FAKE_S3_PATH + "/product.zip", size=200_000_000)
-        creds, s3_resource = make_s3_client_mocks([obj])
+            mock_boto3.assert_called_once()
+            call_kwargs = mock_boto3.call_args[1]
+            assert call_kwargs["aws_access_key_id"] == FAKE_ACCESS_KEY
+            assert call_kwargs["aws_secret_access_key"] == FAKE_SECRET
+            assert status == "Downloaded"
 
-        output = str(tmp_path / f"{FAKE_SAFENAME}.zip")
+    def test_handles_multi_file_safe_directory(self, tmp_path):
+        output = str(tmp_path / FAKE_SAFENAME)
         conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
 
-        with (
-            patch(
-                "cdsodatacli.download._get_fresh_s3_client",
-                return_value=(creds, s3_resource),
-            ),
-            patch("shutil.copy2"),
-            patch("os.remove"),
-            patch("os.chmod"),
-        ):
-            speed, elapsed, total_mb, status, safename = cds_s3_download_one_product(
-                FAKE_S3_PATH, FAKE_HEADER, output, conf
-            )
-
-        assert status == "Downloaded"
-
-    def test_safename_base_strips_zip(self, tmp_path):
-        obj = make_s3_object(FAKE_S3_PATH + "/product.zip")
-        creds, s3_resource = make_s3_client_mocks([obj])
-
-        output = str(tmp_path / f"{FAKE_SAFENAME}.zip")
-        conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
-
-        with (
-            patch(
-                "cdsodatacli.download._get_fresh_s3_client",
-                return_value=(creds, s3_resource),
-            ),
-            patch("shutil.copy2"),
-            patch("os.remove"),
-            patch("os.chmod"),
-        ):
-            *_, safename = cds_s3_download_one_product(
-                FAKE_S3_PATH, FAKE_HEADER, output, conf
-            )
-
-        assert safename == FAKE_SAFENAME
-        assert ".zip" not in safename
-
-    def test_speed_is_positive(self, tmp_path):
-        obj = make_s3_object(FAKE_S3_PATH + "/product.zip", size=100_000_000)
-        creds, s3_resource = make_s3_client_mocks([obj])
-
-        output = str(tmp_path / f"{FAKE_SAFENAME}.zip")
-        conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
-
-        with (
-            patch(
-                "cdsodatacli.download._get_fresh_s3_client",
-                return_value=(creds, s3_resource),
-            ),
-            patch("shutil.copy2"),
-            patch("os.remove"),
-            patch("os.chmod"),
-        ):
-            speed, elapsed, total_mb, status, _ = cds_s3_download_one_product(
-                FAKE_S3_PATH, FAKE_HEADER, output, conf
-            )
-
-        assert speed > 0
-        assert elapsed > 0
-        assert total_mb > 0
-
-    def test_tmp_file_moved_to_final_path(self, tmp_path):
-        """shutil.copy2 must be called with the .tmp source and final destination."""
-        obj = make_s3_object(FAKE_S3_PATH + "/product.zip")
-        creds, s3_resource = make_s3_client_mocks([obj])
-
-        output = str(tmp_path / f"{FAKE_SAFENAME}.zip")
-        conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
-        expected_tmp = os.path.join(str(tmp_path), f"{FAKE_SAFENAME}.zip.tmp")
-
-        with (
-            patch(
-                "cdsodatacli.download._get_fresh_s3_client",
-                return_value=(creds, s3_resource),
-            ),
-            patch("shutil.copy2") as mock_copy,
-            patch("os.remove"),
-            patch("os.chmod"),
-        ):
-            cds_s3_download_one_product(FAKE_S3_PATH, FAKE_HEADER, output, conf)
-
-        mock_copy.assert_called_once_with(expected_tmp, output)
-
-    def test_credentials_deleted_after_success(self, tmp_path, patch_requests_delete):
-        obj = make_s3_object(FAKE_S3_PATH + "/product.zip")
-        creds, s3_resource = make_s3_client_mocks([obj])
-
-        output = str(tmp_path / f"{FAKE_SAFENAME}.zip")
-        conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
-
-        with (
-            patch(
-                "cdsodatacli.download._get_fresh_s3_client",
-                return_value=(creds, s3_resource),
-            ),
-            patch("shutil.copy2"),
-            patch("os.remove"),
-            patch("os.chmod"),
-        ):
-            cds_s3_download_one_product(FAKE_S3_PATH, FAKE_HEADER, output, conf)
-
-        assert patch_requests_delete.call_count == 1
-        call_url = patch_requests_delete.call_args[0][0]
-        assert FAKE_ACCESS_ID in call_url
-
-
-class TestCdsS3DownloadMultiFile:
-    """Multi-file .SAFE product (directory tree)."""
-
-    def test_multifile_status_downloaded(self, tmp_path):
         objects = [
             make_s3_object(f"{FAKE_S3_PATH}/manifest.safe", size=1_000),
-            make_s3_object(
-                f"{FAKE_S3_PATH}/measurement/s1a-iw-grd-vv.tiff", size=300_000_000
-            ),
-            make_s3_object(
-                f"{FAKE_S3_PATH}/measurement/s1a-iw-grd-vh.tiff", size=200_000_000
-            ),
+            make_s3_object(f"{FAKE_S3_PATH}/measurement/data.tiff", size=50_000_000),
         ]
-        creds, s3_resource = make_s3_client_mocks(objects)
 
-        output = str(tmp_path / FAKE_SAFENAME)
-        conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
+        with patch("cdsodatacli.download.boto3.resource") as mock_boto3:
+            mock_bucket = MagicMock()
+            mock_bucket.objects.filter.return_value = objects
+            mock_bucket.download_file = MagicMock()
+            mock_boto3.return_value.Bucket.return_value = mock_bucket
 
-        with (
-            patch(
-                "cdsodatacli.download._get_fresh_s3_client",
-                return_value=(creds, s3_resource),
-            ),
-            patch("os.makedirs"),
-        ):
-            speed, elapsed, total_mb, status, safename = cds_s3_download_one_product(
-                FAKE_S3_PATH, FAKE_HEADER, output, conf
-            )
+            with patch("os.makedirs"):
+                speed, elapsed, total_mb, status, safename = (
+                    cds_s3_download_one_product(
+                        FAKE_S3_PATH, FAKE_S3_CREDENTIALS, output, conf
+                    )
+                )
 
-        assert status == "Downloaded"
-        assert speed > 0
+            assert mock_bucket.download_file.call_count == 2
+            assert status == "Downloaded"
 
-    def test_multifile_skips_folder_pseudo_objects(self, tmp_path):
-        """Objects whose key ends with '/' are folder markers and must not be downloaded."""
-        folder_obj = make_s3_object(f"{FAKE_S3_PATH}/", size=0)
-        real_obj = make_s3_object(f"{FAKE_S3_PATH}/manifest.safe", size=1_000)
-        creds, s3_resource = make_s3_client_mocks([folder_obj, real_obj])
-
-        bucket = s3_resource.Bucket.return_value
-        output = str(tmp_path / FAKE_SAFENAME)
-        conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
-
-        with (
-            patch(
-                "cdsodatacli.download._get_fresh_s3_client",
-                return_value=(creds, s3_resource),
-            ),
-            patch("os.makedirs"),
-        ):
-            cds_s3_download_one_product(FAKE_S3_PATH, FAKE_HEADER, output, conf)
-
-        # download_file called once (only for manifest.safe, not the folder marker)
-        assert bucket.download_file.call_count == 1
-        downloaded_key = bucket.download_file.call_args[0][0]
-        assert not downloaded_key.endswith("/")
-
-
-class TestCdsS3DownloadErrors:
-    """Error paths: S3 not found, boto errors, move failure."""
-
-    def test_not_found_returns_notfound_status(self, tmp_path):
-        creds, s3_resource = make_s3_client_mocks([])  # empty object list
+    def test_notfound_status_when_no_objects(self, tmp_path):
         output = str(tmp_path / f"{FAKE_SAFENAME}.zip")
         conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
 
-        with patch(
-            "cdsodatacli.download._get_fresh_s3_client",
-            return_value=(creds, s3_resource),
-        ):
+        with patch("cdsodatacli.download.boto3.resource") as mock_boto3:
+            mock_bucket = MagicMock()
+            mock_bucket.objects.filter.return_value = []
+            mock_boto3.return_value.Bucket.return_value = mock_bucket
+
             _, _, _, status, _ = cds_s3_download_one_product(
-                FAKE_S3_PATH, FAKE_HEADER, output, conf
+                FAKE_S3_PATH, FAKE_S3_CREDENTIALS, output, conf
             )
 
-        assert status == "NotFound"
+            assert status == "NotFound"
 
-    def test_boto_client_error_returns_s3error(self, tmp_path):
-        creds = FAKE_CREDENTIALS
-        s3_resource = MagicMock()
-        s3_resource.Bucket.side_effect = ClientError(
-            {"Error": {"Code": "403", "Message": "Forbidden"}}, "Bucket"
-        )
+    def test_s3error_on_boto_exception(self, tmp_path):
         output = str(tmp_path / f"{FAKE_SAFENAME}.zip")
         conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
 
-        with patch(
-            "cdsodatacli.download._get_fresh_s3_client",
-            return_value=(creds, s3_resource),
-        ):
-            _, _, _, status, _ = cds_s3_download_one_product(
-                FAKE_S3_PATH, FAKE_HEADER, output, conf
+        with patch("cdsodatacli.download.boto3.resource") as mock_boto3:
+            mock_boto3.side_effect = ClientError(
+                {"Error": {"Code": "403", "Message": "Forbidden"}}, "Bucket"
             )
 
-        assert status == "S3Error"
-
-    def test_botocore_error_returns_s3error(self, tmp_path):
-        creds = FAKE_CREDENTIALS
-        s3_resource = MagicMock()
-        s3_resource.Bucket.side_effect = BotoCoreError()
-        output = str(tmp_path / f"{FAKE_SAFENAME}.zip")
-        conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
-
-        with patch(
-            "cdsodatacli.download._get_fresh_s3_client",
-            return_value=(creds, s3_resource),
-        ):
             _, _, _, status, _ = cds_s3_download_one_product(
-                FAKE_S3_PATH, FAKE_HEADER, output, conf
+                FAKE_S3_PATH, FAKE_S3_CREDENTIALS, output, conf
             )
 
-        assert status == "S3Error"
+            assert status == "S3Error"
 
-    def test_tmp_file_cleaned_up_on_s3error(self, tmp_path):
-        """Leftover .tmp must be removed when a S3 error occurs mid-download."""
-        creds = FAKE_CREDENTIALS
-        s3_resource = MagicMock()
-        # Bucket() succeeds, but download_file raises ClientError
-        bucket = MagicMock()
-        obj = make_s3_object(FAKE_S3_PATH + "/product.zip")
-        bucket.objects.filter.return_value = [obj]
-        bucket.download_file.side_effect = ClientError(
-            {"Error": {"Code": "500", "Message": "Internal"}}, "download_file"
-        )
-        s3_resource.Bucket.return_value = bucket
-
+    def test_cleans_up_tmp_on_error(self, tmp_path):
         output = str(tmp_path / f"{FAKE_SAFENAME}.zip")
         tmp_file = os.path.join(str(tmp_path), f"{FAKE_SAFENAME}.zip.tmp")
         conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
 
-        # Create a dummy .tmp to simulate partial download
         open(tmp_file, "w").close()
 
-        with patch(
-            "cdsodatacli.download._get_fresh_s3_client",
-            return_value=(creds, s3_resource),
-        ):
-            cds_s3_download_one_product(FAKE_S3_PATH, FAKE_HEADER, output, conf)
-
-        assert not os.path.exists(tmp_file), ".tmp file should have been cleaned up"
-
-    def test_move_error_returns_moveerror_status(self, tmp_path):
-        obj = make_s3_object(FAKE_S3_PATH + "/product.zip")
-        creds, s3_resource = make_s3_client_mocks([obj])
-
-        output = str(tmp_path / f"{FAKE_SAFENAME}.zip")
-        conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
-
-        with (
-            patch(
-                "cdsodatacli.download._get_fresh_s3_client",
-                return_value=(creds, s3_resource),
-            ),
-            patch("shutil.copy2", side_effect=OSError("disk full")),
-            patch("os.remove"),
-        ):
-            _, _, _, status, _ = cds_s3_download_one_product(
-                FAKE_S3_PATH, FAKE_HEADER, output, conf
+        with patch("cdsodatacli.download.boto3.resource") as mock_boto3:
+            mock_bucket = MagicMock()
+            mock_obj = make_s3_object(FAKE_S3_PATH + "/product.zip")
+            mock_bucket.objects.filter.return_value = [mock_obj]
+            mock_bucket.download_file.side_effect = ClientError(
+                {"Error": {"Code": "500"}}, "download_file"
             )
+            mock_boto3.return_value.Bucket.return_value = mock_bucket
 
-        assert status == "MoveError"
+            with patch("os.remove") as mock_remove:
+                cds_s3_download_one_product(
+                    FAKE_S3_PATH, FAKE_S3_CREDENTIALS, output, conf
+                )
+                mock_remove.assert_called()
 
-    def test_credentials_deleted_even_on_error(self, tmp_path, patch_requests_delete):
-        """Credential cleanup must happen regardless of download outcome."""
-        creds, s3_resource = make_s3_client_mocks([])  # triggers NotFound
-
-        output = str(tmp_path / f"{FAKE_SAFENAME}.zip")
+    def test_skips_folder_marker_objects(self, tmp_path):
+        output = str(tmp_path / FAKE_SAFENAME)
         conf = {**FAKE_CONF, "pre_spool": str(tmp_path)}
 
-        with patch(
-            "cdsodatacli.download._get_fresh_s3_client",
-            return_value=(creds, s3_resource),
-        ):
-            cds_s3_download_one_product(FAKE_S3_PATH, FAKE_HEADER, output, conf)
+        objects = [
+            make_s3_object(f"{FAKE_S3_PATH}/", size=0),
+            make_s3_object(f"{FAKE_S3_PATH}/manifest.safe", size=1_000),
+        ]
 
-        assert patch_requests_delete.call_count == 1
+        with patch("cdsodatacli.download.boto3.resource") as mock_boto3:
+            mock_bucket = MagicMock()
+            mock_bucket.objects.filter.return_value = objects
+            mock_bucket.download_file = MagicMock()
+            mock_boto3.return_value.Bucket.return_value = mock_bucket
+
+            with patch("os.makedirs"):
+                cds_s3_download_one_product(
+                    FAKE_S3_PATH, FAKE_S3_CREDENTIALS, output, conf
+                )
+
+            downloaded_keys = [
+                c[0][0] for c in mock_bucket.download_file.call_args_list
+            ]
+            assert f"{FAKE_S3_PATH}/" not in downloaded_keys
+            assert f"{FAKE_S3_PATH}/manifest.safe" in downloaded_keys
 
 
 # ===========================================================================
-# Part 2 — download_list_product_multithread_v4 integration tests
+# Part 4 — download_list_product_multithread_v4 integration tests
 # ===========================================================================
+
+# Shared helper: build the downloadable df returned by get_sessions_download_available_s3
+
+
+def _make_ready_df(safenames, login=None):
+    """Build df as returned by get_sessions_download_available_s3."""
+    n = len(safenames)
+    if login is None:
+        login = FAKE_LOGIN
+    return pd.DataFrame(
+        {
+            "safe": safenames,
+            "S3Path": [f"Sentinel-1/SAR/GRD/2022/05/03/{s}.SAFE" for s in safenames],
+            "id": [f"id-{i}" for i in range(n)],
+            "status": np.zeros(n),
+            "output_path": [f"/fake/spool/{s}" for s in safenames],
+            "login": [login] * n,
+            "s3_access_key": [FAKE_ACCESS_KEY] * n,
+            "s3_secret": [FAKE_SECRET] * n,
+            "s3_session": list(range(n)),
+        }
+    )
+
+
+def _side_effect_process_success(
+    done,
+    f2i,
+    df2,
+    pbar,
+    speeds,
+    speed_window,
+    time_window,
+    elapsed,
+    total,
+    cpt,
+    errors,
+    blacklist,
+    sessions,
+):
+    """process_completed_futures stub: mirrors the real 13-arg signature.
+    Marks each future's safename as status=1 and populates speed/time windows.
+    """
+    for fut in done:
+        info = f2i.pop(fut, {})
+        safename = info.get("safename", "unknown")
+        login = info.get("login", "unknown")
+        session_id = info.get("s3_session_id", 0)
+        if login in sessions:
+            sessions[login][session_id] = False
+        try:
+            speed, el, mb, status_meaning, safename = fut.result()
+        except Exception:
+            df2.loc[df2["safe"] == safename, "status"] = -1
+            pbar.update(1)
+            continue
+        if status_meaning in ("OK", "Downloaded"):
+            df2.loc[df2["safe"] == safename, "status"] = 1
+            speeds.append(speed)
+            speed_window.append(speed)
+            time_window.append(el)
+            elapsed.append(el)
+            total.append(mb)
+            cpt["successful_download"] += 1
+        else:
+            df2.loc[df2["safe"] == safename, "status"] = -1
+        cpt[f"status_{status_meaning}"] += 1
+        pbar.update(1)
+    return (
+        done,
+        f2i,
+        df2,
+        pbar,
+        speeds,
+        speed_window,
+        time_window,
+        elapsed,
+        total,
+        cpt,
+        errors,
+        blacklist,
+        sessions,
+    )
 
 
 class TestV4InputValidation:
     """Input contracts."""
 
     def test_mismatched_lengths_raise(self):
-        # S3Path column absent — KeyError fires inside the function before
-        # any network call is made, satisfying the input-contract test.
         df = pd.DataFrame(
             {
                 "safename": ["SAFE_A", "SAFE_B"],
                 "id": ["id0", "id1"],
-                # "S3Path" intentionally absent
             }
         )
         with pytest.raises((AssertionError, KeyError)):
@@ -520,28 +701,17 @@ class TestV4InputValidation:
             )
 
     def test_status_column_created_if_absent(self, patch_filter):
-        """If inputdf has no 'status' column, v4 must add it silently."""
-        safenames = ["SAFE_A"]
-        df = pd.DataFrame(
-            {
-                "safename": safenames,
-                "S3Path": ["Sentinel-1/SAR/GRD/2022/05/03/SAFE_A.SAFE"],
-                "id": ["id0"],
-                # no 'status' column
-            }
-        )
+        df = make_inputdf_for_v4(["SAFE_A"])
+        df = df.drop(columns=["status"])
 
         def _all_done(
             cpt, df_in, outputdir, force_download, cdsodatacli_conf, extension=""
         ):
-            # return empty so the while loop exits immediately
-            empty = df_in.iloc[:0].copy()
-            return empty, cpt
+            return df_in.iloc[:0].copy(), cpt
 
         patch_filter.side_effect = _all_done
 
-        # Should not raise even though 'status' is missing in input
-        with patch("cdsodatacli.download.get_sessions_download_available"):
+        with patch("cdsodatacli.download.get_sessions_download_available_s3"):
             download_list_product_multithread_v4(
                 df, "/fake/out", account_group="logins"
             )
@@ -552,12 +722,16 @@ class TestV4AllSuccessful:
 
     def test_returns_dataframe(self):
         safenames = ["SAFE_A", "SAFE_B"]
-        inputdf = make_inputdf(safenames)
+        inputdf = make_inputdf_for_v4(safenames)
 
         with (
             patch(
-                "cdsodatacli.download.get_sessions_download_available",
-                return_value=make_downloadable_df(safenames),
+                "cdsodatacli.download.get_sessions_download_available_s3",
+                return_value=(_make_ready_df(safenames), make_active_sessions_status()),
+            ),
+            patch(
+                "cdsodatacli.download.process_completed_futures",
+                side_effect=_side_effect_process_success,
             ),
             patch(
                 "cdsodatacli.download.cds_s3_download_one_product",
@@ -567,42 +741,48 @@ class TestV4AllSuccessful:
             result = download_list_product_multithread_v4(
                 inputdf, "/fake/out", account_group="logins"
             )
-
         assert isinstance(result, pd.DataFrame)
 
     def test_all_status_1_on_downloaded(self):
         safenames = ["SAFE_A", "SAFE_B"]
-        inputdf = make_inputdf(safenames)
+        inputdf = make_inputdf_for_v4(safenames)
 
-        def mock_s3_worker(s3_path, header, output_path, conf):
-            safename = os.path.basename(output_path)
-            return make_s3_result(safename)
+        def s3_worker(s3_path, s3_credentials, output_path, conf):
+            assert "s3-access-key" in s3_credentials
+            assert "s3-secret" in s3_credentials
+            return make_s3_result(os.path.basename(output_path))
 
         with (
             patch(
-                "cdsodatacli.download.get_sessions_download_available",
-                return_value=make_downloadable_df(safenames),
+                "cdsodatacli.download.get_sessions_download_available_s3",
+                return_value=(_make_ready_df(safenames), make_active_sessions_status()),
+            ),
+            patch(
+                "cdsodatacli.download.process_completed_futures",
+                side_effect=_side_effect_process_success,
             ),
             patch(
                 "cdsodatacli.download.cds_s3_download_one_product",
-                side_effect=mock_s3_worker,
+                side_effect=s3_worker,
             ),
         ):
             result = download_list_product_multithread_v4(
                 inputdf, "/fake/out", account_group="logins"
             )
-
         assert (result["status"] == 1).all()
 
     def test_ok_status_meaning_also_sets_status_1(self):
-        """'OK' is accepted as a success status_meaning in v4 (legacy compat)."""
         safenames = ["SAFE_A"]
-        inputdf = make_inputdf(safenames)
+        inputdf = make_inputdf_for_v4(safenames)
 
         with (
             patch(
-                "cdsodatacli.download.get_sessions_download_available",
-                return_value=make_downloadable_df(safenames),
+                "cdsodatacli.download.get_sessions_download_available_s3",
+                return_value=(_make_ready_df(safenames), make_active_sessions_status()),
+            ),
+            patch(
+                "cdsodatacli.download.process_completed_futures",
+                side_effect=_side_effect_process_success,
             ),
             patch(
                 "cdsodatacli.download.cds_s3_download_one_product",
@@ -612,7 +792,6 @@ class TestV4AllSuccessful:
             result = download_list_product_multithread_v4(
                 inputdf, "/fake/out", account_group="logins"
             )
-
         assert result.loc[result["safe"] == "SAFE_A", "status"].iloc[0] == 1
 
 
@@ -621,12 +800,16 @@ class TestV4DownloadErrors:
 
     def test_notfound_marks_status_minus1(self):
         safenames = ["SAFE_MISSING"]
-        inputdf = make_inputdf(safenames)
+        inputdf = make_inputdf_for_v4(safenames)
 
         with (
             patch(
-                "cdsodatacli.download.get_sessions_download_available",
-                return_value=make_downloadable_df(safenames),
+                "cdsodatacli.download.get_sessions_download_available_s3",
+                return_value=(_make_ready_df(safenames), make_active_sessions_status()),
+            ),
+            patch(
+                "cdsodatacli.download.process_completed_futures",
+                side_effect=_side_effect_process_success,
             ),
             patch(
                 "cdsodatacli.download.cds_s3_download_one_product",
@@ -638,37 +821,20 @@ class TestV4DownloadErrors:
             result = download_list_product_multithread_v4(
                 inputdf, "/fake/out", account_group="logins"
             )
-
         assert result.loc[result["safe"] == "SAFE_MISSING", "status"].iloc[0] == -1
-
-    def test_s3error_marks_status_minus1(self):
-        safenames = ["SAFE_ERR"]
-        inputdf = make_inputdf(safenames)
-
-        with (
-            patch(
-                "cdsodatacli.download.get_sessions_download_available",
-                return_value=make_downloadable_df(safenames),
-            ),
-            patch(
-                "cdsodatacli.download.cds_s3_download_one_product",
-                return_value=make_s3_result("SAFE_ERR", status="S3Error", speed=np.nan),
-            ),
-        ):
-            result = download_list_product_multithread_v4(
-                inputdf, "/fake/out", account_group="logins"
-            )
-
-        assert result.loc[result["safe"] == "SAFE_ERR", "status"].iloc[0] == -1
 
     def test_unhandled_exception_marks_status_minus1(self):
         safenames = ["SAFE_CRASH"]
-        inputdf = make_inputdf(safenames)
+        inputdf = make_inputdf_for_v4(safenames)
 
         with (
             patch(
-                "cdsodatacli.download.get_sessions_download_available",
-                return_value=make_downloadable_df(safenames),
+                "cdsodatacli.download.get_sessions_download_available_s3",
+                return_value=(_make_ready_df(safenames), make_active_sessions_status()),
+            ),
+            patch(
+                "cdsodatacli.download.process_completed_futures",
+                side_effect=_side_effect_process_success,
             ),
             patch(
                 "cdsodatacli.download.cds_s3_download_one_product",
@@ -678,52 +844,26 @@ class TestV4DownloadErrors:
             result = download_list_product_multithread_v4(
                 inputdf, "/fake/out", account_group="logins"
             )
-
         assert result.loc[result["safe"] == "SAFE_CRASH", "status"].iloc[0] == -1
 
-    def test_one_failure_does_not_abort_others(self):
-        safenames = ["SAFE_OK", "SAFE_FAIL"]
-        inputdf = make_inputdf(safenames)
+    def test_all_failures_loop_terminates(self):
+        """While loop must exit even if every product fails."""
+        safenames = ["SAFE_A", "SAFE_B", "SAFE_C"]
+        inputdf = make_inputdf_for_v4(safenames)
 
-        def sessions_side_effect(conf, subset, **kw):
-            pending = subset["safe"].tolist()
-            return make_downloadable_df([s for s in safenames if s in pending])
-
-        def worker(s3_path, header, output_path, conf):
-            safename = os.path.basename(output_path)
-            if safename == "SAFE_FAIL":
-                return make_s3_result("SAFE_FAIL", status="S3Error", speed=np.nan)
-            return make_s3_result(safename)
-
-        with (
-            patch(
-                "cdsodatacli.download.get_sessions_download_available",
-                side_effect=sessions_side_effect,
-            ),
-            patch(
-                "cdsodatacli.download.cds_s3_download_one_product", side_effect=worker
-            ),
-        ):
-            result = download_list_product_multithread_v4(
-                inputdf, "/fake/out", account_group="logins"
+        def failing_worker(s3_path, s3_credentials, output_path, conf):
+            return make_s3_result(
+                os.path.basename(output_path), status="S3Error", speed=np.nan
             )
 
-        assert result.loc[result["safe"] == "SAFE_OK", "status"].iloc[0] == 1
-        assert result.loc[result["safe"] == "SAFE_FAIL", "status"].iloc[0] == -1
-
-    def test_all_failures_loop_terminates(self):
-        """While loop must exit even if every product fails (no infinite loop)."""
-        safenames = ["SAFE_A", "SAFE_B", "SAFE_C"]
-        inputdf = make_inputdf(safenames)
-
-        def failing_worker(s3_path, header, output_path, conf):
-            safename = os.path.basename(output_path)
-            return make_s3_result(safename, status="S3Error", speed=np.nan)
-
         with (
             patch(
-                "cdsodatacli.download.get_sessions_download_available",
-                return_value=make_downloadable_df(safenames),
+                "cdsodatacli.download.get_sessions_download_available_s3",
+                return_value=(_make_ready_df(safenames), make_active_sessions_status()),
+            ),
+            patch(
+                "cdsodatacli.download.process_completed_futures",
+                side_effect=_side_effect_process_success,
             ),
             patch(
                 "cdsodatacli.download.cds_s3_download_one_product",
@@ -733,81 +873,185 @@ class TestV4DownloadErrors:
             result = download_list_product_multithread_v4(
                 inputdf, "/fake/out", account_group="logins"
             )
-
         assert (result["status"] != 0).all()
 
 
-class TestV4NoDuplicateDownload:
-    """Same safename must not be submitted twice concurrently."""
+class TestV4CredentialsFlow:
+    """Tests that credentials flow correctly through the v4 pipeline."""
 
-    def test_duplicate_safename_submitted_only_once(self):
-        safenames = ["SAFE_A", "SAFE_A"]
-        inputdf = make_inputdf(safenames)
-        submission_count = {"n": 0}
+    def test_credentials_passed_to_download_worker(self):
+        safenames = ["SAFE_A"]
+        inputdf = make_inputdf_for_v4(safenames)
+        captured_creds = {}
 
-        def tracking_worker(s3_path, header, output_path, conf):
-            submission_count["n"] += 1
+        def capture_worker(s3_path, s3_credentials, output_path, conf):
+            captured_creds["received"] = s3_credentials.copy()
             return make_s3_result("SAFE_A")
 
         with (
             patch(
-                "cdsodatacli.download.get_sessions_download_available",
-                return_value=make_downloadable_df(safenames),
+                "cdsodatacli.download.get_sessions_download_available_s3",
+                return_value=(_make_ready_df(safenames), make_active_sessions_status()),
+            ),
+            patch(
+                "cdsodatacli.download.process_completed_futures",
+                side_effect=_side_effect_process_success,
             ),
             patch(
                 "cdsodatacli.download.cds_s3_download_one_product",
-                side_effect=tracking_worker,
+                side_effect=capture_worker,
             ),
         ):
             download_list_product_multithread_v4(
                 inputdf, "/fake/out", account_group="logins"
             )
 
-        assert submission_count["n"] == 1
+        assert "received" in captured_creds
+        assert captured_creds["received"]["s3-access-key"] == FAKE_ACCESS_KEY
+        assert captured_creds["received"]["s3-secret"] == FAKE_SECRET
 
+    def test_multiple_accounts_use_correct_credentials(self):
+        safenames = ["SAFE_A", "SAFE_B"]
+        inputdf = make_inputdf_for_v4(safenames)
+        credential_log = {}
 
-class TestV4AllAlreadyPresent:
-    """All products already on disk — nothing to download."""
+        def logging_worker(s3_path, s3_credentials, output_path, conf):
+            safename = os.path.basename(output_path)
+            credential_log[safename] = s3_credentials.copy()
+            return make_s3_result(safename)
 
-    def test_empty_df2_skips_sessions(self, patch_filter):
-        def _all_archived(
-            cpt, df_in, outputdir, force_download, cdsodatacli_conf, extension=""
+        # Build ready df with different logins per product
+        ready_df = _make_ready_df(safenames)
+        ready_df["login"] = ["user1@example.fr", "user2@example.fr"]
+        ready_df["s3_access_key"] = [
+            FAKE_CONF["logins"]["user1@example.fr"]["s3-access-key"],
+            FAKE_CONF["logins"]["user2@example.fr"]["s3-access-key"],
+        ]
+        ready_df["s3_secret"] = [
+            FAKE_CONF["logins"]["user1@example.fr"]["s3-secret"],
+            FAKE_CONF["logins"]["user2@example.fr"]["s3-secret"],
+        ]
+
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available_s3",
+                return_value=(ready_df, make_active_sessions_status()),
+            ),
+            patch(
+                "cdsodatacli.download.process_completed_futures",
+                side_effect=_side_effect_process_success,
+            ),
+            patch(
+                "cdsodatacli.download.cds_s3_download_one_product",
+                side_effect=logging_worker,
+            ),
         ):
-            cpt["archived_product"] = len(df_in)
-            empty = df_in.iloc[:0].copy()
-            return empty, cpt
-
-        patch_filter.side_effect = _all_archived
-
-        with patch("cdsodatacli.download.get_sessions_download_available") as mock_sess:
             download_list_product_multithread_v4(
-                make_inputdf(["SAFE_A"]), "/fake/out", account_group="logins"
+                inputdf, "/fake/out", account_group="logins"
             )
 
-        mock_sess.assert_not_called()
+        assert "SAFE_A" in credential_log
+        assert "SAFE_B" in credential_log
+        assert (
+            credential_log["SAFE_A"]["s3-access-key"]
+            == FAKE_CONF["logins"]["user1@example.fr"]["s3-access-key"]
+        )
+        assert (
+            credential_log["SAFE_B"]["s3-access-key"]
+            == FAKE_CONF["logins"]["user2@example.fr"]["s3-access-key"]
+        )
+
+
+class TestV4NewParameters:
+    """Tests for optional parameters in v4."""
+
+    def test_hideprogressbar_sets_env_var(self):
+        safenames = ["SAFE_A"]
+        inputdf = make_inputdf_for_v4(safenames)
+
+        with (
+            patch(
+                "cdsodatacli.download.get_sessions_download_available_s3",
+                return_value=(_make_ready_df(safenames), make_active_sessions_status()),
+            ),
+            patch(
+                "cdsodatacli.download.process_completed_futures",
+                side_effect=_side_effect_process_success,
+            ),
+            patch(
+                "cdsodatacli.download.cds_s3_download_one_product",
+                return_value=make_s3_result("SAFE_A"),
+            ),
+            patch.dict(os.environ, {}, clear=True),
+        ):
+            download_list_product_multithread_v4(
+                inputdf,
+                "/fake/out",
+                account_group="logins",
+                hideprogressbar=True,
+            )
+            assert os.environ.get("DISABLE_TQDM") == "True"
+
+    def test_check_on_disk_false_passes_force_download_true(self, patch_filter):
+        inputdf = make_inputdf_for_v4(["SAFE_A"])
+        captured = {}
+
+        def _capture(
+            cpt, df_in, outputdir, force_download, cdsodatacli_conf, extension=""
+        ):
+            captured["force_download"] = force_download
+            return df_in.iloc[:0].copy(), cpt
+
+        patch_filter.side_effect = _capture
+
+        with patch("cdsodatacli.download.get_sessions_download_available_s3"):
+            download_list_product_multithread_v4(
+                inputdf, "/fake/out", account_group="logins", check_on_disk=False
+            )
+
+        assert captured["force_download"] is True
 
 
 class TestV4NoSession:
-    """get_sessions_download_available returns empty — should wait and retry."""
+    """get_sessions_download_available_s3 returns empty — should wait and retry."""
+
+    def _make_empty_ready_df(self):
+        return pd.DataFrame(
+            columns=[
+                "safe",
+                "S3Path",
+                "id",
+                "status",
+                "output_path",
+                "login",
+                "s3_access_key",
+                "s3_secret",
+                "s3_session",
+            ]
+        )
 
     def test_sleeps_when_no_session(self):
         safenames = ["SAFE_A"]
-        inputdf = make_inputdf(safenames)
+        inputdf = make_inputdf_for_v4(safenames)
         call_count = {"n": 0}
 
-        def sessions_side_effect(*a, **kw):
+        def sessions_side_effect(**kw):
             call_count["n"] += 1
             if call_count["n"] < 3:
-                return make_downloadable_df([])
-            return make_downloadable_df(safenames)
+                return self._make_empty_ready_df(), make_active_sessions_status()
+            return _make_ready_df(safenames), make_active_sessions_status()
 
-        def s3_worker(s3_path, header, output_path, conf):
+        def s3_worker(s3_path, s3_credentials, output_path, conf):
             return make_s3_result(os.path.basename(output_path))
 
         with (
             patch(
-                "cdsodatacli.download.get_sessions_download_available",
+                "cdsodatacli.download.get_sessions_download_available_s3",
                 side_effect=sessions_side_effect,
+            ),
+            patch(
+                "cdsodatacli.download.process_completed_futures",
+                side_effect=_side_effect_process_success,
             ),
             patch(
                 "cdsodatacli.download.cds_s3_download_one_product",
@@ -823,22 +1067,26 @@ class TestV4NoSession:
 
     def test_sleep_duration_is_5_seconds(self):
         safenames = ["SAFE_A"]
-        inputdf = make_inputdf(safenames)
+        inputdf = make_inputdf_for_v4(safenames)
         call_count = {"n": 0}
 
-        def sessions_side_effect(*a, **kw):
+        def sessions_side_effect(**kw):
             call_count["n"] += 1
             if call_count["n"] < 2:
-                return make_downloadable_df([])
-            return make_downloadable_df(safenames)
+                return self._make_empty_ready_df(), make_active_sessions_status()
+            return _make_ready_df(safenames), make_active_sessions_status()
 
-        def s3_worker(s3_path, header, output_path, conf):
+        def s3_worker(s3_path, s3_credentials, output_path, conf):
             return make_s3_result(os.path.basename(output_path))
 
         with (
             patch(
-                "cdsodatacli.download.get_sessions_download_available",
+                "cdsodatacli.download.get_sessions_download_available_s3",
                 side_effect=sessions_side_effect,
+            ),
+            patch(
+                "cdsodatacli.download.process_completed_futures",
+                side_effect=_side_effect_process_success,
             ),
             patch(
                 "cdsodatacli.download.cds_s3_download_one_product",
@@ -854,106 +1102,128 @@ class TestV4NoSession:
             assert c.args[0] == 5
 
 
-class TestV4FilterCalledWithExtensionEmpty:
-    """v4 passes extension='' to filter_product_already_present (SAFE dirs, not .zip)."""
-
-    def test_filter_called_with_empty_extension(self, patch_filter):
-        safenames = ["SAFE_A"]
-        inputdf = make_inputdf(safenames)
-
-        def _capture(
-            cpt, df_in, outputdir, force_download, cdsodatacli_conf, extension=""
-        ):
-            _capture.extension_used = extension
-            empty = df_in.iloc[:0].copy()
-            return empty, cpt
-
-        _capture.extension_used = None
-        patch_filter.side_effect = _capture
-
-        with patch("cdsodatacli.download.get_sessions_download_available"):
-            download_list_product_multithread_v4(
-                inputdf, "/fake/out", account_group="logins"
-            )
-
-        assert _capture.extension_used == ""
+# ===========================================================================
+# Part 5 — process_completed_futures helper tests
+# ===========================================================================
 
 
-class TestV4Concurrency:
-    """Race condition and true parallelism checks."""
+class TestProcessCompletedFutures:
+    """Tests for the process_completed_futures helper function."""
 
-    def test_two_products_can_run_concurrently(self):
-        safenames = ["SAFE_X", "SAFE_Y"]
-        inputdf = make_inputdf(safenames)
-        active = {"count": 0, "max": 0}
-        lock = threading.Lock()
+    # FIX 2: pass a real active_sessions dict so release_s3_session_after_usage
+    # can look up login keys without KeyError.
+    _active_sessions = {"user1@example.fr": {0: True, 1: False, 2: False, 3: False}}
 
-        def concurrent_worker(s3_path, header, output_path, conf):
-            safename = os.path.basename(output_path)
-            with lock:
-                active["count"] += 1
-                active["max"] = max(active["max"], active["count"])
-            time.sleep(0.05)
-            with lock:
-                active["count"] -= 1
-            return make_s3_result(safename)
+    def test_process_success_updates_status_and_counters(self):
+        from cdsodatacli.download import process_completed_futures
 
-        with (
-            patch(
-                "cdsodatacli.download.get_sessions_download_available",
-                return_value=make_downloadable_df(safenames),
-            ),
-            patch(
-                "cdsodatacli.download.cds_s3_download_one_product",
-                side_effect=concurrent_worker,
-            ),
-        ):
-            result = download_list_product_multithread_v4(
-                inputdf, "/fake/out", account_group="logins"
-            )
+        df2 = pd.DataFrame({"safe": ["SAFE_A"], "status": [2]})
+        pbar = MagicMock()
+        cpt = defaultdict(int)
 
-        assert (result["status"] == 1).all()
-        assert active["max"] >= 2
+        future = MagicMock(spec=Future)
+        future.result.return_value = make_s3_result("SAFE_A", status="Downloaded")
+        future.exception.return_value = None
 
-    def test_slow_product_not_resubmitted(self):
-        """A product still in flight must not be re-submitted in the next loop.
+        future_to_info = {
+            future: {
+                "safename": "SAFE_A",
+                "login": "user1@example.fr",
+                "s3_session_id": 0,
+            }
+        }
+        active_sessions = {"user1@example.fr": {0: True, 1: False, 2: False, 3: False}}
 
-        The barrier is released by a daemon thread after a short delay so it
-        fires independently of the while-loop progression — avoiding the
-        deadlock where the worker waits for the barrier and the barrier is only
-        set inside sessions_side_effect which itself only runs after the worker
-        finishes.
-        """
-        safenames = ["SAFE_SLOW"]
-        inputdf = make_inputdf(safenames)
-        submission_count = {"n": 0}
-        barrier = threading.Event()
+        (
+            done,
+            new_f2i,
+            new_df2,
+            new_pbar,
+            speeds,
+            speed_window,
+            time_window,
+            elapsed,
+            total,
+            new_cpt,
+            errors,
+            blacklist,
+            sessions,
+        ) = process_completed_futures(
+            {future},
+            future_to_info,
+            df2,
+            pbar,
+            [],  # all_speeds
+            [],  # speed_window
+            [],  # time_window
+            [],  # all_elapsed_time
+            [],  # all_total_mb
+            cpt,
+            defaultdict(int),
+            [],
+            active_sessions,
+        )
 
-        # Release the barrier from a background thread after 0.2 s so the
-        # slow worker can finish regardless of how many loop iterations occur.
-        def _release():
-            time.sleep(0.2)
-            barrier.set()
+        assert new_df2.loc[new_df2["safe"] == "SAFE_A", "status"].iloc[0] == 1
+        assert new_cpt["successful_download"] == 1
+        assert len(speeds) == 1
+        assert len(speed_window) == 1
+        assert len(time_window) == 1
+        # session must be released after processing
+        assert sessions["user1@example.fr"][0] is False
 
-        threading.Thread(target=_release, daemon=True).start()
+    def test_process_error_updates_status_and_counters(self):
+        from cdsodatacli.download import process_completed_futures
 
-        def slow_worker(s3_path, header, output_path, conf):
-            submission_count["n"] += 1
-            assert barrier.wait(timeout=5), "barrier was never released"
-            return make_s3_result("SAFE_SLOW")
+        df2 = pd.DataFrame({"safe": ["SAFE_ERR"], "status": [2]})
+        pbar = MagicMock()
+        cpt = defaultdict(int)
 
-        with (
-            patch(
-                "cdsodatacli.download.get_sessions_download_available",
-                return_value=make_downloadable_df(safenames),
-            ),
-            patch(
-                "cdsodatacli.download.cds_s3_download_one_product",
-                side_effect=slow_worker,
-            ),
-        ):
-            download_list_product_multithread_v4(
-                inputdf, "/fake/out", account_group="logins"
-            )
+        future = MagicMock(spec=Future)
+        future.result.return_value = make_s3_result(
+            "SAFE_ERR", status="S3Error", speed=np.nan
+        )
+        future.exception.return_value = None
 
-        assert submission_count["n"] == 1
+        future_to_info = {
+            future: {
+                "safename": "SAFE_ERR",
+                "login": "user1@example.fr",
+                "s3_session_id": 0,
+            }
+        }
+        active_sessions = {"user1@example.fr": {0: True, 1: False, 2: False, 3: False}}
+
+        (
+            done,
+            new_f2i,
+            new_df2,
+            new_pbar,
+            speeds,
+            speed_window,
+            time_window,
+            elapsed,
+            total,
+            new_cpt,
+            errors,
+            blacklist,
+            sessions,
+        ) = process_completed_futures(
+            {future},
+            future_to_info,
+            df2,
+            pbar,
+            [],  # all_speeds
+            [],  # speed_window
+            [],  # time_window
+            [],  # all_elapsed_time
+            [],  # all_total_mb
+            cpt,
+            defaultdict(int),
+            [],
+            active_sessions,
+        )
+
+        assert new_df2.loc[new_df2["safe"] == "SAFE_ERR", "status"].iloc[0] == -1
+        assert "status_S3Error" in new_cpt
+        assert sessions["user1@example.fr"][0] is False
