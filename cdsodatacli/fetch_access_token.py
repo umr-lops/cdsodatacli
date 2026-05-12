@@ -6,7 +6,6 @@ import urllib3
 import requests
 
 MAX_VALIDITY_ACCESS_TOKEN = 600  # sec (defined by CDS API)
-DATE_FORMAT_YMDTHMS = "%Y%m%dt%H%M%S"
 ACTIVE_ACCESS_TOKEN = (
     {}
 )  # login -> list of {'access-token': str, 'access-token-creation-date': datetime}
@@ -150,128 +149,6 @@ def get_bearer_access_token(
                 del ACTIVE_ACCESS_TOKEN[logintest]
 
     return token, date_generation, login
-
-
-def get_valid_access_token(login):
-    """
-    Get a valid access token for a specific login from the in-memory cache.
-
-    Parameters
-    ----------
-    login (str): CDSE account email address
-
-    Returns
-    -------
-        token (str): valid bearer access token
-        date_generation (datetime.datetime): token creation time
-        or (None, None) if no valid token found for this login
-    """
-    with _token_cache_lock:
-        if login not in ACTIVE_ACCESS_TOKEN:
-            logger.debug("no token found in cache for %s", login)
-            return None, None
-        for entry in ACTIVE_ACCESS_TOKEN[login]:
-            age = (
-                datetime.datetime.today() - entry["access-token-creation-date"]
-            ).total_seconds()
-            if (
-                age < MAX_VALIDITY_ACCESS_TOKEN - 60
-            ):  # 30s safety margin, same as in get_bearer_access_token
-                logger.debug("valid token found in cache for %s (age=%ds)", login, age)
-                return entry["access-token"], entry["access-token-creation-date"]
-        logger.debug("no valid token found in cache for %s (all expired)", login)
-        return None, None
-
-
-# def write_token_semaphore_file(
-#     login, date_generation_access_token, token_dir, access_token
-# ):
-#     """
-#     When a we get an access token for a given CDSE account, we can use it for 600 seconds
-#     then we need to store it on disk with the date of creation of the token
-
-#     Parameters
-#     ----------
-#     safename (str):
-#     login (str) :email address of CDSE account
-#     date_generation_access_token (datetime.datetime)
-#     token_dir (str)
-
-#     Returns
-#     -------
-
-#     """
-#     path_acces_token_file = os.path.join(
-#         token_dir,
-#         "CDSE_access_token_%s_%s.txt"
-#         % (login, date_generation_access_token.strftime(DATE_FORMAT_YMDTHMS)),
-#     )
-#     fid = open(path_acces_token_file, "w")
-#     fid.write(access_token)
-#     fid.close()
-#     return path_acces_token_file
-
-
-# def get_list_of_existing_token_semaphore_file(token_dir, account=None):
-#     """
-#     a bearer access token can be re-used (no need to have one token per download)
-#     present method lists all the access token that can be used
-#       for a specific account or in general
-
-#     Parameters
-
-#         account (str): optional
-
-#     Returns
-#     -------
-#         lst_token (list)
-#     """
-#     if account is not None:
-#         lst_token0 = glob.glob(
-#             os.path.join(token_dir, "CDSE_access_token_%s_*.txt" % account)
-#         )
-#     else:
-#         lst_token0 = glob.glob(os.path.join(token_dir, "CDSE_access_token_*.txt"))
-
-#     lst_token = []
-#     for ll in lst_token0:
-#         date_generation_access_token = datetime.datetime.strptime(
-#             os.path.basename(ll).split("_")[4].replace(".txt", ""), DATE_FORMAT_YMDTHMS
-#         )
-#         if (
-#             datetime.datetime.today() - date_generation_access_token
-#         ).total_seconds() < MAX_VALIDITY_ACCESS_TOKEN:
-#             lst_token.append(ll)
-#     logger.debug("Number of token found: %s", len(lst_token))
-#     return lst_token
-
-
-# def remove_semaphore_token_file(token_dir, login, date_generation_access_token):
-#     """
-#     this function is supposed to be used when a download is finished ( could be long time after the validity expired)
-
-#     token_dir (str):
-#     safename (str): basename of the product
-#     login (str): CDSE email account
-#     date_generation_access_token (datetime.datetime)
-
-#     Returns
-#     -------
-
-#     """
-#     path_token = os.path.join(
-#         token_dir,
-#         "CDSE_access_token_%s_%s.txt"
-#         % (login, date_generation_access_token.strftime(DATE_FORMAT_YMDTHMS)),
-#     )
-#     exists = os.path.exists(path_token)
-#     if (
-#         exists
-#         and (datetime.datetime.today() - date_generation_access_token).total_seconds()
-#         >= MAX_VALIDITY_ACCESS_TOKEN
-#     ):
-#         os.remove(path_token)
-#         logger.debug("token semaphore file removed")
 
 
 def get_access_token(email, password):

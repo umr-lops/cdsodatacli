@@ -1,7 +1,6 @@
 import pytest
 import pandas as pd
-import datetime
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch, MagicMock
 from collections import defaultdict
 
 import cdsodatacli.download as dl
@@ -77,42 +76,6 @@ def test_filter_product_already_present(mock_conf):
         assert updated_cpt["preproc-in_spool_product"] == 1
 
 
-# 2. Test core download function
-@patch("cdsodatacli.download.get_conf")
-@patch("os.path.exists", return_value=True)  # <-- ajout
-@patch("shutil.copy2")  # <-- remplace subprocess.check_output
-@patch("os.remove")
-@patch("os.chmod")
-def test_CDS_Odata_download_one_product_v2_success(
-    mock_chmod, mock_remove, mock_copy2, mock_exists, mock_get_conf, mock_conf, tmp_path
-):
-    mock_get_conf.return_value = mock_conf
-    session = MagicMock()
-    mock_response = MagicMock()
-    mock_response.ok = True
-    mock_response.status_code = 200
-    mock_response.reason = "OK"
-    mock_response.headers = {"content-length": "2000000"}
-    mock_response.iter_content.return_value = [b"chunk1"]
-    session.get.return_value = mock_response
-
-    output_path = str(tmp_path / "test.zip")
-
-    with patch("builtins.open", mock_open()):
-        speed, meaning, name = dl.CDS_Odata_download_one_product_v2(
-            session=session,
-            headers={},
-            url="http://url",
-            output_filepath=output_path,
-            conf=mock_get_conf,
-        )
-
-    assert meaning == "OK"
-    assert speed > 0
-    mock_copy2.assert_called_once()  # vérifie que le move a bien eu lieu
-    mock_chmod.assert_called_once()
-
-
 # 3. Test Metadata generation
 def test_add_missing_cdse_hash_ids_in_listing(tmp_path, mock_conf):
     listing = tmp_path / "list.txt"
@@ -140,104 +103,3 @@ def test_add_missing_cdse_hash_ids_in_listing(tmp_path, mock_conf):
         res = dl.add_missing_cdse_hash_ids_in_listing(str(listing), mock_conf)
         assert not res.empty
         assert res["id"].iloc[0] == "uuid-123"
-
-
-# 4. Sequential Download
-@patch("cdsodatacli.download.get_conf")
-@patch("cdsodatacli.download.get_sessions_download_available")
-@patch("cdsodatacli.download.CDS_Odata_download_one_product_v2")
-@patch("cdsodatacli.download.get_bearer_access_token")
-def test_download_list_product_sequential(
-    mock_token, mock_dl_one, mock_sessions, mock_get_conf, mock_conf
-):
-    mock_get_conf.return_value = mock_conf
-    fake_sem = "/tmp/type_group_status_user1_20240101t120000.txt"
-
-    # Mocking token refresh
-    mock_token.return_value = ("token", datetime.datetime.now(), "user1")
-
-    mock_sessions.return_value = pd.DataFrame(
-        {
-            "url": ["url1"],
-            "session": [MagicMock()],
-            "session_semaphore": [fake_sem],
-            "header": [{"Auth": "Bearer"}],
-            # "token_semaphore": [fake_sem],
-            "output_path": ["/tmp/out.zip"],
-            "safe": ["SAFE1"],
-        }
-    )
-
-    mock_dl_one.return_value = (10.0, "OK", "SAFE1")
-
-    with (
-        # patch("cdsodatacli.download.remove_semaphore_token_file"),
-        patch("cdsodatacli.download.remove_semaphore_session_file"),
-        patch("cdsodatacli.download.filter_product_already_present") as mock_filter,
-    ):
-
-        mock_filter.return_value = (
-            pd.DataFrame(
-                {
-                    "safe": ["SAFE1"],
-                    "id": ["id1"],
-                    "outputpath": ["/tmp/SAFE1.zip"],
-                    "urls": ["url1"],
-                }
-            ),
-            defaultdict(int),
-        )
-
-        res = dl.download_list_product_sequential(["id1"], ["SAFE1"], "/tmp/out")
-        assert res["status"].iloc[0] == 1
-
-
-# 5. Multi-thread Orchestrator
-@patch("cdsodatacli.download.get_conf")
-@patch("cdsodatacli.download.get_sessions_download_available")
-@patch("cdsodatacli.download.CDS_Odata_download_one_product_v2")
-def test_download_list_product_multithread_v2(
-    mock_dl_one, mock_sessions, mock_get_conf, mock_conf
-):
-    mock_get_conf.return_value = mock_conf
-    # fake_sem = "/tmp/type_group_status_user1_20240101t120000.txt"
-
-    mock_sessions.return_value = pd.DataFrame(
-        {
-            "url": ["url1"],
-            "session": [MagicMock()],
-            "header": [{}],
-            "output_path": ["p1.zip"],
-            "login": ["foobar"],
-            # "token_semaphore": [fake_sem],
-            "safe": ["SAFE1"],
-        }
-    )
-
-    mock_dl_one.return_value = (5.0, "OK", "SAFE1")
-
-    with (
-        # patch("cdsodatacli.download.remove_semaphore_token_file"),
-        patch("cdsodatacli.download.remove_semaphore_session_file"),
-        patch("cdsodatacli.download.filter_product_already_present") as mock_filter,
-    ):
-
-        mock_filter.return_value = (
-            pd.DataFrame(
-                {
-                    "safe": ["SAFE1"],
-                    "status": [0],
-                    "id": ["id1"],
-                    "S3Path": [
-                        "Sentinel-1/SAR/GRD/S1A_IW_GRDH_1SDV_20220503T000000.SAFE"
-                    ],
-                    "output_path": ["/tmp/SAFE1.zip"],
-                    "header": [{}],
-                    "url": ["url1"],
-                }
-            ),
-            defaultdict(int),
-        )
-
-        res = dl.download_list_product_multithread_v2(["id1"], ["SAFE1"], "/tmp/out")
-        assert res["status"].iloc[0] == 1

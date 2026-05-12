@@ -3,7 +3,7 @@
 # list_safe = ['S1A_WV_SLC__1SSV_20231110T201811_20231110T203308_051159_062BA3_954C.SAFE',
 #        'S1A_WV_SLC__1SSV_20231110T234523_20231110T235358_051161_062BB4_B4D0.SAFE']
 """
-python cdsodatacli/scripts/download_multithread_one_account_deamon.py --listing /home/antoine/Documents/sources/cdsodatacli/scripts/example_WV_SLC_listing_local.txt --logingroup loginsbackfill8 --outputdir /tmp/downloadtest/ --cdsodatacli_conf_file ~/git/cdsodatacli/cdsodatacli/localconfig.yml
+python cdsodatacli/scripts/download_multithread_one_account_deamon.py --listing example_WV_SLC_listing_local.txt --logingroup dummygrp --outputdir ./downloadtest/ --cdsodatacli_conf_file ~/git/cdsodatacli/cdsodatacli/localconfig.yml
 """
 
 
@@ -12,13 +12,13 @@ import os
 import pandas as pd
 import cdsodatacli
 from cdsodatacli.download import (
-    download_list_product_multithread_v3,
     download_list_product_multithread_v4,
     test_listing_content,
     test_csv_content,
     add_missing_cdse_hash_ids_in_listing,
 )
 from cdsodatacli.utils import get_conf
+from cdsodatacli.s3_path import guess_s3_path
 
 
 default_listing = os.path.join(
@@ -76,10 +76,10 @@ def entrypoint():
         help="path to the cdsodatacli configuration file .yml [optional, default is localconfig.yml then config.yml]",
     )
     parser.add_argument(
-        "--download-backend",
-        choices=["zipper", "s3endpoint"],
-        default="s3endpoint",
-        help="backend to use for downloading products, 'zipper' will use the legacy zipper API, 's3endpoint' will use direct S3 endpoint access (default: 's3endpoint')",
+        "--s3pathretrievalmethod",
+        choices=["odataservice", "guessfromsafename"],
+        default="guessfromsafename",
+        help="method to retrieve S3Path for each product [default=guessfromsafename, other option is to query OData API with product id]",
     )
     args = parser.parse_args()
     fmt = "%(asctime)s %(levelname)s %(filename)s(%(lineno)d) %(message)s"
@@ -105,10 +105,8 @@ def entrypoint():
         len(conf[logins_group]),
     )
     outputdir = args.outputdir
-    if args.download_backend == "zipper":
-        first_var = "id"
-    else:
-        first_var = "S3Path"
+
+    first_var = "S3Path"
     if listing.endswith(".csv"):
         test_format_input_ok = test_csv_content(listing)
     else:
@@ -116,32 +114,39 @@ def entrypoint():
     if test_format_input_ok:
         inputdf = pd.read_csv(listing, delimiter=",")  # header is mandatory
     else:
-        inputdf = add_missing_cdse_hash_ids_in_listing(listing_path=listing, conf=conf)
+        if args.s3pathretrievalmethod == "odataservice":
+            inputdf = add_missing_cdse_hash_ids_in_listing(
+                listing_path=listing, conf=conf
+            )
+        else:
+            # we expect the listing to be a simple list of safenames.
+            inputdf = pd.read_csv(
+                listing, names=["safename"], header=None
+            )  # header is not mandatory, we will add it
+            # inputdf = pd.DataFrame()
+            # with open(listing, "r") as f:
+            # lines = f.readlines()
+            # inputdf[first_var] = [line.split(",")[0].strip() for line in lines]
+            # inputdf["safename"] = inputdf[first_var].apply(lambda x: x.split(",")[1].strip())
+            inputdf["S3Path"] = inputdf["safename"].apply(guess_s3_path)
+            # add the header "safename", and "S3Path" (skip "id" useless column)
+            inputdf = inputdf[["safename", "S3Path"]]
+    logging.debug("input dataframe for download: %s", inputdf)
     if not os.path.exists(outputdir):
         logging.debug("mkdir on %s", outputdir)
         os.makedirs(outputdir, 0o0775)
     if len(inputdf[first_var]) > 0:
-        if args.download_backend == "zipper":
-            logging.info("Using zipper backend for download")
-            dfout = download_list_product_multithread_v3(
-                inputdf=inputdf,
-                outputdir=outputdir,
-                hideprogressbar=False,
-                account_group=logins_group,
-                check_on_disk=not args.forcedownload,
-                cdsodatacli_conf_file=args.cdsodatacli_conf_file,
-            )
-        else:
-            logging.info("Using s3endpoint backend for download")
-            dfout = download_list_product_multithread_v4(
-                inputdf=inputdf,  # .rename(columns={'safename':'safe'}),
-                outputdir=outputdir,
-                hideprogressbar=False,
-                account_group=logins_group,
-                check_on_disk=not args.forcedownload,
-                cdsodatacli_conf_file=args.cdsodatacli_conf_file,
-            )
-            logging.debug("downloaded dataframe: %s", dfout)
+
+        logging.info("Using s3endpoint backend for download")
+        dfout = download_list_product_multithread_v4(
+            inputdf=inputdf,  # .rename(columns={'safename':'safe'}),
+            outputdir=outputdir,
+            hideprogressbar=False,
+            account_group=logins_group,
+            check_on_disk=not args.forcedownload,
+            cdsodatacli_conf_file=args.cdsodatacli_conf_file,
+        )
+        logging.debug("downloaded dataframe: %s", dfout)
     else:
         logging.info("empty listing to treat")
     logging.info("end of function")

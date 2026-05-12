@@ -156,12 +156,6 @@ def patch_conf():
 
 
 @pytest.fixture(autouse=True)
-def patch_semaphores():
-    with patch("cdsodatacli.download.remove_semaphore_session_file"):
-        yield
-
-
-@pytest.fixture(autouse=True)
 def patch_tqdm():
     with patch("cdsodatacli.download.tqdm", side_effect=lambda *a, **kw: MagicMock()):
         yield
@@ -184,15 +178,6 @@ def patch_filter():
 
         mock.side_effect = _default
         yield mock
-
-
-@pytest.fixture(autouse=True)
-def patch_requests_delete():
-    """Prevent real HTTP calls for credential cleanup."""
-    mock_resp = MagicMock()
-    mock_resp.status_code = 204
-    with patch("cdsodatacli.download.requests.delete", return_value=mock_resp) as m:
-        yield m
 
 
 @pytest.fixture
