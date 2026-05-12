@@ -1291,6 +1291,8 @@ def process_completed_futures(
     df2,
     pbar,
     all_speeds,
+    speed_window,
+    time_window,
     all_elapsed_time,
     all_total_mb,
     cpt,
@@ -1346,7 +1348,9 @@ def process_completed_futures(
         if status_meaning == "OK" or status_meaning == "Downloaded":
             df2.loc[(df2["safe"] == safename_base), "status"] = 1
             all_speeds.append(speed)
+            speed_window.append(speed)
             all_elapsed_time.append(elapsed_time)
+            time_window.append(elapsed_time)
             all_total_mb.append(total_mb)
             cpt["successful_download"] += 1
         else:
@@ -1373,7 +1377,9 @@ def process_completed_futures(
         df2,
         pbar,
         all_speeds,
+        speed_window,
         all_elapsed_time,
+        time_window,
         all_total_mb,
         cpt,
         errors_per_account,
@@ -1449,9 +1455,9 @@ def download_list_product_multithread_v4(
     all_elapsed_time = []
     all_total_mb = []
     # Rolling window for speed/ETA — last 10 completed downloads
-    _SPEED_WINDOW = 10
-    _speed_window: list[float] = []  # Mo/s per completed product
-    _time_window: list[float] = []  # elapsed seconds per completed product
+    _SPEED_WINDOW_NB = 10
+    speed_window: list[float] = []  # Mo/s per completed product
+    time_window: list[float] = []  # elapsed seconds per completed product
     # status, 0->not treated, -1->error download , 1-> successful download
     # df = pd.DataFrame(
     #     {"safe": list_safename, "status": np.zeros(len(list_safename)), "s3path": list_s3path}
@@ -1495,8 +1501,8 @@ def download_list_product_multithread_v4(
                     subset_to_treat,
                     running_futures,
                     active_s3_sessions_status,
-                    _speed_window,
-                    _time_window,
+                    speed_window,
+                    time_window,
                     df2,
                 )
             )
@@ -1605,7 +1611,9 @@ def download_list_product_multithread_v4(
                 df2,
                 pbar,
                 all_speeds,
+                speed_window,
                 all_elapsed_time,
+                time_window,
                 all_total_mb,
                 cpt,
                 errors_per_account,
@@ -1617,7 +1625,9 @@ def download_list_product_multithread_v4(
                 df2,
                 pbar,
                 all_speeds,
+                speed_window,
                 all_elapsed_time,
+                time_window,
                 all_total_mb,
                 cpt,
                 errors_per_account,

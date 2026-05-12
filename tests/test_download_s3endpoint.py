@@ -641,9 +641,23 @@ def _make_ready_df(safenames, login=None):
 
 
 def _side_effect_process_success(
-    done, f2i, df2, pbar, speeds, elapsed, total, cpt, errors, blacklist, sessions
+    done,
+    f2i,
+    df2,
+    pbar,
+    speeds,
+    speed_window,
+    time_window,
+    elapsed,
+    total,
+    cpt,
+    errors,
+    blacklist,
+    sessions,
 ):
-    """process_completed_futures stub: marks each future's safename as status=1."""
+    """process_completed_futures stub: mirrors the real 13-arg signature.
+    Marks each future's safename as status=1 and populates speed/time windows.
+    """
     for fut in done:
         info = f2i.pop(fut, {})
         safename = info.get("safename", "unknown")
@@ -660,6 +674,8 @@ def _side_effect_process_success(
         if status_meaning in ("OK", "Downloaded"):
             df2.loc[df2["safe"] == safename, "status"] = 1
             speeds.append(speed)
+            speed_window.append(speed)
+            time_window.append(el)
             elapsed.append(el)
             total.append(mb)
             cpt["successful_download"] += 1
@@ -673,6 +689,8 @@ def _side_effect_process_success(
         df2,
         pbar,
         speeds,
+        speed_window,
+        time_window,
         elapsed,
         total,
         cpt,
@@ -1137,6 +1155,8 @@ class TestProcessCompletedFutures:
             new_df2,
             new_pbar,
             speeds,
+            speed_window,
+            time_window,
             elapsed,
             total,
             new_cpt,
@@ -1148,9 +1168,11 @@ class TestProcessCompletedFutures:
             future_to_info,
             df2,
             pbar,
-            [],
-            [],
-            [],
+            [],  # all_speeds
+            [],  # speed_window
+            [],  # time_window
+            [],  # all_elapsed_time
+            [],  # all_total_mb
             cpt,
             defaultdict(int),
             [],
@@ -1160,6 +1182,8 @@ class TestProcessCompletedFutures:
         assert new_df2.loc[new_df2["safe"] == "SAFE_A", "status"].iloc[0] == 1
         assert new_cpt["successful_download"] == 1
         assert len(speeds) == 1
+        assert len(speed_window) == 1
+        assert len(time_window) == 1
         # session must be released after processing
         assert sessions["user1@example.fr"][0] is False
 
@@ -1191,6 +1215,8 @@ class TestProcessCompletedFutures:
             new_df2,
             new_pbar,
             speeds,
+            speed_window,
+            time_window,
             elapsed,
             total,
             new_cpt,
@@ -1202,9 +1228,11 @@ class TestProcessCompletedFutures:
             future_to_info,
             df2,
             pbar,
-            [],
-            [],
-            [],
+            [],  # all_speeds
+            [],  # speed_window
+            [],  # time_window
+            [],  # all_elapsed_time
+            [],  # all_total_mb
             cpt,
             defaultdict(int),
             [],
