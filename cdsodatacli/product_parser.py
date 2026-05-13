@@ -37,7 +37,7 @@ class ExplodeSAFE(object):
             self.satellite = self.safename[0:3]
             self.mode = self.safename[4:6]
             self.product = self.safename[7:11]
-            self.level = self.safename[12]
+            self.level = self.safename[12]  # '1' or '2' or "0"
             self.kind = self.safename[13]
             self.polarisation = self.safename[14:16]
             self.startdate = datetime.datetime.strptime(

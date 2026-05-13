@@ -45,16 +45,38 @@ def parse_start_time(product_name: str) -> datetime | None:
         return None
 
 
+# def parse_safe_info(product_name: str):
+#     """Retourne (start_datetime, datatake_hex) ou (None, None) en cas d'échec."""
+#     try:
+#         inst = ExplodeSAFE(product_name)
+#         # Exemple d'attributs disponibles (à adapter selon votre lib)
+#         return inst.startdate, getattr(inst, 'mission_data_take', None)
+#     except Exception:
+#         return None, None
+
+
 MAX_DELTA_SECONDS = 8
 
 
 def closest_in_time(
     reference_dt: datetime, candidates: list[dict]
 ) -> tuple[dict, float]:
-    """Return (candidate, delta_seconds) for the product closest in time to reference_dt."""
+    """
+    Return (candidate, delta_seconds) for the product closest in time to reference_dt.
+
+    Args:
+        reference_dt (datetime): The reference datetime to compare against.
+        candidates (list of dict): List of product dicts, each with a "Name" key containing the product name to parse for datetime.
+    Returns:
+        tuple: (best_candidate_dict, delta_seconds) where best_candidate_dict is the dict from candidates with the closest datetime, and delta_seconds is the absolute difference in seconds between reference_dt and the
+
+    """
 
     def time_delta(prod):
-        dt = parse_start_time(prod["Name"])
+        # dt = parse_start_time(prod["Name"])
+        tmpinst = ExplodeSAFE(prod["Name"])
+        dt = tmpinst.startdate
+        # dt, _ = parse_safe_info(prod["Name"])
         if dt is None:
             return float("inf")
         return abs((dt - reference_dt).total_seconds())
@@ -76,30 +98,29 @@ def find_product_for_safe(
     then closest-in-time as fallback.
     """
     try:
-        clean_id = source_id.replace(".SAFE", "").replace("_COG", "")
-        parts = clean_id.split("_")
+        inst = ExplodeSAFE(source_id)
+        source_start = inst.startdate
+        source_datatake = inst.mission_data_take
+        source_absolute_orbit = inst.absolute_orbit_number
+        if source_start is None or source_datatake is None:
+            logger.error("Failed to parse start date or datatake from %s", source_id)
+            return {
+                "source_id": source_id,
+                "status": "error",
+                "note": "Impossible d'extraire les infos du nom",
+            }
 
-        platform = parts[0]  # e.g. S1A
-        start_time = parts[4]  # e.g. 20230726T071112
-        datatake_hex = parts[7]  # e.g. 05F692
-
-        # Normalise target type: pad to 4 chars with trailing underscore if needed
-        type_token = (
-            target_type.rstrip("_").ljust(4, "_")
-            if len(target_type) < 4
-            else target_type
-        )
-
-        # ── FIX APPLIED HERE ────────────────────────────────────────────────
-        # Added 'not contains(Name,'_COG')' to exclude COG products from results
+        platform = source_id.split("_")[0]  # ou inst.platform
+        type_token = target_type.rstrip("_").ljust(4, "_")
+        pol_full = f"{inst.level}S{inst.polarisation}"
         query_filter = (
             f"startswith(Name,'{platform}') and "
             f"contains(Name,'_{type_token}') and "
-            f"contains(Name,'{datatake_hex}') and "
+            f"contains(Name,'_{source_absolute_orbit}_{source_datatake}') and "
+            f"contains(Name,'_{pol_full}') and "
             f"not contains(Name,'_COG')"
         )
         # ─────────────────────────────────────────────────────────────────────
-
         params = {"$filter": query_filter, "$top": 50}
 
         logger.debug("OData query filter: %s", query_filter)
@@ -115,15 +136,19 @@ def find_product_for_safe(
         products = resp.json().get("value", [])
 
         if not products:
+            logger.debug(
+                "No products found for %s with filter: %s", source_id, query_filter
+            )
             return {
                 "source_id": source_id,
                 "status": "not_found",
-                "note": f"No {target_type} product found for DataTake {datatake_hex}",
+                "note": f"No {target_type} product found for DataTake {source_datatake}",
             }
 
         # ── Match strategy ───────────────────────────────────────────────────
         # 1. Exact start-time match (same slice)
-        exact = next((p for p in products if start_time in p["Name"]), None)
+        start_time_str = source_start.strftime("%Y%m%dT%H%M%S")
+        exact = next((p for p in products if start_time_str in p["Name"]), None)
 
         if exact:
             match = exact
