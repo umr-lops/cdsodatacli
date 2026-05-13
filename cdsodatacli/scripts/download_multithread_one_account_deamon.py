@@ -9,16 +9,12 @@ python cdsodatacli/scripts/download_multithread_one_account_deamon.py --listing 
 
 import logging
 import os
-import pandas as pd
 import cdsodatacli
 from cdsodatacli.download import (
     download_list_product_multithread_v4,
-    test_listing_content,
-    test_csv_content,
-    add_missing_cdse_hash_ids_in_listing,
+    check_input_df,
 )
 from cdsodatacli.utils import get_conf
-from cdsodatacli.s3_path import guess_s3_path
 
 
 default_listing = os.path.join(
@@ -28,21 +24,7 @@ default_listing = os.path.join(
 )
 
 
-def entrypoint():
-    """
-    Entrypoint for the multi-thread single acount download script.
-    Reads command-line arguments and initiates the download process.
-
-    Args:
-        None (uses command-line arguments)
-    Returns:
-        None
-    """
-    root = logging.getLogger()
-    if root.handlers:
-        for handler in root.handlers:
-            root.removeHandler(handler)
-
+def parser_args():
     import argparse
 
     parser = argparse.ArgumentParser(description="download deamon CDSE")
@@ -82,6 +64,25 @@ def entrypoint():
         help="method to retrieve S3Path for each product [default=guessfromsafename, other option is to query OData API with product id]",
     )
     args = parser.parse_args()
+    return args
+
+
+def entrypoint():
+    """
+    Entrypoint for the multi-thread single acount download script.
+    Reads command-line arguments and initiates the download process.
+
+    Args:
+        None (uses command-line arguments)
+    Returns:
+        None
+    """
+    root = logging.getLogger()
+    if root.handlers:
+        for handler in root.handlers:
+            root.removeHandler(handler)
+    args = parser_args()
+
     fmt = "%(asctime)s %(levelname)s %(filename)s(%(lineno)d) %(message)s"
     if args.verbose:
         logging.basicConfig(
@@ -106,36 +107,13 @@ def entrypoint():
     )
     outputdir = args.outputdir
 
-    first_var = "S3Path"
-    if listing.endswith(".csv"):
-        test_format_input_ok = test_csv_content(listing)
-    else:
-        test_format_input_ok = test_listing_content(listing_path=listing)
-    if test_format_input_ok:
-        inputdf = pd.read_csv(listing, delimiter=",")  # header is mandatory
-    else:
-        if args.s3pathretrievalmethod == "odataservice":
-            inputdf = add_missing_cdse_hash_ids_in_listing(
-                listing_path=listing, conf=conf
-            )
-        else:
-            # we expect the listing to be a simple list of safenames.
-            inputdf = pd.read_csv(
-                listing, names=["safename"], header=None
-            )  # header is not mandatory, we will add it
-            # inputdf = pd.DataFrame()
-            # with open(listing, "r") as f:
-            # lines = f.readlines()
-            # inputdf[first_var] = [line.split(",")[0].strip() for line in lines]
-            # inputdf["safename"] = inputdf[first_var].apply(lambda x: x.split(",")[1].strip())
-            inputdf["S3Path"] = inputdf["safename"].apply(guess_s3_path)
-            # add the header "safename", and "S3Path" (skip "id" useless column)
-            inputdf = inputdf[["safename", "S3Path"]]
-    logging.debug("input dataframe for download: %s", inputdf)
+    inputdf = check_input_df(
+        listing, conf=conf, s3pathretrievalmethod=args.s3pathretrievalmethod
+    )
     if not os.path.exists(outputdir):
         logging.debug("mkdir on %s", outputdir)
         os.makedirs(outputdir, 0o0775)
-    if len(inputdf[first_var]) > 0:
+    if len(inputdf["safename"]) > 0:
 
         logging.info("Using s3endpoint backend for download")
         dfout = download_list_product_multithread_v4(
