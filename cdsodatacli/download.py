@@ -26,6 +26,7 @@ from cdsodatacli.utils import (
     check_safe_in_outputdir,
 )
 from cdsodatacli.product_parser import ExplodeSAFE
+from cdsodatacli.s3_path import guess_s3_path
 from collections import defaultdict
 
 logger = logging.getLogger(__name__)
@@ -537,6 +538,31 @@ def process_completed_futures(
     )
 
 
+def check_input_df(listing, conf, s3pathretrievalmethod):
+
+    if listing.endswith(".csv"):
+        test_format_input_ok = test_csv_content(listing)
+    else:
+        test_format_input_ok = test_listing_content(listing_path=listing)
+    if test_format_input_ok:
+        inputdf = pd.read_csv(listing, delimiter=",")  # header is mandatory
+    else:
+        if s3pathretrievalmethod == "odataservice":
+            inputdf = add_missing_cdse_hash_ids_in_listing(
+                listing_path=listing, conf=conf
+            )
+        else:
+            # we expect the listing to be a simple list of safenames.
+            inputdf = pd.read_csv(
+                listing, names=["safename"], header=None
+            )  # header is not mandatory, we will add it
+            inputdf["S3Path"] = inputdf["safename"].apply(guess_s3_path)
+            # add the header "safename", and "S3Path" (skip "id" useless column)
+            inputdf = inputdf[["safename", "S3Path"]]
+    logging.debug("input dataframe for download: %s", inputdf)
+    return inputdf
+
+
 def download_list_product_multithread_v4(
     inputdf,
     outputdir,
@@ -564,7 +590,7 @@ def download_list_product_multithread_v4(
 
     Parameters
     ----------
-    inputdf (pd.DataFrame): DataFrame containing the products to download with columns "S3Path", "id", and "safename"
+    inputdf (pd.DataFrame): DataFrame containing the products to download with columns "S3Path" and "safename"
     outputdir (str): the directory where to store the product collected
     account_group (str): a group define in the config file with a unique account -> 4 sessions in parallel
     hideprogressbar (bool): True -> no tqdm progress bar in stdout
