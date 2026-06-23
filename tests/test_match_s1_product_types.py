@@ -112,12 +112,12 @@ def test_find_product_success_exact(
     delta_dist = defaultdict(int)
     res = find_product_for_safe(real_safe_id, "OCN_", logger, delta_dist)
     assert res["match_method"] == "exact_timestamp"
-    
+
     # Vérifier que le filtre a bien utilisé l'orbite et le datatake
     args, kwargs = mock_get.call_args
     filter_str = kwargs["params"]["$filter"]
     assert "49591_05F692" in filter_str
-    
+
     # CORRECTION : Pour OCN, le niveau est 2, donc polarisation complète = 2SDV
     assert "2SDV" in filter_str, f"Expected '2SDV' in filter, got: {filter_str}"
 
@@ -153,7 +153,7 @@ def test_find_product_success_exact_grds(
     delta_dist = defaultdict(int)
     res = find_product_for_safe(real_safe_id, "GRDH", logger, delta_dist)
     assert res["match_method"] == "exact_timestamp"
-    
+
     # Vérifier le filtre
     args, kwargs = mock_get.call_args
     filter_str = kwargs["params"]["$filter"]
@@ -281,7 +281,7 @@ def test_find_product_for_slc(
     delta_dist = defaultdict(int)
     res = find_product_for_safe(real_safe_id, "SLC_", logger, delta_dist)
     assert res["match_method"] == "exact_timestamp"
-    
+
     # Vérifier le filtre
     args, kwargs = mock_get.call_args
     filter_str = kwargs["params"]["$filter"]

@@ -4,7 +4,6 @@ Sentinel-1 Product Matchup Tool - Version optimisée avec rate limiting et check
 """
 
 import requests
-import time
 from tqdm import tqdm
 import logging
 import argparse
@@ -27,9 +26,9 @@ MAX_BURST = 40
 
 # Rate limiter global
 _GLOBAL_RATE_LIMITER = RateLimiter(
-    max_requests_per_second=REQUESTS_PER_SECOND,
-    max_burst=MAX_BURST
+    max_requests_per_second=REQUESTS_PER_SECOND, max_burst=MAX_BURST
 )
+
 
 # ── LOGGING SETUP ────────────────────────────────────────────────────────────
 def setup_logger(verbose: bool = False) -> logging.Logger:
@@ -44,6 +43,7 @@ def setup_logger(verbose: bool = False) -> logging.Logger:
     logger.addHandler(handler)
     return logger
 
+
 # ── HELPERS ──────────────────────────────────────────────────────────────────
 def parse_start_time(product_name: str) -> datetime | None:
     try:
@@ -51,6 +51,7 @@ def parse_start_time(product_name: str) -> datetime | None:
         return inst.startdate
     except (IndexError, ValueError, AttributeError):
         return None
+
 
 # ── CORE LOGIC AVEC RATE LIMITING ET RETRY ────────────────────────────────
 @retry_with_backoff(max_retries=5, base_delay=1, max_delay=60)
@@ -61,6 +62,7 @@ def _query_odata_with_retry(query_filter: str) -> requests.Response:
     response = requests.get(ODATA_URL, params=params, timeout=30)
     response.raise_for_status()  # Déclenche le retry sur 4xx/5xx
     return response
+
 
 def find_product_for_safe(
     source_id: str,
@@ -94,7 +96,7 @@ def find_product_for_safe(
         )
 
         logger.debug("OData query filter: %s", query_filter)
-        
+
         # Requête avec retry automatique
         response = _query_odata_with_retry(query_filter)
         products = response.json().get("value", [])
@@ -154,10 +156,12 @@ def find_product_for_safe(
     except Exception as exc:
         return {"source_id": source_id, "status": "error", "note": str(exc)}
 
+
 def closest_in_time(
     reference_dt: datetime, candidates: list[dict]
 ) -> tuple[dict, float]:
     """Trouve le candidat le plus proche en temps (inchangé)."""
+
     def time_delta(prod):
         dt = parse_start_time(prod["Name"])
         if dt is None:
@@ -167,6 +171,7 @@ def closest_in_time(
     best = min(candidates, key=time_delta)
     return best, time_delta(best)
 
+
 # ── CHECKPOINT SYSTEM ──────────────────────────────────────────────────────
 def save_checkpoint(processed_ids: list[str], checkpoint_file: Path):
     """Sauvegarde les IDs déjà traités."""
@@ -174,12 +179,14 @@ def save_checkpoint(processed_ids: list[str], checkpoint_file: Path):
         for pid in processed_ids:
             f.write(f"{pid}\n")
 
+
 def load_checkpoint(checkpoint_file: Path) -> set[str]:
     """Charge les IDs déjà traités depuis un checkpoint."""
     if not checkpoint_file.exists():
         return set()
     with checkpoint_file.open("r") as f:
         return {line.strip() for line in f if line.strip()}
+
 
 # ── ENTRYPOINT OPTIMISÉ ────────────────────────────────────────────────────
 def entrypoint(
@@ -190,40 +197,48 @@ def entrypoint(
     checkpoint_dir: str | None = None,
 ) -> list[dict]:
     """Version avec progress bar, checkpoint et rate limiting."""
-    
+
     # Gestion du checkpoint
     checkpoint_file = None
     if checkpoint_dir:
         checkpoint_path = Path(checkpoint_dir)
         checkpoint_path.mkdir(parents=True, exist_ok=True)
-        checkpoint_file = checkpoint_path / f"{Path(output_filename).stem}_checkpoint.txt"
+        checkpoint_file = (
+            checkpoint_path / f"{Path(output_filename).stem}_checkpoint.txt"
+        )
         processed_ids = load_checkpoint(checkpoint_file)
-        logger.info(f"Loaded checkpoint: {len(processed_ids)} products already processed")
+        logger.info(
+            f"Loaded checkpoint: {len(processed_ids)} products already processed"
+        )
         # Filtrer la liste
         safe_list = [s for s in safe_list if s not in processed_ids]
-    
+
     logger.info(
         "Starting matchup: %d product(s) → target type '%s'",
         len(safe_list),
         target_type,
     )
-    
+
     results = []
     delta_distribution = defaultdict(int)
     lock = Lock()
     processed = set()
-    
+
     # Barre de progression avec statistiques
     with tqdm(total=len(safe_list), desc="Matching products", unit="product") as pbar:
-        
+
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = {
                 executor.submit(
-                    find_product_for_safe, safe_id, target_type, logger, delta_distribution
+                    find_product_for_safe,
+                    safe_id,
+                    target_type,
+                    logger,
+                    delta_distribution,
                 ): safe_id
                 for safe_id in safe_list
             }
-            
+
             for future in as_completed(futures):
                 safe_id = futures[future]
                 try:
@@ -231,39 +246,41 @@ def entrypoint(
                     with lock:
                         results.append(res)
                         processed.add(safe_id)
-                    
+
                     # Sauvegarde périodique du checkpoint
                     if checkpoint_file and len(processed) % 10 == 0:
                         save_checkpoint(list(processed), checkpoint_file)
-                    
+
                     # Mise à jour de la progress bar
                     found = sum(1 for r in results if "target_name" in r)
-                    not_found = sum(1 for r in results if r.get("status") == "not_found")
+                    not_found = sum(
+                        1 for r in results if r.get("status") == "not_found"
+                    )
                     errors = sum(1 for r in results if r.get("status") == "error")
-                    pbar.set_postfix({
-                        'found': found,
-                        'not_found': not_found,
-                        'errors': errors,
-                        'rate': f"{_GLOBAL_RATE_LIMITER.tokens:.1f}"
-                    })
-                    
+                    pbar.set_postfix(
+                        {
+                            "found": found,
+                            "not_found": not_found,
+                            "errors": errors,
+                            "rate": f"{_GLOBAL_RATE_LIMITER.tokens:.1f}",
+                        }
+                    )
+
                 except Exception as e:
                     logger.error(f"Error processing {safe_id}: {e}")
                     with lock:
-                        results.append({
-                            "source_id": safe_id,
-                            "status": "error",
-                            "note": str(e)
-                        })
+                        results.append(
+                            {"source_id": safe_id, "status": "error", "note": str(e)}
+                        )
                         processed.add(safe_id)
-                
+
                 pbar.update(1)
-    
+
     # Sauvegarde finale du checkpoint
     if checkpoint_file:
         save_checkpoint(list(processed), checkpoint_file)
         logger.info(f"Checkpoint saved to {checkpoint_file}")
-    
+
     # Écriture des résultats
     output_path = Path(output_filename)
     with output_path.open("w") as fh:
@@ -272,7 +289,7 @@ def entrypoint(
                 fh.write(f"{r['target_name']}\n")
             else:
                 fh.write(f"# NOT_FOUND: {r['source_id']} — {r.get('note', '')}\n")
-    
+
     # Log du résumé
     found = sum(1 for r in results if "target_name" in r)
     not_found = sum(1 for r in results if r.get("status") == "not_found")
@@ -284,15 +301,16 @@ def entrypoint(
         errors,
         output_path.resolve(),
     )
-    
+
     if delta_distribution:
         logger.info("Delta-time distribution (seconds → count):")
         for delta_s, count in sorted(delta_distribution.items()):
             label = f"{delta_s}s" if delta_s > 0 else "exact"
             flag = "  ← above threshold" if delta_s > MAX_DELTA_SECONDS else ""
             logger.info("  %6s : %d%s", label, count, flag)
-    
+
     return results
+
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 def parse_args() -> argparse.Namespace:
@@ -358,6 +376,7 @@ Examples:
 
     return parser.parse_args()
 
+
 def load_listing(filepath: str, logger: logging.Logger) -> list[str]:
     path = Path(filepath)
     if not path.exists():
@@ -366,6 +385,7 @@ def load_listing(filepath: str, logger: logging.Logger) -> list[str]:
     lines = [lili.strip() for lili in path.read_text().splitlines() if lili.strip()]
     logger.info("Loaded %d product ID(s) from %s", len(lines), filepath)
     return lines
+
 
 def main():
     args = parse_args()
@@ -387,6 +407,7 @@ def main():
         logger=logger,
         checkpoint_dir=args.checkpoint_dir,
     )
+
 
 if __name__ == "__main__":
     main()

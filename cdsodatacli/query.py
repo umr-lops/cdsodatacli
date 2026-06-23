@@ -33,10 +33,8 @@ MAX_WORKERS = 4
 
 # Rate limiter global pour toutes les requêtes
 _GLOBAL_RATE_LIMITER = RateLimiter(
-    max_requests_per_second=REQUESTS_PER_SECOND,
-    max_burst=MAX_BURST
+    max_requests_per_second=REQUESTS_PER_SECOND, max_burst=MAX_BURST
 )
-
 
 
 def time_based_hash(length=7):
@@ -700,7 +698,7 @@ def fetch_one_url(url, cpt, index, cache_dir, headers=None):
             # json_data = requests.get(url, headers=headers, timeout=timeout).json()
             # Application du rate limiting GLOBAL avant la requête
             _GLOBAL_RATE_LIMITER.wait_if_needed()
-            
+
             # Requête avec retry automatique sur 429 et autres erreurs réseau
             json_data = _fetch_with_retry(url, headers, timeout)
             cpt["urls_OK"] += 1
@@ -742,6 +740,7 @@ def fetch_one_url(url, cpt, index, cache_dir, headers=None):
         cpt["empty_answer"] += 1
     return cpt, collected_data
 
+
 @retry_with_backoff(max_retries=5, base_delay=1, max_delay=60)
 def _fetch_with_retry(url, headers, timeout):
     """Effectue la requête HTTP avec retry en cas d'erreur."""
@@ -771,11 +770,13 @@ def fetch_data_from_urls_sequential(urls_plus_headers, cache_dir, cpt=None):
             if collected_data is not None and not collected_data.empty:
                 collected_data_x.append(collected_data)
             pbar.update(1)
-            pbar.set_postfix({
-                'OK': cpt['urls_OK'], 
-                'Cache': cpt['cache_used'],
-                '429': cpt.get('urls_retried', 0)
-            })
+            pbar.set_postfix(
+                {
+                    "OK": cpt["urls_OK"],
+                    "Cache": cpt["cache_used"],
+                    "429": cpt.get("urls_retried", 0),
+                }
+            )
     if len(collected_data_x) > 0:
         collected_data_final = pd.concat(collected_data_x)
     end_time = time.time()
