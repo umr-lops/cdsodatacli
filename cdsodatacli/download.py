@@ -273,6 +273,8 @@ def test_csv_content(csv_path) -> bool:
     for colneeded in ["id", "safename", "S3Path"]:
         if colneeded not in df.columns:
             csv_ok = False
+    meaning = "OK" if csv_ok else "KO"
+    logger.info("test_csv_content for %s : %s", csv_path, meaning)
     return csv_ok
 
 
@@ -539,8 +541,9 @@ def process_completed_futures(
 
 
 def check_input_df(listing, conf, s3pathretrievalmethod):
-
+    logger.info("check_input_df for listing %s", listing)
     if listing.endswith(".csv"):
+        logger.debug("test_format_input_ok with test_csv_content for %s", listing)
         test_format_input_ok = test_csv_content(listing)
     else:
         test_format_input_ok = test_listing_content(listing_path=listing)

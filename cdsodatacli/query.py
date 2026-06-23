@@ -19,11 +19,22 @@ import warnings
 from geodatasets import get_path
 import numpy as np
 from cdsodatacli.fetch_access_token import get_access_token
+from cdsodatacli.rate_limiter import RateLimiter  # Nouveau module
+from cdsodatacli.retry import retry_with_backoff  # Nouveau module
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TOP_ROWS_PER_QUERY = 1000
 WORLDPOLYGON = shapely.wkt.loads("POLYGON((-180 -90,180 -90,180 90,-180 90,-180 -90))")
+# Limites officielles CDSE : 2000 requêtes/minute → ~33 req/s, mais on est conservateur
+REQUESTS_PER_SECOND = 30  # Marge pour éviter les 429
+MAX_BURST = 40  # Burst autorisé
+MAX_WORKERS = 4
+
+# Rate limiter global pour toutes les requêtes
+_GLOBAL_RATE_LIMITER = RateLimiter(
+    max_requests_per_second=REQUESTS_PER_SECOND, max_burst=MAX_BURST
+)
 
 
 def time_based_hash(length=7):
@@ -115,7 +126,7 @@ def query_client():
     )
     parser.add_argument(
         "--output-safe-listing",
-        help="output txt file containing the SAFE listing resulting from the query [optional]",
+        help="output .csv file containing the SAFE listing resulting from the query, (ids, S3path, polygons,...) [optional]",
         required=False,
         default=None,
     )
@@ -180,9 +191,8 @@ def query_client():
             os.makedirs(
                 os.path.dirname(args.output_safe_listing), 0o0755, exist_ok=True
             )
-            print("with Ids")
-            result_query[["Id", "Name"]].to_csv(
-                args.output_safe_listing, index=False, header=False
+            result_query[["Id", "Name", "S3Path", "geometry", "Checksum"]].to_csv(
+                args.output_safe_listing, index=False, header=True
             )
             logger.info("SAFE listing saved to : %s", args.output_safe_listing)
             os.chmod(args.output_safe_listing, 0o0644)
@@ -670,7 +680,7 @@ def fetch_one_url(url, cpt, index, cache_dir, headers=None):
             - Updated counters.
             - DataFrame containing result rows for this URL.
     """
-    timeout = 10  # seconds
+    timeout = 30  # seconds
     json_data = None
     collected_data = None
     if cache_dir is not None:
@@ -685,7 +695,12 @@ def fetch_one_url(url, cpt, index, cache_dir, headers=None):
         logger.debug("no cache file -> go for query CDS")
         cpt["urls_tested"] += 1
         try:
-            json_data = requests.get(url, headers=headers, timeout=timeout).json()
+            # json_data = requests.get(url, headers=headers, timeout=timeout).json()
+            # Application du rate limiting GLOBAL avant la requête
+            _GLOBAL_RATE_LIMITER.wait_if_needed()
+
+            # Requête avec retry automatique sur 429 et autres erreurs réseau
+            json_data = _fetch_with_retry(url, headers, timeout)
             cpt["urls_OK"] += 1
         except requests.exceptions.ReadTimeout:
             cpt["urls_timeout"] += 1
@@ -726,19 +741,16 @@ def fetch_one_url(url, cpt, index, cache_dir, headers=None):
     return cpt, collected_data
 
 
+@retry_with_backoff(max_retries=5, base_delay=1, max_delay=60)
+def _fetch_with_retry(url, headers, timeout):
+    """Effectue la requête HTTP avec retry en cas d'erreur."""
+    response = requests.get(url, headers=headers, timeout=timeout)
+    response.raise_for_status()  # Lève une exception pour les codes 4xx/5xx
+    return response.json()
+
+
 def fetch_data_from_urls_sequential(urls_plus_headers, cache_dir, cpt=None):
-    """Fetches meta-data sequentially from a list of OData URLs.
-
-    Args:
-        urls_plus_headers (dict): Dict containing 'urls' (list) and 'headers' (dict).
-        cache_dir (str, optional): Path for local caching.
-        cpt (collections.defaultdict, optional): Status counters.
-
-    Returns:
-        tuple: (pd.DataFrame, defaultdict)
-            - Concatenated meta-data results.
-            - Updated status counters.
-    """
+    """Fetches meta-data sequentially from a list of OData URLs."""
     urls = urls_plus_headers["urls"]
     headers = urls_plus_headers["headers"]
     if cpt is None:
@@ -750,15 +762,21 @@ def fetch_data_from_urls_sequential(urls_plus_headers, cache_dir, cpt=None):
         if not os.path.exists(cache_dir):
             logger.info("mkdir cache dir: %s", cache_dir)
             os.makedirs(cache_dir)
-    for ii in tqdm(range(len(urls)), disable=True):
-        url = urls[ii][1]
-        index = urls[ii][0]
-        cpt, collected_data = fetch_one_url(
-            url, cpt, index=index, cache_dir=cache_dir, headers=headers
-        )
-        if collected_data is not None:
-            if not collected_data.empty:
+    with tqdm(total=len(urls), desc="Fetching data from CDSE", unit="query") as pbar:
+        for index, url in urls:  # <-- CHANGED: was (url, index), now (index, url)
+            cpt, collected_data = fetch_one_url(
+                url, cpt, index=index, cache_dir=cache_dir, headers=headers
+            )
+            if collected_data is not None and not collected_data.empty:
                 collected_data_x.append(collected_data)
+            pbar.update(1)
+            pbar.set_postfix(
+                {
+                    "OK": cpt["urls_OK"],
+                    "Cache": cpt["cache_used"],
+                    "429": cpt.get("urls_retried", 0),
+                }
+            )
     if len(collected_data_x) > 0:
         collected_data_final = pd.concat(collected_data_x)
     end_time = time.time()
@@ -771,7 +789,7 @@ def fetch_data_from_urls_sequential(urls_plus_headers, cache_dir, cpt=None):
 
 
 def fetch_data_from_urls_multithread(
-    urls_plus_headers, cache_dir=None, max_workers=50, cpt=None
+    urls_plus_headers, cache_dir=None, max_workers=5, cpt=None
 ):
     """Fetches meta-data from OData URLs using a thread pool.
 
@@ -787,6 +805,7 @@ def fetch_data_from_urls_multithread(
             - Updated status counters.
     """
     collected_data = pd.DataFrame()
+    max_workers = min(max_workers, 5)  # Maximum de 5 threads pour éviter la saturatio
     if cpt is None:
         cpt = defaultdict(int)
     urls = urls_plus_headers["urls"]
