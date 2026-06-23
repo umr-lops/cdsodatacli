@@ -1,3 +1,5 @@
+# test_match_s1_product_types.py - Version corrigée
+
 import pytest
 from unittest.mock import MagicMock, patch, mock_open
 from datetime import datetime
@@ -84,6 +86,48 @@ def test_closest_in_time():
 def test_find_product_success_exact(
     mock_explode_class, mock_get, real_safe_id, logger, mock_explode_safe
 ):
+    """Test de matching exact pour OCN (niveau 2)."""
+    # Simuler l'instance ExplodeSAFE pour source_id
+    mock_inst = mock_explode_safe(
+        startdate=datetime(2023, 7, 26, 7, 11, 12),
+        mission_data_take="05F692",
+        absolute_orbit_number=49591,
+        level="1",  # Source en niveau 1
+        polarisation="DV",
+    )
+    mock_explode_class.return_value = mock_inst
+
+    # Simuler la réponse OData - OCN est niveau 2
+    mock_get.return_value.status_code = 200
+    mock_get.return_value.json.return_value = {
+        "value": [
+            {
+                "Id": "u1",
+                "Name": "S1A_IW_OCN__2SDV_20230726T071112_20230726T071137_049591_05F692_E123.SAFE",
+                "ContentLength": 100,
+            }
+        ]
+    }
+
+    delta_dist = defaultdict(int)
+    res = find_product_for_safe(real_safe_id, "OCN_", logger, delta_dist)
+    assert res["match_method"] == "exact_timestamp"
+    
+    # Vérifier que le filtre a bien utilisé l'orbite et le datatake
+    args, kwargs = mock_get.call_args
+    filter_str = kwargs["params"]["$filter"]
+    assert "49591_05F692" in filter_str
+    
+    # CORRECTION : Pour OCN, le niveau est 2, donc polarisation complète = 2SDV
+    assert "2SDV" in filter_str, f"Expected '2SDV' in filter, got: {filter_str}"
+
+
+@patch("requests.get")
+@patch("cdsodatacli.scripts.match_s1_product_types.ExplodeSAFE")
+def test_find_product_success_exact_grds(
+    mock_explode_class, mock_get, real_safe_id, logger, mock_explode_safe
+):
+    """Test de matching exact pour GRDH (niveau 1)."""
     # Simuler l'instance ExplodeSAFE pour source_id
     mock_inst = mock_explode_safe(
         startdate=datetime(2023, 7, 26, 7, 11, 12),
@@ -94,26 +138,28 @@ def test_find_product_success_exact(
     )
     mock_explode_class.return_value = mock_inst
 
-    # Simuler la réponse OData
+    # Simuler la réponse OData pour GRDH
     mock_get.return_value.status_code = 200
     mock_get.return_value.json.return_value = {
         "value": [
             {
                 "Id": "u1",
-                "Name": "S1A_IW_OCN__1SDV_20230726T071112_20230726T071137_049591_05F692_E123.SAFE",
+                "Name": "S1A_IW_GRDH_1SDV_20230726T071112_20230726T071137_049591_05F692_E123.SAFE",
                 "ContentLength": 100,
             }
         ]
     }
 
     delta_dist = defaultdict(int)
-    res = find_product_for_safe(real_safe_id, "OCN_", logger, delta_dist)
+    res = find_product_for_safe(real_safe_id, "GRDH", logger, delta_dist)
     assert res["match_method"] == "exact_timestamp"
-    # Vérifier que le filtre a bien utilisé l'orbite et le datatake
+    
+    # Vérifier le filtre
     args, kwargs = mock_get.call_args
     filter_str = kwargs["params"]["$filter"]
     assert "49591_05F692" in filter_str
-    assert "1SDV" in filter_str  # polarisation complète
+    # Pour GRDH, le niveau est 1, donc 1SDV
+    assert "1SDV" in filter_str, f"Expected '1SDV' in filter, got: {filter_str}"
 
 
 @patch("requests.get")
@@ -121,6 +167,7 @@ def test_find_product_success_exact(
 def test_find_product_success_closest(
     mock_explode_class, mock_get, real_safe_id, logger, mock_explode_safe
 ):
+    """Test de matching par plus proche voisin."""
     # Source
     src_inst = mock_explode_safe(
         startdate=datetime(2023, 7, 26, 7, 11, 12),
@@ -203,6 +250,43 @@ def test_find_product_delta_exceeds_threshold(
     res = find_product_for_safe(real_safe_id, "GRDH", logger, delta_dist)
     assert res["status"] == "not_found"
     assert "20s away" in res["note"]
+
+
+@patch("requests.get")
+@patch("cdsodatacli.scripts.match_s1_product_types.ExplodeSAFE")
+def test_find_product_for_slc(
+    mock_explode_class, mock_get, real_safe_id, logger, mock_explode_safe
+):
+    """Test spécifique pour SLC_ (niveau 1 également)."""
+    mock_inst = mock_explode_safe(
+        startdate=datetime(2023, 7, 26, 7, 11, 12),
+        mission_data_take="05F692",
+        absolute_orbit_number=49591,
+        level="1",
+        polarisation="DV",
+    )
+    mock_explode_class.return_value = mock_inst
+
+    mock_get.return_value.status_code = 200
+    mock_get.return_value.json.return_value = {
+        "value": [
+            {
+                "Id": "u1",
+                "Name": "S1A_IW_SLC__1SDV_20230726T071112_20230726T071137_049591_05F692_E123.SAFE",
+                "ContentLength": 100,
+            }
+        ]
+    }
+
+    delta_dist = defaultdict(int)
+    res = find_product_for_safe(real_safe_id, "SLC_", logger, delta_dist)
+    assert res["match_method"] == "exact_timestamp"
+    
+    # Vérifier le filtre
+    args, kwargs = mock_get.call_args
+    filter_str = kwargs["params"]["$filter"]
+    # SLC_ est aussi niveau 1
+    assert "1SDV" in filter_str, f"Expected '1SDV' in filter, got: {filter_str}"
 
 
 def test_load_listing(logger):

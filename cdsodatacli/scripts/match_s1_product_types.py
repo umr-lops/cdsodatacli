@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Sentinel-1 Product Matchup Tool
-Finds a target product type for a given list of Sentinel-1 SAFE product IDs.
+Sentinel-1 Product Matchup Tool - Version optimisée avec rate limiting et checkpoint.
 """
 
 import requests
@@ -12,22 +11,32 @@ import argparse
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 from cdsodatacli.product_parser import ExplodeSAFE
+from cdsodatacli.rate_limiter import RateLimiter
+from cdsodatacli.retry import retry_with_backoff
 
 # ── CONFIGURATION ────────────────────────────────────────────────────────────
 ODATA_URL = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products"
-
 VALID_PRODUCT_TYPES = ["GRDH", "GRDM", "SLC_", "OCN_", "RAW_"]
+MAX_DELTA_SECONDS = 8
+MAX_WORKERS = 4  # Threads parallèles
+REQUESTS_PER_SECOND = 30  # Basé sur la limite de 2000/min
+MAX_BURST = 40
 
+# Rate limiter global
+_GLOBAL_RATE_LIMITER = RateLimiter(
+    max_requests_per_second=REQUESTS_PER_SECOND,
+    max_burst=MAX_BURST
+)
 
 # ── LOGGING SETUP ────────────────────────────────────────────────────────────
 def setup_logger(verbose: bool = False) -> logging.Logger:
     logger = logging.getLogger("s1_matchup")
     logger.setLevel(logging.DEBUG if verbose else logging.INFO)
-
     handler = logging.StreamHandler()
     handler.setLevel(logging.DEBUG if verbose else logging.INFO)
-
     formatter = logging.Formatter(
         fmt="%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
@@ -35,107 +44,46 @@ def setup_logger(verbose: bool = False) -> logging.Logger:
     logger.addHandler(handler)
     return logger
 
-
 # ── HELPERS ──────────────────────────────────────────────────────────────────
 def parse_start_time(product_name: str) -> datetime | None:
     try:
         inst = ExplodeSAFE(product_name)
         return inst.startdate
-    except (IndexError, ValueError, AttributeError):  # Added AttributeError
+    except (IndexError, ValueError, AttributeError):
         return None
 
+# ── CORE LOGIC AVEC RATE LIMITING ET RETRY ────────────────────────────────
+@retry_with_backoff(max_retries=5, base_delay=1, max_delay=60)
+def _query_odata_with_retry(query_filter: str) -> requests.Response:
+    """Effectue une requête OData avec retry et rate limiting."""
+    params = {"$filter": query_filter, "$top": 50}
+    _GLOBAL_RATE_LIMITER.wait_if_needed()
+    response = requests.get(ODATA_URL, params=params, timeout=30)
+    response.raise_for_status()  # Déclenche le retry sur 4xx/5xx
+    return response
 
-# def parse_safe_info(product_name: str):
-#     """Retourne (start_datetime, datatake_hex) ou (None, None) en cas d'échec."""
-#     try:
-#         inst = ExplodeSAFE(product_name)
-#         # Exemple d'attributs disponibles (à adapter selon votre lib)
-#         return inst.startdate, getattr(inst, 'mission_data_take', None)
-#     except Exception:
-#         return None, None
-
-
-MAX_DELTA_SECONDS = 8
-
-
-def closest_in_time(
-    reference_dt: datetime, candidates: list[dict]
-) -> tuple[dict, float]:
-    """
-    Return (candidate, delta_seconds) for the product closest in time to reference_dt.
-
-    Args:
-        reference_dt (datetime): The reference datetime to compare against.
-        candidates (list of dict): List of product dicts, each with a "Name" key containing the product name to parse for datetime.
-    Returns:
-        tuple: (best_candidate_dict, delta_seconds) where best_candidate_dict is the dict from candidates with the closest datetime, and delta_seconds is the absolute difference in seconds between reference_dt and the
-
-    """
-
-    def time_delta(prod):
-        # dt = parse_start_time(prod["Name"])
-        tmpinst = ExplodeSAFE(prod["Name"])
-        dt = tmpinst.startdate
-        # dt, _ = parse_safe_info(prod["Name"])
-        if dt is None:
-            return float("inf")
-        return abs((dt - reference_dt).total_seconds())
-
-    best = min(candidates, key=time_delta)
-    return best, time_delta(best)
-
-
-# ── CORE LOGIC ───────────────────────────────────────────────────────────────
 def find_product_for_safe(
     source_id: str,
     target_type: str,
     logger: logging.Logger,
     delta_distribution: defaultdict,
 ) -> dict:
-    """
-    Finds a target-type product for a given source Sentinel-1 product ID.
-    Uses DataTake ID as the primary anchor, then exact timestamp match,
-    then closest-in-time as fallback.
-
-    Args:
-        source_id (str): SAFENAME Sentinel-1
-        target_type (str): the product-type for which we need a matching product (e.g. SLC_ or GRDH)
-        logger (): logging stuff
-        delta_distribution (defaultdict): to have stats on the delta shift in seconds between a product and its correspondant
-    Returns:
-        dict: containing {
-            "source_id": source_id,
-            "target_id": match["Id"],
-            "target_name": match["Name"],
-            "target_type": target_type,
-            "match_method": match_method,
-            "size_mb": round(match["ContentLength"] / 1024**2, 2),
-            "download_url": (
-                f"https://download.dataspace.copernicus.eu"
-                f"/odata/v1/Products({match['Id']})/$value"
-            ),
-        }
-
-    """
+    """Version avec rate limiting et retry intégré."""
     try:
         inst = ExplodeSAFE(source_id)
         source_start = inst.startdate
         source_datatake = inst.mission_data_take
         source_absolute_orbit = inst.absolute_orbit_number
         if source_start is None or source_datatake is None:
-            logger.error("Failed to parse start date or datatake from %s", source_id)
             return {
                 "source_id": source_id,
                 "status": "error",
                 "note": "Impossible d'extraire les infos du nom",
             }
 
-        platform = source_id.split("_")[0]  # ou inst.platform
+        platform = source_id.split("_")[0]
         type_token = target_type.rstrip("_").ljust(4, "_")
-        if target_type == "OCN_":
-            leveltarget = "2"
-        else:
-            leveltarget = "1"
+        leveltarget = "2" if target_type == "OCN_" else "1"
         pol_full = f"{leveltarget}S{inst.polarisation}"
         query_filter = (
             f"startswith(Name,'{platform}') and "
@@ -144,33 +92,21 @@ def find_product_for_safe(
             f"contains(Name,'_{pol_full}') and "
             f"not contains(Name,'_COG')"
         )
-        # ─────────────────────────────────────────────────────────────────────
-        params = {"$filter": query_filter, "$top": 50}
 
         logger.debug("OData query filter: %s", query_filter)
-
-        resp = requests.get(ODATA_URL, params=params, timeout=30)
-        if resp.status_code != 200:
-            return {
-                "source_id": source_id,
-                "status": "error",
-                "note": f"HTTP {resp.status_code}: {resp.text[:200]}",
-            }
-
-        products = resp.json().get("value", [])
+        
+        # Requête avec retry automatique
+        response = _query_odata_with_retry(query_filter)
+        products = response.json().get("value", [])
 
         if not products:
-            logger.debug(
-                "No products found for %s with filter: %s", source_id, query_filter
-            )
             return {
                 "source_id": source_id,
                 "status": "not_found",
                 "note": f"No {target_type} product found for DataTake {source_datatake}",
             }
 
-        # ── Match strategy ───────────────────────────────────────────────────
-        # 1. Exact start-time match (same slice)
+        # Stratégie de matching (inchangée)
         start_time_str = source_start.strftime("%Y%m%dT%H%M%S")
         exact = next((p for p in products if start_time_str in p["Name"]), None)
 
@@ -178,11 +114,8 @@ def find_product_for_safe(
             match = exact
             match_method = "exact_timestamp"
             delta_distribution[0] += 1
-
         else:
-            # 2. Closest-in-time within the same DataTake
             reference_dt = parse_start_time(source_id)
-
             match, delta = closest_in_time(reference_dt, products)
             delta_int = int(delta)
             delta_distribution[delta_int] += 1
@@ -198,7 +131,7 @@ def find_product_for_safe(
                 }
             match_method = "closest_in_time"
             logger.debug(
-                "No exact timestamp match; picked closest product " "(delta=%.0fs): %s",
+                "No exact timestamp match; picked closest product (delta=%.0fs): %s",
                 delta,
                 match["Name"],
             )
@@ -221,56 +154,117 @@ def find_product_for_safe(
     except Exception as exc:
         return {"source_id": source_id, "status": "error", "note": str(exc)}
 
+def closest_in_time(
+    reference_dt: datetime, candidates: list[dict]
+) -> tuple[dict, float]:
+    """Trouve le candidat le plus proche en temps (inchangé)."""
+    def time_delta(prod):
+        dt = parse_start_time(prod["Name"])
+        if dt is None:
+            return float("inf")
+        return abs((dt - reference_dt).total_seconds())
 
-# ── ENTRYPOINT ───────────────────────────────────────────────────────────────
+    best = min(candidates, key=time_delta)
+    return best, time_delta(best)
+
+# ── CHECKPOINT SYSTEM ──────────────────────────────────────────────────────
+def save_checkpoint(processed_ids: list[str], checkpoint_file: Path):
+    """Sauvegarde les IDs déjà traités."""
+    with checkpoint_file.open("w") as f:
+        for pid in processed_ids:
+            f.write(f"{pid}\n")
+
+def load_checkpoint(checkpoint_file: Path) -> set[str]:
+    """Charge les IDs déjà traités depuis un checkpoint."""
+    if not checkpoint_file.exists():
+        return set()
+    with checkpoint_file.open("r") as f:
+        return {line.strip() for line in f if line.strip()}
+
+# ── ENTRYPOINT OPTIMISÉ ────────────────────────────────────────────────────
 def entrypoint(
     safe_list: list[str],
     target_type: str,
     output_filename: str,
     logger: logging.Logger,
+    checkpoint_dir: str | None = None,
 ) -> list[dict]:
+    """Version avec progress bar, checkpoint et rate limiting."""
+    
+    # Gestion du checkpoint
+    checkpoint_file = None
+    if checkpoint_dir:
+        checkpoint_path = Path(checkpoint_dir)
+        checkpoint_path.mkdir(parents=True, exist_ok=True)
+        checkpoint_file = checkpoint_path / f"{Path(output_filename).stem}_checkpoint.txt"
+        processed_ids = load_checkpoint(checkpoint_file)
+        logger.info(f"Loaded checkpoint: {len(processed_ids)} products already processed")
+        # Filtrer la liste
+        safe_list = [s for s in safe_list if s not in processed_ids]
+    
     logger.info(
         "Starting matchup: %d product(s) → target type '%s'",
         len(safe_list),
         target_type,
     )
+    
     results = []
-    delta_distribution: defaultdict[int, int] = defaultdict(int)
-    pbar = tqdm(safe_list, desc="Matching products", unit="product")
-    try:
-
-        for safe_id in pbar:
-            pbar.set_description(f" match  delta sec count: {delta_distribution}")
-            safe_id = safe_id.strip()
-            if not safe_id:
-                continue
-
-            logger.debug("Processing %s", safe_id)
-            res = find_product_for_safe(
-                safe_id, target_type, logger, delta_distribution
-            )
-            results.append(res)
-
-            if "target_name" in res:
-                logger.debug(
-                    "  ✓ Found (%s): %s  [%.1f MB]",
-                    res["match_method"],
-                    res["target_name"],
-                    res["size_mb"],
-                )
-            else:
-                logger.debug(
-                    "  ✗ Failed for %s — %s", safe_id, res.get("note", "unknown error")
-                )
-
-            time.sleep(0.5)  # Be polite to the OData endpoint
-
-    except KeyboardInterrupt:
-        logger.warning(
-            "Interrupted by user after %d product(s) processed.", len(results)
-        )
-
-    # ── Write results ────────────────────────────────────────────────────────
+    delta_distribution = defaultdict(int)
+    lock = Lock()
+    processed = set()
+    
+    # Barre de progression avec statistiques
+    with tqdm(total=len(safe_list), desc="Matching products", unit="product") as pbar:
+        
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = {
+                executor.submit(
+                    find_product_for_safe, safe_id, target_type, logger, delta_distribution
+                ): safe_id
+                for safe_id in safe_list
+            }
+            
+            for future in as_completed(futures):
+                safe_id = futures[future]
+                try:
+                    res = future.result()
+                    with lock:
+                        results.append(res)
+                        processed.add(safe_id)
+                    
+                    # Sauvegarde périodique du checkpoint
+                    if checkpoint_file and len(processed) % 10 == 0:
+                        save_checkpoint(list(processed), checkpoint_file)
+                    
+                    # Mise à jour de la progress bar
+                    found = sum(1 for r in results if "target_name" in r)
+                    not_found = sum(1 for r in results if r.get("status") == "not_found")
+                    errors = sum(1 for r in results if r.get("status") == "error")
+                    pbar.set_postfix({
+                        'found': found,
+                        'not_found': not_found,
+                        'errors': errors,
+                        'rate': f"{_GLOBAL_RATE_LIMITER.tokens:.1f}"
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Error processing {safe_id}: {e}")
+                    with lock:
+                        results.append({
+                            "source_id": safe_id,
+                            "status": "error",
+                            "note": str(e)
+                        })
+                        processed.add(safe_id)
+                
+                pbar.update(1)
+    
+    # Sauvegarde finale du checkpoint
+    if checkpoint_file:
+        save_checkpoint(list(processed), checkpoint_file)
+        logger.info(f"Checkpoint saved to {checkpoint_file}")
+    
+    # Écriture des résultats
     output_path = Path(output_filename)
     with output_path.open("w") as fh:
         for r in results:
@@ -278,11 +272,11 @@ def entrypoint(
                 fh.write(f"{r['target_name']}\n")
             else:
                 fh.write(f"# NOT_FOUND: {r['source_id']} — {r.get('note', '')}\n")
-
+    
+    # Log du résumé
     found = sum(1 for r in results if "target_name" in r)
     not_found = sum(1 for r in results if r.get("status") == "not_found")
     errors = sum(1 for r in results if r.get("status") == "error")
-
     logger.info(
         "Done — %d found, %d not found, %d errors. Results → %s",
         found,
@@ -290,17 +284,15 @@ def entrypoint(
         errors,
         output_path.resolve(),
     )
-
-    # ── Delta distribution ────────────────────────────────────────────────────
+    
     if delta_distribution:
         logger.info("Delta-time distribution (seconds → count):")
         for delta_s, count in sorted(delta_distribution.items()):
             label = f"{delta_s}s" if delta_s > 0 else "exact"
             flag = "  ← above threshold" if delta_s > MAX_DELTA_SECONDS else ""
             logger.info("  %6s : %d%s", label, count, flag)
-
+    
     return results
-
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 def parse_args() -> argparse.Namespace:
@@ -316,8 +308,8 @@ Examples:
   # From a file (one SAFE ID per line), look for SLC products
   python s1_matchup.py --prodtype SLC_ --input-listing my_products.txt
 
-  # Enable verbose/debug logging
-  python s1_matchup.py --prodtype OCN_ --input-listing list.txt --verbose
+  # Enable checkpointing
+  python s1_matchup.py --prodtype OCN_ --input-listing list.txt --checkpoint-dir ./checkpoints
         """,
     )
 
@@ -348,6 +340,11 @@ Examples:
         help="Output text file to write results to (one match per line).",
     )
     parser.add_argument(
+        "--checkpoint-dir",
+        metavar="DIR",
+        help="Directory to store checkpoint files for resuming interrupted runs.",
+    )
+    parser.add_argument(
         "--dev",
         action="store_true",
         help="Enable dev mode with reduced number of SAFE to treat.",
@@ -361,7 +358,6 @@ Examples:
 
     return parser.parse_args()
 
-
 def load_listing(filepath: str, logger: logging.Logger) -> list[str]:
     path = Path(filepath)
     if not path.exists():
@@ -370,7 +366,6 @@ def load_listing(filepath: str, logger: logging.Logger) -> list[str]:
     lines = [lili.strip() for lili in path.read_text().splitlines() if lili.strip()]
     logger.info("Loaded %d product ID(s) from %s", len(lines), filepath)
     return lines
-
 
 def main():
     args = parse_args()
@@ -390,9 +385,8 @@ def main():
         target_type=args.prodtype,
         output_filename=args.output,
         logger=logger,
+        checkpoint_dir=args.checkpoint_dir,
     )
 
-
-# ── MAIN ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     main()
