@@ -96,6 +96,26 @@ def find_product_for_safe(
     Finds a target-type product for a given source Sentinel-1 product ID.
     Uses DataTake ID as the primary anchor, then exact timestamp match,
     then closest-in-time as fallback.
+
+    Args:
+        source_id (str): SAFENAME Sentinel-1
+        target_type (str): the product-type for which we need a matching product (e.g. SLC_ or GRDH)
+        logger (): logging stuff
+        delta_distribution (defaultdict): to have stats on the delta shift in seconds between a product and its correspondant
+    Returns:
+        dict: containing {
+            "source_id": source_id,
+            "target_id": match["Id"],
+            "target_name": match["Name"],
+            "target_type": target_type,
+            "match_method": match_method,
+            "size_mb": round(match["ContentLength"] / 1024**2, 2),
+            "download_url": (
+                f"https://download.dataspace.copernicus.eu"
+                f"/odata/v1/Products({match['Id']})/$value"
+            ),
+        }
+
     """
     try:
         inst = ExplodeSAFE(source_id)
@@ -112,7 +132,11 @@ def find_product_for_safe(
 
         platform = source_id.split("_")[0]  # ou inst.platform
         type_token = target_type.rstrip("_").ljust(4, "_")
-        pol_full = f"{inst.level}S{inst.polarisation}"
+        if target_type == "OCN_":
+            leveltarget = "2"
+        else:
+            leveltarget = "1"
+        pol_full = f"{leveltarget}S{inst.polarisation}"
         query_filter = (
             f"startswith(Name,'{platform}') and "
             f"contains(Name,'_{type_token}') and "

@@ -115,7 +115,7 @@ def query_client():
     )
     parser.add_argument(
         "--output-safe-listing",
-        help="output txt file containing the SAFE listing resulting from the query [optional]",
+        help="output .csv file containing the SAFE listing resulting from the query, (ids, S3path, polygons,...) [optional]",
         required=False,
         default=None,
     )
@@ -180,9 +180,8 @@ def query_client():
             os.makedirs(
                 os.path.dirname(args.output_safe_listing), 0o0755, exist_ok=True
             )
-            print("with Ids")
-            result_query[["Id", "Name"]].to_csv(
-                args.output_safe_listing, index=False, header=False
+            result_query[["Id", "Name", "S3Path", "geometry", "Checksum"]].to_csv(
+                args.output_safe_listing, index=False, header=True
             )
             logger.info("SAFE listing saved to : %s", args.output_safe_listing)
             os.chmod(args.output_safe_listing, 0o0644)
