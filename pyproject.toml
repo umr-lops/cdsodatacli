@@ -37,6 +37,14 @@ dependencies = [
 
 dynamic = ["version"]
 [project.optional-dependencies]
+docs = [
+  "sphinx",
+  "sphinx_autosummary_accessors",
+  "sphinx-rtd-theme",
+  "nbsphinx",
+  "jupyter_sphinx",
+  "ipython",
+]
 dev = [
   "pre-commit",
   "pytest",
@@ -47,7 +55,6 @@ dev = [
   "ruff>=0.8.0",
   "sphinx",
   "sphinx_autosummary_accessors",
-
 ]
 
 [project.scripts]
