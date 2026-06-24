@@ -55,11 +55,15 @@ def parse_start_time(product_name: str) -> datetime | None:
 
 # ── CORE LOGIC AVEC RATE LIMITING ET RETRY ────────────────────────────────
 @retry_with_backoff(max_retries=5, base_delay=1, max_delay=60)
-def _query_odata_with_retry(query_filter: str) -> requests.Response:
+def _query_odata_with_retry(
+    query_filter: str, logger: logging.Logger
+) -> requests.Response:
     """Effectue une requête OData avec retry et rate limiting."""
-    params = {"$filter": query_filter, "$top": 50}
+    params = {"$filter": query_filter, "$top": 999}
     _GLOBAL_RATE_LIMITER.wait_if_needed()
+    logger.debug("requests.get URL: %s params : %s", ODATA_URL, params)
     response = requests.get(ODATA_URL, params=params, timeout=30)
+    logger.debug("response raw: %s", response)
     response.raise_for_status()  # Déclenche le retry sur 4xx/5xx
     return response
 
@@ -98,7 +102,7 @@ def find_product_for_safe(
         logger.debug("OData query filter: %s", query_filter)
 
         # Requête avec retry automatique
-        response = _query_odata_with_retry(query_filter)
+        response = _query_odata_with_retry(query_filter, logger=logger)
         products = response.json().get("value", [])
 
         if not products:
