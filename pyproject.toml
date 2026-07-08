@@ -63,6 +63,7 @@ downloadMultiThreadMultiUserS3 = 'cdsodatacli.scripts.download_multithread_one_a
 countProductsLocally = 'cdsodatacli.scripts.count_present_and_absent_products:entrypoint'
 match_s1_prodtypes = 'cdsodatacli.scripts.match_s1_product_types:main'
 get-odata-ids = 'cdsodatacli.scripts.get_ids_listing_safe_iterative:entrypoint'
+get-metadata-from-product-names = 'cdsodatacli.get_products_metadata:main'
 
 
 [build-system]
