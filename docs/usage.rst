@@ -231,7 +231,7 @@ Example:
         geometry="POINT (-5.02 48.4)",
         collection="SENTINEL-1",
         sensormode="IW",
-        producttype="SLC"
+        producttype="SLC",
     )
 
     # Fetch metadata

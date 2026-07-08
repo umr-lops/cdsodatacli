@@ -35,6 +35,7 @@ The package provides several command-line tools:
 Search for products using spatial and temporal filters (geometry, date range, product type, etc.).
 
 **Features:**
+
 - Spatial filtering (Point, Polygon, global)
 - Temporal range with automatic time slicing (`--batch-size`)
 - Product type filtering (GRD, SLC, OCN, RAW)
@@ -64,6 +65,7 @@ queryCDS --collection SENTINEL-1 --startdate 20230101T00:00:00 --stopdate 202301
 ```
 
 **Key Options:**
+
 - `--startdate`, `--stopdate`: Time range (format: YYYYMMDDTHH:MM:SS)
 - `--geometry`: WKT geometry (Point or Polygon)
 - `--collection`: SENTINEL-1, SENTINEL-2, etc.
@@ -81,6 +83,7 @@ queryCDS --collection SENTINEL-1 --startdate 20230101T00:00:00 --stopdate 202301
 Retrieve complete metadata for a list of known SAFE product names or Product UUIDs.
 
 **Features:**
+
 - Input: text file with one SAFE name or UUID per line
 - Automatic detection of SAFE names vs UUIDs
 - Batching (15 names per OData query)
@@ -106,6 +109,7 @@ get-metadata-from-product-names --input-listing safes.txt --output results.csv -
 ```
 
 **Key Options:**
+
 - `--input-listing`: Text file with one SAFE name or UUID per line
 - `--output`: CSV output file
 - `--batch-size`: Products per OData query (default: 15)
@@ -133,9 +137,10 @@ match_s1_prodtypes --input-listing big_list.txt --prodtype OCN_ --output matches
 ```
 
 **Key Options:**
+
 - `--safe`: List of SAFE names
 - `--input-listing`: File with one SAFE name per line
-- `--prodtype`: Target product type (GRDH, GRDM, SLC_, OCN_, RAW_)
+- `--prodtype`: Target product type (GRDH, GRDM, SLC*, OCN*, RAW\_)
 - `--checkpoint-dir`: Resume interrupted runs
 
 ---
