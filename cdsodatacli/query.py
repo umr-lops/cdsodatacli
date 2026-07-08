@@ -8,7 +8,9 @@ import pandas as pd
 import argparse
 from shapely import wkt
 import geopandas as gpd
+from pathlib import Path
 import shapely
+from typing import Dict, List, Optional, Set, Tuple  # <-- Manquant
 from shapely.ops import unary_union
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -146,6 +148,17 @@ def query_client():
         default=None,
         help="minimum sea percent to filter out products based on their sea percent coverage [optional, default=None -> no filtering]",
     )
+    parser.add_argument(
+        "--checkpoint-dir",
+        help="path to checkpoint directory to resume interrupted queries [optional]",
+        default=None,
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        help="number of days per time slice for splitting queries [optional, default=14]",
+    )
 
     args = parser.parse_args()
     fmt = "%(asctime)s %(levelname)s %(filename)s(%(lineno)d) %(message)s"
@@ -161,6 +174,12 @@ def query_client():
     sta = datetime.datetime.strptime(args.startdate, "%Y%m%dT%H:%M:%S")
     sto = datetime.datetime.strptime(args.stopdate, "%Y%m%dT%H:%M:%S")
     id_query = time_based_hash() if args.id_query is None else args.id_query
+    checkpoint_dir = args.checkpoint_dir
+    timedelta_slice = (
+        datetime.timedelta(days=args.batch_size)
+        if args.batch_size
+        else datetime.timedelta(days=14)
+    )
     gdf = gpd.GeoDataFrame(
         {
             "start_datetime": [sta],
@@ -176,13 +195,14 @@ def query_client():
     )
     result_query = fetch_data(
         gdf,
-        timedelta_slice=datetime.timedelta(days=14),
+        timedelta_slice=timedelta_slice,
         min_sea_percent=None,
         top=args.top,
         cache_dir=args.cache_dir,
         querymode=args.querymode,
         email=args.email,
         password=args.password,
+        checkpoint_dir=checkpoint_dir,
     )
     logger.info("time to query : %1.1f sec", time.time() - t0)
     if result_query is not None and result_query.empty is False:
@@ -224,6 +244,21 @@ def touch(fname, times=None):
         fhandle.close()
 
 
+def save_checkpoint(processed_ids: List[str], checkpoint_file: Path):
+    """Sauvegarde les IDs déjà traités."""
+    with checkpoint_file.open("w") as f:
+        for pid in processed_ids:
+            f.write(f"{pid}\n")
+
+
+def load_checkpoint(checkpoint_file: Path) -> Set[str]:
+    """Charge les IDs déjà traités depuis un checkpoint."""
+    if not checkpoint_file.exists():
+        return set()
+    with checkpoint_file.open("r") as f:
+        return {line.strip() for line in f if line.strip()}
+
+
 def fetch_data(
     gdf,
     timedelta_slice=None,
@@ -234,6 +269,7 @@ def fetch_data(
     email=None,
     password=None,
     display_tqdm=False,
+    checkpoint_dir=None,
 ):
     """Fetches meta-data of CDSE products based on provided parameters.
 
@@ -272,6 +308,20 @@ def fetch_data(
     if email and password:
         headers = get_access_token(email, password)
     collected_data = None
+    # Gestion du checkpoint
+    checkpoint_file = None
+    processed_set = set()
+    if checkpoint_dir:
+        checkpoint_path = Path(checkpoint_dir)
+        checkpoint_path.mkdir(parents=True, exist_ok=True)
+        checkpoint_file = checkpoint_path / "fetch_data_checkpoint.txt"
+        processed_set = load_checkpoint(checkpoint_file)
+        if processed_set:
+            logger.info(
+                f"Loaded checkpoint: {len(processed_set)} queries already processed"
+            )
+        else:
+            logger.info("No checkpoint found, starting fresh")
     # split the gdf in subsets based on the query_id
     unique_query_ids = gdf["id_query"].unique()
     pbar = tqdm(
@@ -283,6 +333,10 @@ def fetch_data(
     cpt = defaultdict(int)
     for qi in pbar:
         query_id = unique_query_ids[qi]
+        # Vérifier si déjà traité
+        if checkpoint_file and str(query_id) in processed_set:
+            logger.info(f"Skipping already processed query: {query_id}")
+            continue
         gdf_subset = gdf[gdf["id_query"] == query_id]
         logger.info(
             f"fetching data for query_id:{query_id} with {len(gdf_subset)} geometries"
@@ -300,6 +354,10 @@ def fetch_data(
             headers=headers if email and password else None,
         )
         pbar.set_description("queries: %s" % cpt)
+        # Sauvegarder le checkpoint après chaque requête réussie
+        if checkpoint_file:
+            processed_set.add(str(query_id))
+            save_checkpoint(list(processed_set), checkpoint_file)
         if collected_data is None:
             collected_data = data_subset
         else:
@@ -319,28 +377,6 @@ def fetch_data_single_query(
     cpt=None,
     headers=None,
 ):
-    """Executes fetching logic for a GeoDataFrame subset (single query ID).
-
-    Normalizes the GeoDataFrame, creates URLs, performs the HTTP requests,
-    and post-processes the results (deduplication, geometry conversion).
-
-    Args:
-        gdf (gpd.GeoDataFrame): Normalized input data.
-        min_sea_percent (float, optional): Threshold for sea coverage.
-        top (int, optional): Max rows per query.
-        cache_dir (str, optional): Path for local caching.
-        querymode (str): 'seq' or 'multi'. Defaults to 'seq'.
-        timedelta_slice (datetime.timedelta, optional): Time-based slicing window.
-        email (str, optional): Auth email.
-        password (str, optional): Auth password.
-        cpt (collections.defaultdict, optional): Counter for tracking query status.
-        headers (dict, optional): Pre-obtained authentication headers. [optional]
-
-    Returns:
-        tuple: (pd.DataFrame, dict)
-            - pd.DataFrame: Results for the single query.
-            - dict: Updated status counters.
-    """
     if cpt is None:
         cpt = defaultdict(int)
     if gdf is not None and isinstance(gdf, gpd.GeoDataFrame):
@@ -349,15 +385,36 @@ def fetch_data_single_query(
             timedelta_slice=timedelta_slice,
         )
         logger.debug(gdf_norm.keys())
-        logger.info(f"Length of input after slicing in time:{len(gdf_norm)}")
+        logger.info(f"Length of input after slicing in time: {len(gdf_norm)}")
+
         urls_plus_headers = create_urls(
             gdf=gdf_norm, top=top, email=email, password=password, headers=headers
         )
+
+        # Ajouter: nombre d'URLs créées
+        num_urls = len(urls_plus_headers["urls"])
+        logger.info(f"Created {num_urls} OData URL(s) for this query")
+
+        # Ajouter: estimation du nombre total de produits (si top connu)
+        if top is not None:
+            estimated_max = num_urls * int(top)
+            logger.info(
+                f"Estimated maximum products to fetch: up to {estimated_max} (based on $top={top})"
+            )
+        else:
+            logger.info(
+                f"Estimated maximum products to fetch: up to {num_urls * DEFAULT_TOP_ROWS_PER_QUERY} (based on $top={DEFAULT_TOP_ROWS_PER_QUERY})"
+            )
+
     else:
         urls_plus_headers = {"urls": [], "headers": None}
+
     if querymode == "seq":
         collected_data, cpt = fetch_data_from_urls_sequential(
-            urls_plus_headers=urls_plus_headers, cache_dir=cache_dir, cpt=cpt
+            urls_plus_headers=urls_plus_headers,
+            cache_dir=cache_dir,
+            cpt=cpt,
+            top=top,
         )
 
     elif querymode == "multi":
@@ -368,6 +425,7 @@ def fetch_data_single_query(
             cache_dir=cache_dir,
             max_workers=maxworker,
             cpt=cpt,
+            top=top,
         )
     if collected_data is not None and collected_data.empty is False:
         data_dedup = remove_duplicates(safes_ori=collected_data)
@@ -392,26 +450,16 @@ def fetch_data_single_query(
 
 
 def apply_slicing_time_to_gdf(gdf, timedelta_slice=None):
-    """Slices a GeoDataFrame into multiple time windows.
-
-    Args:
-        gdf (gpd.GeoDataFrame): GeoDataFrame with 'start_datetime' and 'end_datetime'.
-        timedelta_slice (datetime.timedelta, optional): The time window to slice by.
-
-    Returns:
-        gpd.GeoDataFrame: A GeoDataFrame containing expanded rows for each time slice.
-    """
+    """Slices a GeoDataFrame into multiple time windows."""
     gdf_slices = gdf
 
     # slice
     if timedelta_slice is not None:
         mindate = gdf["start_datetime"].min()
         maxdate = gdf["end_datetime"].max()
-        # those index will need to be time expanded
         idx_to_expand = gdf.index[
             (gdf["end_datetime"] - gdf["start_datetime"]) > timedelta_slice
         ]
-        # TO make sure that date does not contain future date
         if maxdate > datetime.datetime.now(datetime.UTC):
             maxdate = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=1)
 
@@ -420,17 +468,21 @@ def apply_slicing_time_to_gdf(gdf, timedelta_slice=None):
             slice_begin = mindate
             slice_end = slice_begin
             islice = 0
+
+            # Liste pour stocker les infos des slices
+            slice_info = []
+
             while slice_end < maxdate:
                 islice += 1
                 slice_end = slice_begin + timedelta_slice
-                # this is time grouping
+
                 gdf_slice = gdf[
                     (gdf["start_datetime"] >= slice_begin)
                     & (gdf["end_datetime"] <= slice_end)
                 ]
+
+                # Ajouter les géométries chevauchantes
                 for to_expand in idx_to_expand:
-                    # missings index in gdf_slice.
-                    # check if there is time overlap.
                     latest_start = max(gdf.loc[to_expand].start_datetime, slice_begin)
                     earliest_end = min(gdf.loc[to_expand].end_datetime, slice_end)
                     overlap = earliest_end - latest_start
@@ -440,9 +492,28 @@ def apply_slicing_time_to_gdf(gdf, timedelta_slice=None):
                         )
                         gdf_slice.loc[to_expand, "start_datetime"] = latest_start
                         gdf_slice.loc[to_expand, "end_datetime"] = earliest_end
+
                 if not gdf_slice.empty:
                     gdf_slices.append(gdf_slice)
+                    slice_info.append(
+                        {
+                            "slice_id": islice,
+                            "start": slice_begin.strftime("%Y-%m-%d %H:%M:%S"),
+                            "end": slice_end.strftime("%Y-%m-%d %H:%M:%S"),
+                            "num_geometries": len(gdf_slice),
+                        }
+                    )
+
                 slice_begin = slice_end
+
+            # Logger les infos des slices
+            if slice_info:
+                logger.info(f"Time slicing: created {len(slice_info)} slice(s)")
+                for info in slice_info:
+                    logger.info(
+                        f"  Slice {info['slice_id']}: {info['start']} -> {info['end']} ({info['num_geometries']} geometries)"
+                    )
+
     if len(gdf_slices) > 0:
         gdf_norm = gpd.GeoDataFrame(
             pd.concat(gdf_slices, ignore_index=False), crs=gdf_slices[0].crs
@@ -638,7 +709,7 @@ def create_urls(gdf, top=None, email=None, password=None, headers=None):
 
         # Construction of the final URL
         str_query = " and ".join([f"{key}{val}" for key, val in params.items()])
-        url = f"{urlapi}{str_query}&$top={top}&$expand=Attributes"
+        url = f"{urlapi}{str_query}&$top={top}&$expand=Attributes&$orderby=Id"
         urls.append((enter_index, url))
 
     processing_time = time.time() - start_time
@@ -726,7 +797,7 @@ def fetch_one_url(url, cpt, index, cache_dir, headers=None):
             cpt["product_proposed_by_CDS"] += len(collected_data["Name"])
             collected_data["id_original_query"] = index
             if len(collected_data) == DEFAULT_TOP_ROWS_PER_QUERY:
-                logger.warning(
+                logger.debug(
                     "%i products found in a single OData query (max is %s).",
                     len(collected_data),
                     DEFAULT_TOP_ROWS_PER_QUERY,
@@ -749,26 +820,52 @@ def _fetch_with_retry(url, headers, timeout):
     return response.json()
 
 
-def fetch_data_from_urls_sequential(urls_plus_headers, cache_dir, cpt=None):
-    """Fetches meta-data sequentially from a list of OData URLs."""
+def fetch_data_from_urls_sequential(urls_plus_headers, cache_dir, cpt=None, top=None):
+    """Fetches meta-data sequentially from a list of OData URLs with pagination."""
     urls = urls_plus_headers["urls"]
     headers = urls_plus_headers["headers"]
     if cpt is None:
         cpt = defaultdict(int)
+    if top is None:
+        top = DEFAULT_TOP_ROWS_PER_QUERY
+
     start_time = time.time()
     collected_data_x = []
     collected_data_final = None
+
     if cache_dir is not None:
         if not os.path.exists(cache_dir):
             logger.info("mkdir cache dir: %s", cache_dir)
             os.makedirs(cache_dir)
-    with tqdm(total=len(urls), desc="Fetching data from CDSE", unit="query") as pbar:
-        for index, url in urls:  # <-- CHANGED: was (url, index), now (index, url)
-            cpt, collected_data = fetch_one_url(
-                url, cpt, index=index, cache_dir=cache_dir, headers=headers
+
+    total_batches = len(urls)
+    logger.info(f"Processing {total_batches} time batch(es)...")
+
+    # Compteurs pour le résumé
+    total_http_requests = 0
+    total_pages = 0
+    total_products = 0
+
+    with tqdm(
+        total=total_batches, desc="Fetching data from CDSE", unit="batch"
+    ) as pbar:
+        for idx, (index, url) in enumerate(urls, 1):
+            logger.debug(f"Processing batch {idx}/{total_batches}: {url[:100]}...")
+
+            cpt, collected_data = fetch_one_url_with_pagination(
+                url, cpt, index=index, cache_dir=cache_dir, headers=headers, top=top
             )
+
             if collected_data is not None and not collected_data.empty:
                 collected_data_x.append(collected_data)
+                batch_size = len(collected_data)
+                total_products += batch_size
+                pages_in_batch = cpt.get("pages_fetched", 0) - total_pages
+                total_pages = cpt.get("pages_fetched", 0)
+                logger.info(
+                    f"  Batch {idx}/{total_batches}: {batch_size} products (fetched in {pages_in_batch} page(s))"
+                )
+
             pbar.update(1)
             pbar.set_postfix(
                 {
@@ -777,58 +874,100 @@ def fetch_data_from_urls_sequential(urls_plus_headers, cache_dir, cpt=None):
                     "429": cpt.get("urls_retried", 0),
                 }
             )
+
+    # Résumé détaillé
+    total_http_requests = cpt.get("urls_OK", 0)
+    total_pages = cpt.get("pages_fetched", 0)
+
     if len(collected_data_x) > 0:
         collected_data_final = pd.concat(collected_data_x)
+        total_products = len(collected_data_final)
+
+        logger.info("")
+        logger.info("📊 FETCH SUMMARY")
+        logger.info("-" * 50)
+        logger.info(f"  Time batches processed:    {total_batches}")
+        logger.info(f"  Total OData pages fetched: {total_pages}")
+        logger.info(f"  Total HTTP requests:       {total_http_requests}")
+        logger.info(f"  Total products found:      {total_products}")
+        logger.info(f"  Cache hits:                {cpt.get('cache_used', 0)}")
+        if cpt.get("urls_retried", 0) > 0:
+            logger.info(f"  Rate limiting (429) hits:  {cpt.get('urls_retried', 0)}")
+        logger.info("-" * 50)
+    else:
+        logger.warning("No products found in any batch")
+
     end_time = time.time()
     processing_time = end_time - start_time
     logger.info("fetch_data_from_urls time:%1.1fsec", processing_time)
-    logger.info("counter: %s", cpt)
+
     if collected_data_final is not None:
         assert "id_original_query" in collected_data_final
     return collected_data_final, cpt
 
 
 def fetch_data_from_urls_multithread(
-    urls_plus_headers, cache_dir=None, max_workers=5, cpt=None
+    urls_plus_headers, cache_dir=None, max_workers=5, cpt=None, top=None
 ):
-    """Fetches meta-data from OData URLs using a thread pool.
-
-    Args:
-        urls_plus_headers (dict): Dict containing 'urls' (list) and 'headers' (dict).
-        cache_dir (str, optional): Path for local caching.
-        max_workers (int): Max number of threads. Defaults to 50.
-        cpt (collections.defaultdict, optional): Status counters.
-
-    Returns:
-        tuple: (pd.DataFrame, defaultdict)
-            - Concatenated results.
-            - Updated status counters.
-    """
+    """Fetches meta-data from OData URLs using a thread pool with pagination."""
     collected_data = pd.DataFrame()
-    max_workers = min(max_workers, 5)  # Maximum de 5 threads pour éviter la saturatio
+    max_workers = min(max_workers, 5)
     if cpt is None:
         cpt = defaultdict(int)
+    if top is None:
+        top = DEFAULT_TOP_ROWS_PER_QUERY
+
     urls = urls_plus_headers["urls"]
     headers = urls_plus_headers["headers"]
+
+    total_batches = len(urls)
+    logger.info(
+        f"Processing {total_batches} time batch(es) in parallel with {max_workers} workers..."
+    )
+
     with (
         ThreadPoolExecutor(max_workers=max_workers) as executor,
-        tqdm(total=len(urls)) as pbar,
+        tqdm(total=total_batches) as pbar,
     ):
         future_to_url = {
             executor.submit(
-                fetch_one_url, url[1], cpt, url[0], cache_dir, headers=headers
-            ): (
-                url[0],
+                fetch_one_url_with_pagination,
                 url[1],
-            )
+                cpt,
+                url[0],
+                cache_dir,
+                headers,
+                top,
+            ): (url[0], url[1])
             for url in urls
         }
+
         for future in as_completed(future_to_url):
             cpt, df = future.result()
-            if df is not None:
-                if not df.empty:
-                    collected_data = pd.concat([collected_data, df])
+            if df is not None and not df.empty:
+                collected_data = pd.concat([collected_data, df])
             pbar.update(1)
+
+    # Résumé détaillé
+    total_pages = cpt.get("pages_fetched", 0)
+    total_http_requests = cpt.get("urls_OK", 0)
+
+    if not collected_data.empty:
+        total_products = len(collected_data)
+        logger.info("")
+        logger.info("📊 FETCH SUMMARY")
+        logger.info("-" * 50)
+        logger.info(f"  Time batches processed:    {total_batches}")
+        logger.info(f"  Total OData pages fetched: {total_pages}")
+        logger.info(f"  Total HTTP requests:       {total_http_requests}")
+        logger.info(f"  Total products found:      {total_products}")
+        logger.info(f"  Cache hits:                {cpt.get('cache_used', 0)}")
+        if cpt.get("urls_retried", 0) > 0:
+            logger.info(f"  Rate limiting (429) hits:  {cpt.get('urls_retried', 0)}")
+        logger.info("-" * 50)
+    else:
+        logger.warning("No products found in any batch")
+
     logger.info("counter: %s", cpt)
     return collected_data, cpt
 
@@ -941,3 +1080,94 @@ def sea_percent(collected_data, min_sea_percent=None):
     processing_time = end_time - start_time
     logger.info(f"sea_percent processing time:{processing_time}s")
     return collected_data
+
+
+def fetch_one_url_with_pagination(
+    url: str,
+    cpt: defaultdict,
+    index: str,
+    cache_dir: Optional[str] = None,
+    headers: Optional[Dict] = None,
+    top: int = DEFAULT_TOP_ROWS_PER_QUERY,
+    max_skip: int = 10000,
+) -> Tuple[defaultdict, Optional[pd.DataFrame]]:
+    """
+    Récupère les métadonnées pour une URL OData avec pagination complète.
+    """
+    # Vérifier le cache
+    if cache_dir:
+        import re
+
+        base_url = re.sub(r"&\$skip=\d+", "", url)
+        base_url = re.sub(r"\$skip=\d+&", "", base_url)
+        cache_file = get_cache_filename(base_url, cache_dir)
+        if os.path.exists(cache_file):
+            cpt["cache_used"] += 1
+            logger.debug(f"Cache hit for base URL: {base_url}")
+            with open(cache_file, "r") as f:
+                json_data = json.load(f)
+                df = process_data(json_data)
+                if df is not None and not df.empty:
+                    cpt["product_proposed_by_CDS"] = len(df)
+                    # Important: ajouter au compteur de pages même pour le cache
+                    cpt["pages_fetched"] = cpt.get("pages_fetched", 0) + 1
+                    return cpt, df
+
+    all_data = []
+    skip = 0
+    total_fetched = 0
+    page = 0
+    import re
+
+    while True:
+        if skip >= max_skip:
+            logger.warning(
+                f"Stopping pagination at skip={skip} (limit={max_skip}). "
+                f"Some products may be missing. Try reducing the time window."
+            )
+            break
+
+        # Construire l'URL avec pagination
+        if "$top=" in url:
+            paginated_url = re.sub(r"\$top=\d+", f"$top={top}", url)
+            if skip > 0:
+                if "$skip=" in paginated_url:
+                    paginated_url = re.sub(
+                        r"\$skip=\d+", f"$skip={skip}", paginated_url
+                    )
+                else:
+                    paginated_url += f"&$skip={skip}"
+        else:
+            paginated_url = f"{url}&$top={top}" if "?" in url else f"{url}?$top={top}"
+            if skip > 0:
+                paginated_url += f"&$skip={skip}"
+
+        # Récupérer une page
+        page_cpt, df_page = fetch_one_url(paginated_url, cpt, index, cache_dir, headers)
+        cpt = page_cpt
+
+        if df_page is None or df_page.empty:
+            break
+
+        all_data.append(df_page)
+        total_fetched += len(df_page)
+        page += 1
+        cpt["pages_fetched"] = cpt.get("pages_fetched", 0) + 1
+
+        # Si on a moins que `top` produits, c'est la dernière page
+        if len(df_page) < top:
+            break
+
+        # Sinon, passer à la page suivante
+        skip += top
+
+        logger.debug(
+            f"Page {page}: fetched {len(df_page)} products, total: {total_fetched}"
+        )
+
+    if all_data:
+        combined_df = pd.concat(all_data, ignore_index=True)
+        cpt["product_proposed_by_CDS"] = total_fetched
+        return cpt, combined_df
+    else:
+        return cpt, None

@@ -22,7 +22,7 @@ class RateLimiter:
         self.tokens = float(max_burst)
         self.last_refill = time.time()
         self.lock = Lock()
-        
+
         logger.debug(
             f"RateLimiter initialized: rate={max_requests_per_second} req/s, "
             f"burst={max_burst}"
@@ -34,8 +34,7 @@ class RateLimiter:
         elapsed = now - self.last_refill
         if elapsed > 0:
             self.tokens = min(
-                self.max_burst, 
-                self.tokens + elapsed * self.max_requests_per_second
+                self.max_burst, self.tokens + elapsed * self.max_requests_per_second
             )
             self.last_refill = now
 
@@ -45,18 +44,18 @@ class RateLimiter:
         """
         with self.lock:
             self._refill()
-            
+
             if self.tokens >= 1.0:
                 self.tokens -= 1.0
                 return
-            
+
             # Pas de jeton disponible : calculer le temps d'attente
             wait_time = (1.0 - self.tokens) / self.max_requests_per_second
-            
+
             # IMPORTANT: On attend avec le lock pour éviter les interférences
             # mais on recharge APRÈS l'attente
             time.sleep(wait_time)
-            
+
             # Après l'attente, recharger et consommer un jeton
             self._refill()
             if self.tokens >= 1.0:
@@ -84,13 +83,7 @@ class RateLimiter:
 # ── INSTANCES GLOBALES ────────────────────────────────────────────────────
 
 # Instance standard pour une utilisation normale (conservatrice)
-_GLOBAL_RATE_LIMITER = RateLimiter(
-    max_requests_per_second=30.0,
-    max_burst=50
-)
+_GLOBAL_RATE_LIMITER = RateLimiter(max_requests_per_second=30.0, max_burst=50)
 
 # Instance agressive pour les tests ou lorsque le système peut supporter plus
-_AGGRESSIVE_RATE_LIMITER = RateLimiter(
-    max_requests_per_second=35.0,
-    max_burst=60
-)
+_AGGRESSIVE_RATE_LIMITER = RateLimiter(max_requests_per_second=35.0, max_burst=60)
