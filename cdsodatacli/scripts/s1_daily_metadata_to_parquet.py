@@ -31,7 +31,6 @@ import traceback
 import geopandas as gpd
 import pandas as pd
 import shapely
-from shapely import wkt
 from tqdm import tqdm
 
 from cdsodatacli.query import fetch_data
@@ -40,9 +39,7 @@ from cdsodatacli.utils import get_conf
 logger = logging.getLogger(__name__)
 
 # Constants
-WORLDPOLYGON = shapely.wkt.loads(
-    "POLYGON((-180 -90,180 -90,180 90,-180 90,-180 -90))"
-)
+WORLDPOLYGON = shapely.wkt.loads("POLYGON((-180 -90,180 -90,180 90,-180 90,-180 -90))")
 
 
 def parse_args() -> argparse.Namespace:
@@ -188,7 +185,9 @@ def setup_logging(level: str = "INFO") -> None:
     logging.getLogger("requests").setLevel(logging.WARNING)
 
 
-def validate_dates(start_date: str, stop_date: str) -> Tuple[datetime.date, datetime.date]:
+def validate_dates(
+    start_date: str, stop_date: str
+) -> Tuple[datetime.date, datetime.date]:
     """
     Validate and parse date strings.
 
@@ -300,7 +299,7 @@ def convert_complex_columns_to_string(df: pd.DataFrame) -> pd.DataFrame:
     Convert complex columns (lists, dicts, geometries, arrays) to strings.
     """
     df_copy = df.copy()
-    
+
     # First: identify which column is causing the problem
     problematic_cols = []
     for col in df_copy.columns:
@@ -317,43 +316,43 @@ def convert_complex_columns_to_string(df: pd.DataFrame) -> pd.DataFrame:
                         logger.debug(f"Column '{col}' - pd.isna() failed: {e}")
                         problematic_cols.append(col)
                         break
-                
+
                 if first_valid is None:
                     continue
-                
+
                 # Check if it's a numpy array
                 if isinstance(first_valid, (np.ndarray, np.generic)):
                     logger.debug(f"Column '{col}' contains numpy arrays")
                     problematic_cols.append(col)
                     continue
-                
+
                 # Check if it's a list
                 if isinstance(first_valid, list):
                     logger.debug(f"Column '{col}' contains lists")
                     # Check if list contains arrays
                     for item in first_valid[:3]:
                         if isinstance(item, (np.ndarray, np.generic)):
-                            logger.debug(f"  - list contains numpy arrays")
+                            logger.debug("  - list contains numpy arrays")
                             problematic_cols.append(col)
                             break
                     continue
-                
+
                 # Check if it's a dict
                 if isinstance(first_valid, dict):
                     logger.debug(f"Column '{col}' contains dicts")
                     continue
-                
+
             except Exception as e:
                 logger.debug(f"Column '{col}' caused error: {e}")
                 problematic_cols.append(col)
-    
+
     logger.debug(f"Problematic columns identified: {problematic_cols}")
-    
+
     # Now convert problematic columns
     for col in df_copy.columns:
         if col not in problematic_cols:
             continue
-            
+
         logger.debug(f"Converting column '{col}' to string")
         try:
             # Safe conversion: apply str() to each value
@@ -369,13 +368,13 @@ def convert_complex_columns_to_string(df: pd.DataFrame) -> pd.DataFrame:
                 logger.error(f"Could not convert column '{col}': {e2}")
                 df_copy = df_copy.drop(columns=[col])
                 logger.warning(f"Dropped column '{col}'")
-    
+
     # Handle geometry columns (convert to WKT)
     geometry_cols = ["geometry", "GeoFootprint", "Footprint"]
     for col in geometry_cols:
         if col not in df_copy.columns:
             continue
-        
+
         try:
             # Check if it's a geometry column (has to_wkt)
             first_valid = None
@@ -386,7 +385,7 @@ def convert_complex_columns_to_string(df: pd.DataFrame) -> pd.DataFrame:
                         break
                 except (ValueError, TypeError):
                     continue
-            
+
             if first_valid is not None and hasattr(first_valid, "to_wkt"):
                 new_col = f"{col}_wkt"
                 df_copy[new_col] = df_copy[col].apply(
@@ -401,7 +400,7 @@ def convert_complex_columns_to_string(df: pd.DataFrame) -> pd.DataFrame:
                 df_copy[col] = df_copy[col].astype(str)
             except Exception:
                 pass
-    
+
     # Handle Checksum (list of dicts) if not already dropped
     if "Checksum" in df_copy.columns:
         try:
@@ -414,7 +413,7 @@ def convert_complex_columns_to_string(df: pd.DataFrame) -> pd.DataFrame:
                 df_copy["Checksum"] = df_copy["Checksum"].astype(str)
             except Exception:
                 pass
-    
+
     # Handle Attributes (often contains complex structures)
     if "Attributes" in df_copy.columns:
         try:
@@ -428,7 +427,7 @@ def convert_complex_columns_to_string(df: pd.DataFrame) -> pd.DataFrame:
                 df_copy["Attributes"] = df_copy["Attributes"].astype(str)
             except Exception:
                 pass
-    
+
     # Final pass: convert any remaining object columns to string
     for col in df_copy.select_dtypes(include=["object"]).columns:
         if col not in problematic_cols:
@@ -437,7 +436,7 @@ def convert_complex_columns_to_string(df: pd.DataFrame) -> pd.DataFrame:
             df_copy[col] = df_copy[col].astype(str)
         except Exception:
             pass
-    
+
     return df_copy
 
 
@@ -563,8 +562,8 @@ def process_day(
             logger.info(f"No products found for {date.strftime('%Y-%m-%d')}")
             elapsed = (datetime.datetime.now() - start_time).total_seconds()
             return date, 0, elapsed
-        
-         # --- DEBUG: Log column types before conversion ---
+
+        # --- DEBUG: Log column types before conversion ---
         # logger.debug(f"Columns before conversion: {result_df.columns.tolist()}")
         # for col in result_df.columns:
         #     if result_df[col].dtype == "object":
@@ -590,7 +589,7 @@ def process_day(
         logger.warning(f"Interrupted during processing of {date.strftime('%Y-%m-%d')}")
         raise
     except Exception as e:
-        logger.exception('traceback added : %s',traceback.format_exc())
+        logger.exception("traceback added : %s", traceback.format_exc())
         logger.error(f"Error processing {date.strftime('%Y-%m-%d')}: {e}")
         elapsed = (datetime.datetime.now() - start_time).total_seconds()
         return date, -1, elapsed
@@ -648,9 +647,7 @@ def main() -> None:
         output_dir = Path(args.outputdir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        email, password = get_credentials(
-            args.config_file, args.email, args.password
-        )
+        email, password = get_credentials(args.config_file, args.email, args.password)
 
         results = []
         total_products = 0
@@ -715,12 +712,10 @@ def main() -> None:
                 f"Average time per day: {total_time / len(processed_days):.1f}s"
             )
             if total_time > 0:
-                logger.info(
-                    f"Throughput: {total_products / total_time:.1f} products/s"
-                )
+                logger.info(f"Throughput: {total_products / total_time:.1f} products/s")
 
         if len(failed) > 0:
-            logger.warning(f"Failed days:")
+            logger.warning("Failed days:")
             for date, _, _ in failed[:10]:
                 logger.warning(f"  - {date.strftime('%Y-%m-%d')}")
             if len(failed) > 10:
