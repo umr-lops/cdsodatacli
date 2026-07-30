@@ -21,3 +21,4 @@ dependencies:
   - cartopy
   - python-dotenv
   - boto3
+  - pyarrow

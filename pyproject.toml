@@ -27,11 +27,12 @@ dependencies = [
   "numpy",
   "requests",
   "shapely",
-  'tqdm',
-  'pyyaml',
-  'cartopy',
+  "tqdm",
+  "pyyaml",
+  "cartopy",
   "python-dotenv",
-  'boto3',
+  "boto3",
+  "pyarrow",
 ]
 
 
@@ -64,6 +65,7 @@ countProductsLocally = 'cdsodatacli.scripts.count_present_and_absent_products:en
 match_s1_prodtypes = 'cdsodatacli.scripts.match_s1_product_types:main'
 get-odata-ids = 'cdsodatacli.scripts.get_ids_listing_safe_iterative:entrypoint'
 get-metadata-from-product-names = 'cdsodatacli.get_products_metadata:main'
+cds-s1-daily-metadata = 'cdsodatacli.scripts.s1_daily_metadata_to_parquet:main'
 
 
 [build-system]
