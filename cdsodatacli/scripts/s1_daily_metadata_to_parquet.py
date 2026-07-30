@@ -23,7 +23,6 @@ import argparse
 import datetime
 import json
 import logging
-import numpy as np
 import sys
 from pathlib import Path
 from typing import Optional, Tuple
@@ -296,146 +295,47 @@ def create_query_gdf(date: datetime.date) -> gpd.GeoDataFrame:
 
 def convert_complex_columns_to_string(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Convert complex columns (lists, dicts, geometries, arrays) to strings.
+    Convert all columns to string representation for parquet serialization.
+    Uses json.dumps() for dicts/lists to ensure valid JSON format with double quotes.
     """
+
+    def to_str(value):
+        """Convert any value to a string representation."""
+        if value is None:
+            return None
+        # For dicts and lists, use json.dumps to get double quotes
+        if isinstance(value, (dict, list)):
+            try:
+                return json.dumps(value)
+            except Exception:
+                return str(value)
+        # For shapely geometries
+        if hasattr(value, "to_wkt"):
+            try:
+                return value.to_wkt()
+            except Exception:
+                return str(value)
+        # For datetime
+        if hasattr(value, "isoformat"):
+            try:
+                return value.isoformat()
+            except Exception:
+                return str(value)
+        return str(value)
+
     df_copy = df.copy()
 
-    # First: identify which column is causing the problem
-    problematic_cols = []
+    # Convert all columns to string
     for col in df_copy.columns:
-        if df_copy[col].dtype == "object":
-            try:
-                # Check first non-null value safely
-                first_valid = None
-                for val in df_copy[col].head(10):
-                    try:
-                        if val is not None and not pd.isna(val):
-                            first_valid = val
-                            break
-                    except (ValueError, TypeError) as e:
-                        logger.debug(f"Column '{col}' - pd.isna() failed: {e}")
-                        problematic_cols.append(col)
-                        break
-
-                if first_valid is None:
-                    continue
-
-                # Check if it's a numpy array
-                if isinstance(first_valid, (np.ndarray, np.generic)):
-                    logger.debug(f"Column '{col}' contains numpy arrays")
-                    problematic_cols.append(col)
-                    continue
-
-                # Check if it's a list
-                if isinstance(first_valid, list):
-                    logger.debug(f"Column '{col}' contains lists")
-                    # Check if list contains arrays
-                    for item in first_valid[:3]:
-                        if isinstance(item, (np.ndarray, np.generic)):
-                            logger.debug("  - list contains numpy arrays")
-                            problematic_cols.append(col)
-                            break
-                    continue
-
-                # Check if it's a dict
-                if isinstance(first_valid, dict):
-                    logger.debug(f"Column '{col}' contains dicts")
-                    continue
-
-            except Exception as e:
-                logger.debug(f"Column '{col}' caused error: {e}")
-                problematic_cols.append(col)
-
-    logger.debug(f"Problematic columns identified: {problematic_cols}")
-
-    # Now convert problematic columns
-    for col in df_copy.columns:
-        if col not in problematic_cols:
-            continue
-
-        logger.debug(f"Converting column '{col}' to string")
         try:
-            # Safe conversion: apply str() to each value
-            df_copy[col] = df_copy[col].apply(
-                lambda x: str(x) if x is not None and not pd.isna(x) else None
-            )
+            df_copy[col] = df_copy[col].apply(to_str)
         except Exception as e:
-            logger.warning(f"Failed to convert column '{col}': {e}")
-            # Final fallback: convert entire column to string
+            logger.warning(f"Could not convert column '{col}': {e}")
             try:
                 df_copy[col] = df_copy[col].astype(str)
-            except Exception as e2:
-                logger.error(f"Could not convert column '{col}': {e2}")
+            except Exception:
                 df_copy = df_copy.drop(columns=[col])
                 logger.warning(f"Dropped column '{col}'")
-
-    # Handle geometry columns (convert to WKT)
-    geometry_cols = ["geometry", "GeoFootprint", "Footprint"]
-    for col in geometry_cols:
-        if col not in df_copy.columns:
-            continue
-
-        try:
-            # Check if it's a geometry column (has to_wkt)
-            first_valid = None
-            for val in df_copy[col].head(10):
-                try:
-                    if val is not None and not pd.isna(val):
-                        first_valid = val
-                        break
-                except (ValueError, TypeError):
-                    continue
-
-            if first_valid is not None and hasattr(first_valid, "to_wkt"):
-                new_col = f"{col}_wkt"
-                df_copy[new_col] = df_copy[col].apply(
-                    lambda x: x.to_wkt() if x is not None and not pd.isna(x) else None
-                )
-                df_copy = df_copy.drop(columns=[col])
-                logger.debug(f"Converted geometry column '{col}' to WKT")
-        except Exception as e:
-            logger.warning(f"Could not convert geometry column '{col}': {e}")
-            # Convert to string as fallback
-            try:
-                df_copy[col] = df_copy[col].astype(str)
-            except Exception:
-                pass
-
-    # Handle Checksum (list of dicts) if not already dropped
-    if "Checksum" in df_copy.columns:
-        try:
-            df_copy["Checksum"] = df_copy["Checksum"].apply(
-                lambda x: json.dumps(x) if x is not None and not pd.isna(x) else None
-            )
-        except Exception as e:
-            logger.warning(f"Could not convert Checksum: {e}")
-            try:
-                df_copy["Checksum"] = df_copy["Checksum"].astype(str)
-            except Exception:
-                pass
-
-    # Handle Attributes (often contains complex structures)
-    if "Attributes" in df_copy.columns:
-        try:
-            # Convert to JSON string if it's a dict/list
-            df_copy["Attributes"] = df_copy["Attributes"].apply(
-                lambda x: json.dumps(x) if x is not None and not pd.isna(x) else None
-            )
-        except Exception as e:
-            logger.warning(f"Could not convert Attributes: {e}")
-            try:
-                df_copy["Attributes"] = df_copy["Attributes"].astype(str)
-            except Exception:
-                pass
-
-    # Final pass: convert any remaining object columns to string
-    for col in df_copy.select_dtypes(include=["object"]).columns:
-        if col not in problematic_cols:
-            continue
-        try:
-            df_copy[col] = df_copy[col].astype(str)
-        except Exception:
-            pass
 
     return df_copy
 
