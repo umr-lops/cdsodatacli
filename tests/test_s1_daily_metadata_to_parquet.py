@@ -20,8 +20,11 @@ import pytest
 from shapely.geometry import Polygon
 
 from cdsodatacli.scripts.s1_daily_metadata_to_parquet import (
+    S1_MODES_TO_KEEP,
     convert_complex_columns_to_string,
     create_query_gdf,
+    extract_operational_mode,
+    filter_by_operational_mode,
     generate_daily_dates,
     get_parquet_filepath,
     parse_args,
@@ -182,6 +185,150 @@ class TestFileHandling:
 
         assert result_date == date
         assert num_products == -1  # Error
+
+
+class TestModeFilter:
+    """Tests for filtering products by operational mode (issue #150)."""
+
+    @staticmethod
+    def _attrs(mode):
+        if mode is None:
+            return None
+        return [
+            {"Name": "origin", "Value": "ESA", "ValueType": "String"},
+            {"Name": "operationalMode", "Value": mode, "ValueType": "String"},
+        ]
+
+    def test_modes_to_keep_constant(self):
+        """The modes to keep match issue #150 requirements."""
+        assert set(S1_MODES_TO_KEEP) == {
+            "WV",
+            "IW",
+            "EW",
+            "S1",
+            "S2",
+            "S3",
+            "S4",
+            "S5",
+            "S6",
+        }
+        for dropped in ["N1", "N2", "N3", "N4", "N5", "N6", "EN", "AI"]:
+            assert dropped not in S1_MODES_TO_KEEP
+
+    def test_extract_operational_mode_list_of_dicts(self):
+        assert extract_operational_mode(self._attrs("IW")) == "IW"
+        assert extract_operational_mode(self._attrs("N1")) == "N1"
+
+    def test_extract_operational_mode_json_string(self):
+        assert extract_operational_mode(json.dumps(self._attrs("S1"))) == "S1"
+
+    def test_extract_operational_mode_missing_or_invalid(self):
+        assert extract_operational_mode(None) is None
+        assert extract_operational_mode([]) is None
+        assert extract_operational_mode([{"Name": "origin", "Value": "ESA"}]) is None
+        assert extract_operational_mode("not json") is None
+        assert extract_operational_mode("plain string") is None
+
+    def test_filter_keeps_wanted_modes(self):
+        df = pd.DataFrame(
+            {
+                "Id": [f"id{i}" for i in range(len(S1_MODES_TO_KEEP))],
+                "Attributes": [self._attrs(m) for m in S1_MODES_TO_KEEP],
+            }
+        )
+        df_filtered = filter_by_operational_mode(df)
+        assert len(df_filtered) == len(S1_MODES_TO_KEEP)
+        assert set(df_filtered["Id"]) == set(df["Id"])
+
+    def test_filter_drops_unwanted_modes(self):
+        kept = ["IW", "S1", "WV"]
+        dropped = ["N1", "N2", "N3", "N4", "N5", "N6", "EN", "AI"]
+        df = pd.DataFrame(
+            {
+                "Id": [f"id{i}" for i in range(len(kept) + len(dropped))],
+                "Attributes": [self._attrs(m) for m in kept + dropped],
+            }
+        )
+        df_filtered = filter_by_operational_mode(df)
+        assert len(df_filtered) == len(kept)
+        modes = df_filtered["Attributes"].apply(extract_operational_mode)
+        assert set(modes) == set(kept)
+
+    def test_filter_drops_rows_without_mode(self):
+        df = pd.DataFrame(
+            {
+                "Id": ["id1", "id2"],
+                "Attributes": [self._attrs("IW"), None],
+            }
+        )
+        df_filtered = filter_by_operational_mode(df)
+        assert list(df_filtered["Id"]) == ["id1"]
+
+    def test_filter_custom_modes_to_keep(self):
+        df = pd.DataFrame(
+            {
+                "Id": ["id1", "id2"],
+                "Attributes": [self._attrs("IW"), self._attrs("WV")],
+            }
+        )
+        df_filtered = filter_by_operational_mode(df, modes_to_keep=["WV"])
+        assert list(df_filtered["Id"]) == ["id2"]
+
+    def test_filter_handles_string_attributes(self):
+        df = pd.DataFrame(
+            {
+                "Id": ["id1", "id2"],
+                "Attributes": [
+                    json.dumps(self._attrs("IW")),
+                    json.dumps(self._attrs("EN")),
+                ],
+            }
+        )
+        df_filtered = filter_by_operational_mode(df)
+        assert list(df_filtered["Id"]) == ["id1"]
+
+    def test_filter_empty_or_missing_attributes_column(self):
+        empty = pd.DataFrame()
+        assert filter_by_operational_mode(empty).empty
+        df_no_attrs = pd.DataFrame({"Id": ["id1"]})
+        assert len(filter_by_operational_mode(df_no_attrs)) == 1
+
+    @patch("cdsodatacli.scripts.s1_daily_metadata_to_parquet.fetch_data")
+    def test_process_day_filters_modes(self, mock_fetch, tmp_path):
+        """process_day must drop products not in kept modes before saving."""
+        kept = ["IW", "S1", "WV", "EN"]
+        mock_fetch.return_value = pd.DataFrame(
+            {
+                "Id": [f"id{i}" for i in range(len(kept))],
+                "Name": [f"name{i}" for i in range(len(kept))],
+                "Attributes": [self._attrs(m) for m in kept],
+            }
+        )
+
+        date = datetime.date(2026, 1, 15)
+        _, num_products, _ = process_day(date=date, output_dir=tmp_path)
+
+        assert num_products == 3  # EN dropped
+        filepath = get_parquet_filepath(date, tmp_path)
+        df_loaded = pd.read_parquet(filepath)
+        assert len(df_loaded) == 3
+
+    @patch("cdsodatacli.scripts.s1_daily_metadata_to_parquet.fetch_data")
+    def test_process_day_all_dropped(self, mock_fetch, tmp_path):
+        """process_day returns 0 products when all modes are dropped."""
+        mock_fetch.return_value = pd.DataFrame(
+            {
+                "Id": ["id1", "id2"],
+                "Name": ["name1", "name2"],
+                "Attributes": [self._attrs("N1"), self._attrs("AI")],
+            }
+        )
+
+        date = datetime.date(2026, 1, 15)
+        _, num_products, _ = process_day(date=date, output_dir=tmp_path)
+
+        assert num_products == 0
+        assert not get_parquet_filepath(date, tmp_path).exists()
 
 
 class TestComplexColumnsConversion:

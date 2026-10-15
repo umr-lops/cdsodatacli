@@ -3,9 +3,11 @@
 Script to fetch daily Sentinel-1 metadata from CDSE and save as parquet files.
 
 This script queries the Copernicus Data Space Ecosystem (CDSE) OData API
-for all Sentinel-1 products (all modes, all product types, all polarizations)
-over a given date range, excluding COG products. Results are saved as daily
-parquet files for efficient storage and processing.
+for all Sentinel-1 products (all product types, all polarizations) over a
+given date range, excluding COG products. Only products in the operational
+modes WV, IW, EW, S1-S6 are kept; other modes (e.g. N1-N6, EN, AI) are
+dropped before saving. Results are saved as daily parquet files for
+efficient storage and processing.
 
 Usage:
     fetch_s1_daily_metadata --start-date 2026-01-01 --stop-date 2026-01-31 --outputdir ./data
@@ -39,6 +41,10 @@ logger = logging.getLogger(__name__)
 
 # Constants
 WORLDPOLYGON = shapely.wkt.loads("POLYGON((-180 -90,180 -90,180 90,-180 90,-180 -90))")
+
+# Operational modes kept in the daily parquet files (see issue #150).
+# Modes N1-N6 and EN/AI are dropped as they are not used downstream.
+S1_MODES_TO_KEEP = ["WV", "IW", "EW", "S1", "S2", "S3", "S4", "S5", "S6"]
 
 
 def parse_args() -> argparse.Namespace:
@@ -293,6 +299,66 @@ def create_query_gdf(date: datetime.date) -> gpd.GeoDataFrame:
     return gdf
 
 
+def extract_operational_mode(attributes) -> Optional[str]:
+    """
+    Extract the operationalMode value from a product Attributes entry.
+
+    Args:
+        attributes: Product Attributes (list of dicts, JSON string, or None).
+
+    Returns:
+        Optional[str]: The operational mode (e.g. "IW") or None if not found.
+    """
+    if attributes is None:
+        return None
+    if isinstance(attributes, str):
+        try:
+            attributes = json.loads(attributes)
+        except (ValueError, TypeError):
+            return None
+    if not isinstance(attributes, list):
+        return None
+    for attr in attributes:
+        if isinstance(attr, dict) and attr.get("Name") == "operationalMode":
+            return attr.get("Value")
+    return None
+
+
+def filter_by_operational_mode(
+    df: pd.DataFrame,
+    modes_to_keep: Optional[list[str]] = None,
+) -> pd.DataFrame:
+    """
+    Keep only rows whose operationalMode is in the allowed list.
+
+    Rows without a resolvable operationalMode are dropped.
+
+    Args:
+        df: DataFrame containing an "Attributes" column.
+        modes_to_keep: List of allowed operational modes.
+            Defaults to S1_MODES_TO_KEEP.
+
+    Returns:
+        pd.DataFrame: Filtered DataFrame.
+    """
+    if df is None or df.empty or "Attributes" not in df.columns:
+        return df
+
+    if modes_to_keep is None:
+        modes_to_keep = S1_MODES_TO_KEEP
+
+    modes = df["Attributes"].apply(extract_operational_mode)
+    mask = modes.isin(modes_to_keep)
+    n_dropped = int((~mask).sum())
+    if n_dropped > 0:
+        dropped_modes = modes[~mask].dropna().unique().tolist()
+        logger.info(
+            f"Dropped {n_dropped} products with modes not in "
+            f"{modes_to_keep}: {dropped_modes}"
+        )
+    return df[mask]
+
+
 def convert_complex_columns_to_string(df: pd.DataFrame) -> pd.DataFrame:
     """
     Convert all columns to string representation for parquet serialization.
@@ -462,6 +528,19 @@ def process_day(
             logger.info(f"No products found for {date.strftime('%Y-%m-%d')}")
             elapsed = (datetime.datetime.now() - start_time).total_seconds()
             return date, 0, elapsed
+
+        n_before = len(result_df)
+        result_df = filter_by_operational_mode(result_df)
+        n_after = len(result_df)
+        if n_after == 0:
+            logger.info(f"No products in kept modes for {date.strftime('%Y-%m-%d')}")
+            elapsed = (datetime.datetime.now() - start_time).total_seconds()
+            return date, 0, elapsed
+
+        if n_after < n_before:
+            logger.info(
+                f"Kept {n_after}/{n_before} products in modes {S1_MODES_TO_KEEP}"
+            )
 
         # --- DEBUG: Log column types before conversion ---
         # logger.debug(f"Columns before conversion: {result_df.columns.tolist()}")
