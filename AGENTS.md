@@ -33,7 +33,7 @@ Guidance for AI coding agents working in this repository.
   - `--strict-markers`: only registered markers are allowed. `integration` is registered for tests that need real CDSE credentials + network (those are skipped in CI by default).
 - Coverage is enforced at `fail_under = 50` on the `tests` source path.
 - After changing code, **always run the full test suite** and confirm it passes.
-- Some modules import optional deps (e.g. `boto3`, `python-dotenv`). If a test file fails at *collection* with `ModuleNotFoundError`, install the missing dependency rather than assuming a code regression.
+- Some modules import optional deps (e.g. `boto3`, `python-dotenv`). If a test file fails at _collection_ with `ModuleNotFoundError`, install the missing dependency rather than assuming a code regression.
 
 ## Linting & formatting
 
