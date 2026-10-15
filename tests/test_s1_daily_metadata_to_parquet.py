@@ -712,6 +712,68 @@ class TestMainFunction:
 
     @patch("cdsodatacli.scripts.s1_daily_metadata_to_parquet.setup_logging")
     @patch("cdsodatacli.scripts.s1_daily_metadata_to_parquet.validate_dates")
+    @patch("cdsodatacli.scripts.s1_daily_metadata_to_parquet.generate_daily_dates")
+    @patch("cdsodatacli.scripts.s1_daily_metadata_to_parquet.process_day")
+    @patch("cdsodatacli.scripts.s1_daily_metadata_to_parquet.get_credentials")
+    @patch("argparse.ArgumentParser.parse_args")
+    def test_main_counts_failed_days(
+        self,
+        mock_parse_args,
+        mock_get_credentials,
+        mock_process_day,
+        mock_generate_dates,
+        mock_validate_dates,
+        mock_setup_logging,
+        tmp_path,
+        caplog,
+    ):
+        """Days that raise/fail in process_day must be counted in the summary."""
+        import logging
+
+        caplog.set_level(logging.INFO)
+
+        mock_args = MagicMock()
+        mock_args.start_date = "2026-01-01"
+        mock_args.stop_date = "2026-01-03"
+        mock_args.outputdir = str(tmp_path)
+        mock_args.config_file = None
+        mock_args.log_level = "INFO"
+        mock_args.email = None
+        mock_args.password = None
+        mock_args.cache_dir = None
+        mock_args.checkpoint_dir = None
+        mock_args.batch_size = 7
+        mock_args.querymode = "seq"
+        mock_args.max_workers = 4
+        mock_args.overwrite = False
+        mock_parse_args.return_value = mock_args
+
+        mock_validate_dates.return_value = (
+            datetime.date(2026, 1, 1),
+            datetime.date(2026, 1, 3),
+        )
+        mock_generate_dates.return_value = [
+            datetime.date(2026, 1, 1),
+            datetime.date(2026, 1, 2),
+            datetime.date(2026, 1, 3),
+        ]
+        mock_process_day.side_effect = [
+            (datetime.date(2026, 1, 1), -1, 0.0),  # Failed
+            (datetime.date(2026, 1, 2), -1, 0.0),  # Failed
+            (datetime.date(2026, 1, 3), 200, 15.0),  # Success
+        ]
+        mock_get_credentials.return_value = (None, None)
+
+        from cdsodatacli.scripts.s1_daily_metadata_to_parquet import main
+
+        with patch("sys.exit") as mock_exit:
+            main()
+            mock_exit.assert_not_called()
+
+        assert "Days failed: 2" in caplog.text
+
+    @patch("cdsodatacli.scripts.s1_daily_metadata_to_parquet.setup_logging")
+    @patch("cdsodatacli.scripts.s1_daily_metadata_to_parquet.validate_dates")
     @patch("argparse.ArgumentParser.parse_args")
     def test_main_invalid_dates(
         self,
