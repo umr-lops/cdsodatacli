@@ -5,11 +5,20 @@ import random
 import urllib3
 import requests
 
+from cdsodatacli.retry import retry_with_backoff
+
 MAX_VALIDITY_ACCESS_TOKEN = 600  # sec (defined by CDS API)
 ACTIVE_ACCESS_TOKEN = (
     {}
 )  # login -> list of {'access-token': str, 'access-token-creation-date': datetime}
 _token_cache_lock = threading.Lock()  # protect concurrent access from threads
+
+# Cache for get_access_token (email/password path): reuse a token while valid
+# so that repeated data fetches do not re-authenticate on every request, which
+# would trip the CDSE identity server rate limit and return 400 Bad Request.
+ACCESS_TOKEN_TTL = MAX_VALIDITY_ACCESS_TOKEN - 30  # 30s safety margin
+_ACCESS_TOKEN_CACHE = {}  # email -> {'headers': dict, 'creation-date': datetime}
+_access_token_cache_lock = threading.Lock()
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +162,48 @@ def get_bearer_access_token(
 
 def get_access_token(email, password):
     """Helper to retrieve OIDC token.
-    one can generate as many access token as wanted per CDSE account
+    one can generate as many access token as wanted per CDSE account.
+
+    The token is cached in memory and reused while it is still valid
+    (CDS 600s validity minus a safety margin), so that callers fetching
+    data repeatedly do not re-authenticate on every request. Re-authenticating
+    on every call would hammer the identity server and trigger its rate limit
+    (400 Bad Request). See issue #152.
+    """
+    # Reuse a still-valid cached token before hitting the identity server
+    with _access_token_cache_lock:
+        entry = _ACCESS_TOKEN_CACHE.get(email)
+        if entry is not None:
+            age = (datetime.datetime.now() - entry["creation-date"]).total_seconds()
+            if age < ACCESS_TOKEN_TTL:
+                logger.debug(
+                    "reusing cached access token for %s (age=%ds)", email, int(age)
+                )
+                return entry["headers"]
+
+    headers = _request_access_token(email, password)
+
+    with _access_token_cache_lock:
+        _ACCESS_TOKEN_CACHE[email] = {
+            "headers": headers,
+            "creation-date": datetime.datetime.now(),
+        }
+    return headers
+
+
+@retry_with_backoff(max_retries=5, base_delay=1, max_delay=60)
+def _request_access_token(email, password):
+    """POST to the CDSE identity token endpoint and return auth headers.
+
+    Retried with exponential backoff (mirrors _fetch_with_retry in query.py)
+    to ride out transient failures (network errors, 429/5xx rate limiting).
+
+    Args:
+        email: CDSE account email.
+        password: CDSE account password.
+
+    Returns:
+        dict: Headers {'Authorization': 'Bearer <token>', 'Accept': ...}.
     """
     auth_url = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
     auth_data = {

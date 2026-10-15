@@ -658,6 +658,7 @@ def main() -> None:
                     results.append((date_obj, num_products, elapsed))
                 else:
                     logger.error(f"Failed to process {date.strftime('%Y-%m-%d')}")
+                    results.append((date_obj, -1, elapsed))
 
             except KeyboardInterrupt:
                 logger.info("Interrupted by user.")
