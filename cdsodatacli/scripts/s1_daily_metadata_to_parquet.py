@@ -411,9 +411,13 @@ def is_wv_imagette_product(name: str) -> bool:
         bool: True for WV OCN and WV SLC products.
 
     Examples:
-        >>> is_wv_imagette_product("S1A_WV_OCN__2SSV_20240918T060833_20240918T064359_055715_06CE05_E53B.SAFE")
+        >>> is_wv_imagette_product(
+        ...     "S1A_WV_OCN__2SSV_20240918T060833_20240918T064359_055715_06CE05_E53B.SAFE"
+        ... )
         True
-        >>> is_wv_imagette_product("S1A_WV_RAW__0SSV_20240918T060833_20240918T064359_055715_06CE05_AAAA.SAFE")
+        >>> is_wv_imagette_product(
+        ...     "S1A_WV_RAW__0SSV_20240918T060833_20240918T064359_055715_06CE05_AAAA.SAFE"
+        ... )
         False
     """
     return bool(WV_IMAGETTE_PRODUCT_RE.match(name or ""))
