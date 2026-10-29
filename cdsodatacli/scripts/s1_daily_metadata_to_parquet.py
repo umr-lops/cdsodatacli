@@ -19,22 +19,30 @@ Usage:
 
     # Overwrite existing files
     fetch_s1_daily_metadata --start-date 2026-01-01 --stop-date 2026-01-31 --outputdir ./data --overwrite
+
+    # Also store the WV imagettes (measurement file names and acquisition times) of
+    # the WV OCN and WV SLC products. Existing files get the new column too.
+    fetch_s1_daily_metadata --start-date 2026-01-01 --stop-date 2026-01-31 --outputdir ./data --wv-imagettes
 """
 
 import argparse
 import datetime
 import json
 import logging
+import re
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional, Tuple
+from urllib.parse import quote
 import traceback
 import geopandas as gpd
 import pandas as pd
 import shapely
 from tqdm import tqdm
 
-from cdsodatacli.query import fetch_data
+from cdsodatacli.fetch_access_token import get_access_token
+from cdsodatacli.query import _GLOBAL_RATE_LIMITER, _fetch_with_retry, fetch_data
 from cdsodatacli.utils import get_conf
 
 logger = logging.getLogger(__name__)
@@ -45,6 +53,21 @@ WORLDPOLYGON = shapely.wkt.loads("POLYGON((-180 -90,180 -90,180 90,-180 90,-180 
 # Operational modes kept in the daily parquet files (see issue #150).
 # Modes N1-N6 and EN/AI are dropped as they are not used downstream.
 S1_MODES_TO_KEEP = ["WV", "IW", "EW", "S1", "S2", "S3", "S4", "S5", "S6"]
+
+# WV OCN and WV SLC products hold one measurement file per imagette. The Nodes
+# listing returns the file names (not the content) without downloading the product.
+WV_IMAGETTE_PRODUCT_RE = re.compile(r"^S1[ABCD]_WV_(OCN__2S|SLC__1S)")
+NODES_URL = (
+    "https://download.dataspace.copernicus.eu/odata/v1/Products({product_id})"
+    "/Nodes({safe_name})/Nodes(measurement)/Nodes"
+)
+NODES_TIMEOUT_SECONDS = 30
+WV_IMAGETTES_COLUMN = "WVImagettes"
+# e.g. s1a-wv1-ocn-vv-20240918t060833-20240918t060836-055715-06ce05-001.nc
+IMAGETTE_NAME_RE = re.compile(
+    r"^s1[abcd]-wv[12]-(?:ocn|slc)-(?:vv|hh)-(?P<start>\d{8}t\d{6})-(?P<end>\d{8}t\d{6})"
+    r"-\d{6}-[0-9a-f]{6}-(?P<index>\d{3})\.(?:nc|tiff)$"
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -156,7 +179,22 @@ Examples:
         "--max-workers",
         type=int,
         default=4,
-        help="Maximum parallel workers for multithreaded mode (default: 4).",
+        help=(
+            "Maximum parallel workers for multithreaded mode and for the imagette "
+            "listings (default: 4)."
+        ),
+    )
+
+    parser.add_argument(
+        "--wv-imagettes",
+        action="store_true",
+        default=False,
+        help=(
+            "Add the column WVImagettes: for each WV OCN and WV SLC product, the "
+            "measurement file names with their acquisition start and end, listed "
+            "through the OData Nodes endpoint (no download). Parquet files that "
+            "already exist get the column without a new catalogue query."
+        ),
     )
 
     parser.add_argument(
@@ -359,6 +397,198 @@ def filter_by_operational_mode(
     return df[mask]
 
 
+def is_wv_imagette_product(name: str) -> bool:
+    """
+    Tell whether a product is a WV OCN or WV SLC product.
+
+    These products hold one measurement file per imagette. Other product types
+    (RAW, IW, EW...) do not.
+
+    Args:
+        name: Product name, e.g. S1A_WV_OCN__2SSV_20240918T060833_..._E53B.SAFE.
+
+    Returns:
+        bool: True for WV OCN and WV SLC products.
+
+    Examples:
+        >>> is_wv_imagette_product("S1A_WV_OCN__2SSV_20240918T060833_20240918T064359_055715_06CE05_E53B.SAFE")
+        True
+        >>> is_wv_imagette_product("S1A_WV_RAW__0SSV_20240918T060833_20240918T064359_055715_06CE05_AAAA.SAFE")
+        False
+    """
+    return bool(WV_IMAGETTE_PRODUCT_RE.match(name or ""))
+
+
+def parse_imagette_names(names: list[str]) -> list[dict]:
+    """
+    Turn the measurement file names of a WV product into imagette records.
+
+    The acquisition start and end of each imagette are written in its file name,
+    e.g. s1a-wv1-ocn-vv-20240918t060833-20240918t060836-055715-06ce05-001.nc.
+
+    Args:
+        names: Measurement file names listed for one product.
+
+    Returns:
+        list[dict]: One record per file, sorted by imagette index, with keys
+            Name, index and ContentDate (Start and End, UTC ISO 8601).
+
+    Raises:
+        ValueError: If a name does not follow the WV measurement naming, or if
+            two files share the same index.
+
+    Examples:
+        >>> parse_imagette_names(
+        ...     ["s1a-wv2-ocn-vv-20240918t060847-20240918t060850-055715-06ce05-002.nc"]
+        ... )[0]["ContentDate"]
+        {'Start': '2024-09-18T06:08:47Z', 'End': '2024-09-18T06:08:50Z'}
+    """
+    imagettes = []
+    for name in names:
+        match = IMAGETTE_NAME_RE.match(name)
+        if match is None:
+            raise ValueError(f"Unexpected WV measurement file name: {name}")
+        start, end = (
+            datetime.datetime.strptime(token, "%Y%m%dt%H%M%S").strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            )
+            for token in match.group("start", "end")
+        )
+        imagettes.append(
+            {
+                "Name": name,
+                "index": int(match.group("index")),
+                "ContentDate": {"Start": start, "End": end},
+            }
+        )
+    imagettes.sort(key=lambda item: item["index"])
+    indices = [item["index"] for item in imagettes]
+    if len(indices) != len(set(indices)):
+        raise ValueError("Duplicate imagette index in the measurement files")
+    return imagettes
+
+
+def fetch_imagette_names(
+    product_id: str, safe_name: str, headers: Optional[dict] = None
+) -> list[str]:
+    """
+    List the measurement file names of one product, without downloading it.
+
+    This uses the OData Nodes listing, which returns names only. It shares the
+    global rate limiter of the catalogue queries.
+
+    Args:
+        product_id: CDSE product Id (UUID).
+        safe_name: Product name ending with .SAFE.
+        headers: Optional authentication headers.
+
+    Returns:
+        list[str]: Names of the files in the measurement folder.
+    """
+    url = NODES_URL.format(product_id=product_id, safe_name=quote(safe_name))
+    _GLOBAL_RATE_LIMITER.wait_if_needed()
+    json_data = _fetch_with_retry(url, headers, NODES_TIMEOUT_SECONDS)
+    return [node["Name"] for node in json_data["result"]]
+
+
+def get_wv_imagettes_json(
+    product_id: str, safe_name: str, headers: Optional[dict] = None
+) -> Optional[str]:
+    """
+    Get the imagette records of one WV product as a JSON string.
+
+    Args:
+        product_id: CDSE product Id (UUID).
+        safe_name: Product name ending with .SAFE.
+        headers: Optional authentication headers.
+
+    Returns:
+        Optional[str]: JSON list of imagette records, or None if the listing or
+            the parsing failed (the error is logged).
+    """
+    try:
+        names = fetch_imagette_names(product_id, safe_name, headers)
+        return json.dumps(parse_imagette_names(names))
+    except Exception as e:
+        logger.error(f"Could not get the imagettes of {safe_name}: {e}")
+        return None
+
+
+def add_wv_imagettes_column(
+    df: pd.DataFrame, headers: Optional[dict] = None, max_workers: int = 4
+) -> pd.DataFrame:
+    """
+    Add the imagette records of the WV OCN and WV SLC products to a DataFrame.
+
+    The column WVImagettes holds a JSON list per product. It stays empty (None) for
+    other products and for products whose listing failed. Rows that already have
+    a value are not queried again, so the function can be run twice to retry the
+    failures.
+
+    Args:
+        df: DataFrame with the columns Id and Name.
+        headers: Optional authentication headers.
+        max_workers: Number of parallel listing requests.
+
+    Returns:
+        pd.DataFrame: Copy of df with the WVImagettes column.
+    """
+    df = df.copy().reset_index(drop=True)
+    if WV_IMAGETTES_COLUMN not in df.columns:
+        df[WV_IMAGETTES_COLUMN] = None
+    todo = df.index[
+        df["Name"].apply(is_wv_imagette_product) & df[WV_IMAGETTES_COLUMN].isna()
+    ]
+    if len(todo) == 0:
+        return df
+    logger.info(f"Listing the imagettes of {len(todo)} WV products")
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        results = list(
+            pool.map(
+                lambda i: get_wv_imagettes_json(
+                    df.at[i, "Id"], df.at[i, "Name"], headers
+                ),
+                todo,
+            )
+        )
+    df.loc[todo, WV_IMAGETTES_COLUMN] = results
+    n_failed = sum(result is None for result in results)
+    if n_failed:
+        logger.warning(f"{n_failed}/{len(todo)} imagette listings failed")
+    return df
+
+
+def enrich_existing_parquet(
+    filepath: Path,
+    headers: Optional[dict] = None,
+    max_workers: int = 4,
+) -> Optional[int]:
+    """
+    Add the WVImagettes column to a daily parquet file that already exists.
+
+    The file is rewritten through a temporary file only if something changed.
+
+    Args:
+        filepath: Daily parquet file.
+        headers: Optional authentication headers.
+        max_workers: Number of parallel listing requests.
+
+    Returns:
+        Optional[int]: Number of products in the file if it was rewritten, None
+            if there was nothing to add.
+    """
+    df = pd.read_parquet(filepath)
+    before = df[WV_IMAGETTES_COLUMN].isna().sum() if WV_IMAGETTES_COLUMN in df else None
+    enriched = add_wv_imagettes_column(df, headers=headers, max_workers=max_workers)
+    if before is not None and enriched[WV_IMAGETTES_COLUMN].isna().sum() == before:
+        return None
+    tmp_path = filepath.with_suffix(".parquet.tmp")
+    enriched.to_parquet(tmp_path, index=False, engine="pyarrow")
+    tmp_path.replace(filepath)
+    logger.info(f"Added the WV imagettes to {filepath}")
+    return len(enriched)
+
+
 def convert_complex_columns_to_string(df: pd.DataFrame) -> pd.DataFrame:
     """
     Convert all columns to string representation for parquet serialization.
@@ -475,6 +705,8 @@ def process_day(
     batch_size: int = 7,
     querymode: str = "seq",
     display_tqdm: bool = True,
+    wv_imagettes: bool = False,
+    max_workers: int = 4,
 ) -> Tuple[datetime.date, int, float]:
     """
     Process a single day: query CDSE and save results.
@@ -490,14 +722,25 @@ def process_day(
         batch_size: Days per time slice.
         querymode: Query mode ('seq' or 'multi').
         display_tqdm: Whether to display progress bar.
+        wv_imagettes: Add the WVImagettes column (WV OCN and WV SLC measurement files).
+        max_workers: Parallel workers for the imagette listings.
 
     Returns:
         tuple: (date, number_of_products, elapsed_time_seconds).
     """
     filepath = get_parquet_filepath(date, output_dir)
+    headers = get_access_token(email, password) if wv_imagettes and email else None
 
     # Check if file already exists
     if not overwrite and filepath.exists():
+        if wv_imagettes:
+            start_time = datetime.datetime.now()
+            n_products = enrich_existing_parquet(
+                filepath, headers=headers, max_workers=max_workers
+            )
+            if n_products is not None:
+                elapsed = (datetime.datetime.now() - start_time).total_seconds()
+                return date, n_products, elapsed
         logger.info(
             f"Skipping {date.strftime('%Y-%m-%d')} - parquet file already exists "
             f"(use --overwrite to force re-download)"
@@ -554,6 +797,11 @@ def process_day(
         #                 if hasattr(val, "shape"):
         #                     logger.debug(f"  - shape: {val.shape}")
         #                 break
+
+        if wv_imagettes:
+            result_df = add_wv_imagettes_column(
+                result_df, headers=headers, max_workers=max_workers
+            )
 
         save_to_parquet(result_df, date, output_dir)
 
@@ -617,6 +865,7 @@ def main() -> None:
     logger.info(f"Output directory: {args.outputdir}")
     logger.info(f"Query mode: {args.querymode}")
     logger.info(f"Overwrite existing files: {args.overwrite}")
+    logger.info(f"Add WV imagettes: {args.wv_imagettes}")
 
     try:
         start_date, stop_date = validate_dates(args.start_date, args.stop_date)
@@ -646,6 +895,8 @@ def main() -> None:
                     batch_size=args.batch_size,
                     querymode=args.querymode,
                     display_tqdm=False,
+                    wv_imagettes=args.wv_imagettes,
+                    max_workers=args.max_workers,
                 )
 
                 if num_products == -2:

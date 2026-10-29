@@ -20,14 +20,20 @@ import pytest
 from shapely.geometry import Polygon
 
 from cdsodatacli.scripts.s1_daily_metadata_to_parquet import (
+    WV_IMAGETTES_COLUMN,
     S1_MODES_TO_KEEP,
+    add_wv_imagettes_column,
     convert_complex_columns_to_string,
     create_query_gdf,
+    enrich_existing_parquet,
     extract_operational_mode,
     filter_by_operational_mode,
     generate_daily_dates,
+    get_wv_imagettes_json,
     get_parquet_filepath,
+    is_wv_imagette_product,
     parse_args,
+    parse_imagette_names,
     process_day,
     save_to_parquet,
     validate_dates,
@@ -887,3 +893,163 @@ class TestArgumentParsing:
             assert args.querymode == "multi"
             assert args.max_workers == 8
             assert args.overwrite is True
+
+
+OCN_SAFE = "S1A_WV_OCN__2SSV_20240918T060833_20240918T064359_055715_06CE05_E53B.SAFE"
+SLC_SAFE = "S1A_WV_SLC__1SSV_20240918T004251_20240918T004802_055712_06CDE7_2919.SAFE"
+RAW_SAFE = "S1A_WV_RAW__0SSV_20240918T060833_20240918T064359_055715_06CE05_AAAA.SAFE"
+IW_SAFE = "S1A_IW_SLC__1SDV_20240918T060833_20240918T064359_055715_06CE05_BBBB.SAFE"
+NAME_1 = "s1a-wv1-ocn-vv-20240918t060833-20240918t060836-055715-06ce05-001.nc"
+NAME_2 = "s1a-wv2-ocn-vv-20240918t060847-20240918t060850-055715-06ce05-002.nc"
+NAME_SLC = "s1a-wv1-slc-vv-20240918t004616-20240918t004619-055712-06cde7-015.tiff"
+FETCH_NAMES = "cdsodatacli.scripts.s1_daily_metadata_to_parquet.fetch_imagette_names"
+
+
+class TestImagettes:
+    """Tests for the imagette listing of WV OCN and WV SLC products."""
+
+    def test_is_wv_imagette_product(self):
+        assert is_wv_imagette_product(OCN_SAFE)
+        assert is_wv_imagette_product(SLC_SAFE)
+        assert not is_wv_imagette_product(RAW_SAFE)
+        assert not is_wv_imagette_product(IW_SAFE)
+        assert not is_wv_imagette_product(None)
+
+    def test_parse_imagette_names_sorted_by_index(self):
+        records = parse_imagette_names([NAME_2, NAME_1])
+        assert [r["index"] for r in records] == [1, 2]
+        assert records[0]["Name"] == NAME_1
+        assert records[0]["ContentDate"] == {
+            "Start": "2024-09-18T06:08:33Z",
+            "End": "2024-09-18T06:08:36Z",
+        }
+
+    def test_parse_imagette_names_slc(self):
+        record = parse_imagette_names([NAME_SLC])[0]
+        assert record["index"] == 15
+        assert record["ContentDate"]["Start"] == "2024-09-18T00:46:16Z"
+
+    def test_parse_imagette_names_unexpected_name(self):
+        with pytest.raises(ValueError, match="Unexpected"):
+            parse_imagette_names(["manifest.safe"])
+
+    def test_parse_imagette_names_duplicate_index(self):
+        other = NAME_2.replace("-002.nc", "-001.nc")
+        with pytest.raises(ValueError, match="Duplicate"):
+            parse_imagette_names([NAME_1, other])
+
+    @patch(FETCH_NAMES, return_value=[NAME_2, NAME_1])
+    def test_get_wv_imagettes_json(self, mock_names):
+        value = get_wv_imagettes_json("id1", OCN_SAFE)
+        assert [r["index"] for r in json.loads(value)] == [1, 2]
+
+    @patch(FETCH_NAMES, side_effect=Exception("HTTP 429"))
+    def test_get_wv_imagettes_json_returns_none_on_error(self, mock_names):
+        assert get_wv_imagettes_json("id1", OCN_SAFE) is None
+
+    @patch(FETCH_NAMES, return_value=[NAME_1])
+    def test_add_wv_imagettes_column_only_for_wv(self, mock_names):
+        df = pd.DataFrame(
+            {"Id": ["a", "b", "c"], "Name": [OCN_SAFE, RAW_SAFE, IW_SAFE]},
+            index=[10, 20, 30],
+        )
+        out = add_wv_imagettes_column(df)
+        assert out[WV_IMAGETTES_COLUMN].notna().tolist() == [True, False, False]
+        assert mock_names.call_count == 1
+        assert WV_IMAGETTES_COLUMN not in df.columns  # input untouched
+
+    @patch(FETCH_NAMES, return_value=[NAME_1])
+    def test_add_wv_imagettes_column_skips_rows_already_done(self, mock_names):
+        df = pd.DataFrame(
+            {
+                "Id": ["a", "b"],
+                "Name": [OCN_SAFE, SLC_SAFE],
+                WV_IMAGETTES_COLUMN: ["[]", None],
+            }
+        )
+        out = add_wv_imagettes_column(df)
+        assert mock_names.call_count == 1
+        assert out[WV_IMAGETTES_COLUMN].iloc[0] == "[]"
+        assert out[WV_IMAGETTES_COLUMN].iloc[1] is not None
+
+    @patch(FETCH_NAMES, side_effect=[[NAME_1], Exception("boom")])
+    def test_add_wv_imagettes_column_keeps_going_after_a_failure(self, mock_names):
+        df = pd.DataFrame({"Id": ["a", "b"], "Name": [OCN_SAFE, SLC_SAFE]})
+        out = add_wv_imagettes_column(df, max_workers=1)
+        assert out[WV_IMAGETTES_COLUMN].notna().tolist() == [True, False]
+
+    @patch(FETCH_NAMES, return_value=[NAME_1])
+    def test_enrich_existing_parquet(self, mock_names, tmp_path):
+        filepath = tmp_path / "s1_2026-01-15.parquet"
+        pd.DataFrame({"Id": ["a", "b"], "Name": [OCN_SAFE, RAW_SAFE]}).to_parquet(
+            filepath
+        )
+        assert enrich_existing_parquet(filepath) == 2
+        df = pd.read_parquet(filepath)
+        assert json.loads(df[WV_IMAGETTES_COLUMN].iloc[0])[0]["Name"] == NAME_1
+        assert pd.isna(df[WV_IMAGETTES_COLUMN].iloc[1])
+        assert not list(tmp_path.glob("*.tmp"))
+        # a second pass has nothing left to query
+        mock_names.reset_mock()
+        assert enrich_existing_parquet(filepath) is None
+        mock_names.assert_not_called()
+
+    @patch(FETCH_NAMES, return_value=[NAME_1])
+    @patch("cdsodatacli.scripts.s1_daily_metadata_to_parquet.fetch_data")
+    def test_process_day_with_imagettes(self, mock_fetch, mock_names, tmp_path):
+        attrs = [{"Name": "operationalMode", "Value": "WV"}]
+        mock_fetch.return_value = pd.DataFrame(
+            {"Id": ["a"], "Name": [OCN_SAFE], "Attributes": [attrs]}
+        )
+        date = datetime.date(2026, 1, 15)
+        _, num_products, _ = process_day(
+            date=date, output_dir=tmp_path, wv_imagettes=True
+        )
+        assert num_products == 1
+        df = pd.read_parquet(get_parquet_filepath(date, tmp_path))
+        assert WV_IMAGETTES_COLUMN in df.columns
+
+    @patch(FETCH_NAMES, return_value=[NAME_1])
+    @patch("cdsodatacli.scripts.s1_daily_metadata_to_parquet.fetch_data")
+    def test_process_day_without_flag_adds_no_column(
+        self, mock_fetch, mock_names, tmp_path
+    ):
+        attrs = [{"Name": "operationalMode", "Value": "WV"}]
+        mock_fetch.return_value = pd.DataFrame(
+            {"Id": ["a"], "Name": [OCN_SAFE], "Attributes": [attrs]}
+        )
+        date = datetime.date(2026, 1, 15)
+        process_day(date=date, output_dir=tmp_path)
+        df = pd.read_parquet(get_parquet_filepath(date, tmp_path))
+        assert WV_IMAGETTES_COLUMN not in df.columns
+        mock_names.assert_not_called()
+
+    @patch(FETCH_NAMES, return_value=[NAME_1])
+    @patch("cdsodatacli.scripts.s1_daily_metadata_to_parquet.fetch_data")
+    def test_process_day_existing_file_gets_the_column(
+        self, mock_fetch, mock_names, tmp_path
+    ):
+        date = datetime.date(2026, 1, 15)
+        filepath = get_parquet_filepath(date, tmp_path)
+        pd.DataFrame({"Id": ["a"], "Name": [OCN_SAFE]}).to_parquet(filepath)
+        _, num_products, _ = process_day(
+            date=date, output_dir=tmp_path, wv_imagettes=True
+        )
+        assert num_products == 1
+        mock_fetch.assert_not_called()  # no new catalogue query
+        assert WV_IMAGETTES_COLUMN in pd.read_parquet(filepath).columns
+
+    def test_parse_args_wv_imagettes_flag(self):
+        base = [
+            "script",
+            "--start-date",
+            "2026-01-01",
+            "--stop-date",
+            "2026-01-02",
+            "--outputdir",
+            "/tmp/x",
+        ]
+        with patch("sys.argv", base):
+            assert parse_args().wv_imagettes is False
+        with patch("sys.argv", base + ["--wv-imagettes"]):
+            assert parse_args().wv_imagettes is True
