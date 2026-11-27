@@ -115,6 +115,13 @@ Retrieve complete metadata for a list of known SAFE product names or Product UUI
 
 Find matching products of different types (e.g., find OCN products for a list of GRD products).
 
+By default the candidates are read from the local daily metadata parquet files
+written by ``cds-s1-daily-metadata`` (``s1_YYYY-MM-DD.parquet``), whose directory is
+given by the ``s1_daily_metadata_parquet_dir`` key of the configuration file
+(``localconfig.yml``, or the file passed with ``--config``). Thousands of products are
+matched in a few seconds. If the key is missing or the directory does not exist, it falls back to
+CDSE OData queries (one request per product); force a backend with ``--backend parquet|odata``.
+
 **Examples:**
 
 .. code-block:: bash
@@ -132,6 +139,8 @@ Find matching products of different types (e.g., find OCN products for a list of
 
 - `--safe`: List of SAFE names
 - `--input-listing`: File with one SAFE name per line
+- ``--backend``: ``auto`` (default: parquet if configured, else odata), ``parquet`` or ``odata``
+- ``--config``: configuration file holding ``s1_daily_metadata_parquet_dir``
 - `--prodtype`: Target product type (GRDH, GRDM, SLC_, OCN_, RAW_)
 - `--checkpoint-dir`: Resume interrupted runs
 

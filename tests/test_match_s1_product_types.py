@@ -306,5 +306,28 @@ def test_entrypoint_logic(mock_file, mock_find, logger):
         "match_method": "e",
         "size_mb": 1024.0,
     }
-    entrypoint(["i"], "OCN_", "o.txt", logger)
+    entrypoint(["i"], "OCN_", "o.txt", logger, backend="odata")
     mock_file().write.assert_any_call("o\n")
+
+
+@patch("requests.get")
+def test_find_product_exact_ignores_stop_time_and_prefers_latest(mock_get, logger):
+    """A product whose stop time equals the source start is not an exact match,
+    and the most recently published version wins among duplicates."""
+    source = "S1A_IW_SLC__1SDV_20230726T071112_20230726T071139_049591_05F692_AAAA.SAFE"
+    previous = (
+        "S1A_IW_GRDH_1SDV_20230726T071047_20230726T071112_049591_05F692_B456.SAFE"
+    )
+    old = "S1A_IW_GRDH_1SDV_20230726T071112_20230726T071137_049591_05F692_0001.SAFE"
+    new = "S1A_IW_GRDH_1SDV_20230726T071112_20230726T071137_049591_05F692_FFFF.SAFE"
+    mock_get.return_value.status_code = 200
+    mock_get.return_value.json.return_value = {
+        "value": [
+            {"Id": "p", "Name": previous, "ContentLength": 1, "PublicationDate": "3"},
+            {"Id": "o", "Name": old, "ContentLength": 1, "PublicationDate": "1"},
+            {"Id": "n", "Name": new, "ContentLength": 1, "PublicationDate": "2"},
+        ]
+    }
+    res = find_product_for_safe(source, "GRDH", logger, defaultdict(int))
+    assert res["match_method"] == "exact_timestamp"
+    assert res["target_name"] == new
