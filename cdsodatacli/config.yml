@@ -24,3 +24,6 @@ s3_region: "default"
 list_sar_unit_private_data:
   - S1E
   - S1F
+# directory of the daily Sentinel-1 metadata parquet files (s1_YYYY-MM-DD.parquet)
+# written by cds-s1-daily-metadata, used by match_s1_prodtypes --backend parquet
+s1_daily_metadata_parquet_dir: "./daily_parquet_files_v2"
