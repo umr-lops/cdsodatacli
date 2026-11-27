@@ -123,6 +123,12 @@ get-metadata-from-product-names --input-listing safes.txt --output results.csv -
 
 Find matching products of different types (e.g., find OCN products for a list of GRD products).
 
+By default the candidates are read from the local daily metadata parquet files
+written by `cds-s1-daily-metadata` (`s1_YYYY-MM-DD.parquet`), whose directory is
+given by the `s1_daily_metadata_parquet_dir` key of the configuration file
+(`localconfig.yml`, or the file passed with `--config`). Thousands of products are
+matched in a few seconds. `--backend odata` queries CDSE instead (one request per product).
+
 **Examples:**
 
 ```bash
@@ -140,6 +146,8 @@ match_s1_prodtypes --input-listing big_list.txt --prodtype OCN_ --output matches
 
 - `--safe`: List of SAFE names
 - `--input-listing`: File with one SAFE name per line
+- `--backend`: `parquet` (default, local daily metadata) or `odata` (CDSE queries)
+- `--config`: configuration file holding `s1_daily_metadata_parquet_dir`
 - `--prodtype`: Target product type (GRDH, GRDM, SLC*, OCN*, RAW\_)
 - `--checkpoint-dir`: Resume interrupted runs
 
