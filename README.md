@@ -127,7 +127,8 @@ By default the candidates are read from the local daily metadata parquet files
 written by `cds-s1-daily-metadata` (`s1_YYYY-MM-DD.parquet`), whose directory is
 given by the `s1_daily_metadata_parquet_dir` key of the configuration file
 (`localconfig.yml`, or the file passed with `--config`). Thousands of products are
-matched in a few seconds. `--backend odata` queries CDSE instead (one request per product).
+matched in a few seconds. If the key is missing or the directory does not exist, it falls back to
+CDSE OData queries (one request per product); force a backend with `--backend parquet|odata`.
 
 **Examples:**
 
@@ -146,7 +147,7 @@ match_s1_prodtypes --input-listing big_list.txt --prodtype OCN_ --output matches
 
 - `--safe`: List of SAFE names
 - `--input-listing`: File with one SAFE name per line
-- `--backend`: `parquet` (default, local daily metadata) or `odata` (CDSE queries)
+- `--backend`: `auto` (default: parquet if configured, else odata), `parquet` or `odata`
 - `--config`: configuration file holding `s1_daily_metadata_parquet_dir`
 - `--prodtype`: Target product type (GRDH, GRDM, SLC*, OCN*, RAW\_)
 - `--checkpoint-dir`: Resume interrupted runs

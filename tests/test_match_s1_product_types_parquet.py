@@ -227,3 +227,44 @@ def test_entrypoint_parquet_dir_not_found(tmp_path, logger):
 def test_entrypoint_invalid_backend(tmp_path, logger):
     with pytest.raises(ValueError, match="backend"):
         m.entrypoint([SLC], "GRDH", str(tmp_path / "o.txt"), logger, backend="x")
+
+
+def test_resolve_backend_auto_fallback_to_odata(tmp_path, logger):
+    cfg = tmp_path / "conf.yml"
+    cfg.write_text("other_key: 1\n")  # no parquet directory configured
+    assert m.resolve_backend("auto", None, str(cfg), logger) == ("odata", None)
+    assert m.resolve_backend("auto", tmp_path / "nope", None, logger) == (
+        "odata",
+        None,
+    )
+    with pytest.raises(KeyError):
+        m.resolve_backend("parquet", None, str(cfg), logger)
+
+
+def test_resolve_backend_auto_uses_parquet(parquet_dir, logger):
+    assert m.resolve_backend("auto", parquet_dir, None, logger) == (
+        "parquet",
+        parquet_dir,
+    )
+    assert m.resolve_backend("odata", parquet_dir, None, logger) == ("odata", None)
+
+
+def test_entrypoint_auto_fallback_calls_odata(tmp_path, logger, monkeypatch):
+    cfg = tmp_path / "conf.yml"
+    cfg.write_text("other_key: 1\n")
+    calls = []
+
+    def fake_odata(source_id, target_type, logger, delta_distribution):
+        calls.append(source_id)
+        return {"source_id": source_id, "status": "not_found", "note": "x"}
+
+    monkeypatch.setattr(m, "find_product_for_safe", fake_odata)
+    m.entrypoint(
+        [SLC],
+        "GRDH",
+        str(tmp_path / "o.txt"),
+        logger,
+        backend="auto",
+        config_file=str(cfg),
+    )
+    assert calls == [SLC]

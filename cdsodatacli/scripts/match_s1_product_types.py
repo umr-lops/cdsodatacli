@@ -7,12 +7,14 @@ datatake (e.g. SLC -> GRD, GRD -> OCN, OCN -> SLC...).
 
 Two backends are available:
 
-- ``parquet`` (default for the CLI): the candidates are read from the local daily
+- ``parquet``: the candidates are read from the local daily
   metadata parquet files produced by ``cds-s1-daily-metadata``
   (``s1_YYYY-MM-DD.parquet``). The directory is given by the
   ``s1_daily_metadata_parquet_dir`` key of the cdsodatacli configuration file.
   All the products are matched at once with a vectorized join: no network access.
 - ``odata``: one CDSE OData query per product (rate limited).
+- ``auto`` (default for the CLI): ``parquet`` if the configured directory
+  exists, otherwise fallback to ``odata``.
 """
 
 import requests
@@ -36,7 +38,7 @@ from cdsodatacli.utils import get_conf
 # ── CONFIGURATION ────────────────────────────────────────────────────────────
 ODATA_URL = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products"
 VALID_PRODUCT_TYPES = ["GRDH", "GRDM", "SLC_", "OCN_", "RAW_"]
-VALID_BACKENDS = ["parquet", "odata"]
+VALID_BACKENDS = ["auto", "parquet", "odata"]
 PARQUET_DIR_CONFIG_KEY = "s1_daily_metadata_parquet_dir"
 PARQUET_COLUMNS = ["Id", "Name", "ContentLength", "PublicationDate"]
 PARQUET_READ_WORKERS = 8  # parallel reads of the daily parquet files
@@ -471,8 +473,10 @@ def entrypoint(
         output_filename (str): text file with one matched SAFE name per line.
         logger (logging.Logger): logger.
         checkpoint_dir (str, optional): directory of the checkpoint file.
-        backend (str): "odata" (one CDSE query per product) or "parquet"
-            (local daily metadata parquet files, much faster).
+        backend (str): "odata" (one CDSE query per product), "parquet"
+            (local daily metadata parquet files, much faster) or "auto"
+            ("parquet" if the parquet directory is configured and exists,
+            otherwise "odata").
         parquet_dir (str or Path, optional): parquet directory, overrides the
             ``s1_daily_metadata_parquet_dir`` configuration key.
         config_file (str, optional): cdsodatacli configuration file.
@@ -509,12 +513,8 @@ def entrypoint(
     lock = Lock()
     processed = set()
 
+    backend, parquet_dir = resolve_backend(backend, parquet_dir, config_file, logger)
     if backend == "parquet":
-        if parquet_dir is None:
-            parquet_dir = get_parquet_dir(config_file)
-        parquet_dir = Path(parquet_dir)
-        if not parquet_dir.is_dir():
-            raise FileNotFoundError(f"parquet directory not found: {parquet_dir}")
         results = find_products_in_parquet(
             safe_list, target_type, parquet_dir, logger, delta_distribution
         )
@@ -538,6 +538,38 @@ def entrypoint(
 
     write_results_and_summary(results, output_filename, delta_distribution, logger)
     return results
+
+
+def resolve_backend(
+    backend: str,
+    parquet_dir: str | Path | None,
+    config_file: str | None,
+    logger: logging.Logger,
+) -> tuple[str, Path | None]:
+    """
+    Choose the backend actually used and the parquet directory.
+
+    "parquet" raises if the directory is not configured or does not exist;
+    "auto" falls back to "odata" in that case.
+
+    Returns:
+        tuple: (backend "parquet" or "odata", parquet directory or None).
+    """
+    if backend == "odata":
+        return "odata", None
+    try:
+        if parquet_dir is None:
+            parquet_dir = get_parquet_dir(config_file)
+        parquet_dir = Path(parquet_dir)
+        if not parquet_dir.is_dir():
+            raise FileNotFoundError(f"parquet directory not found: {parquet_dir}")
+    except (KeyError, FileNotFoundError) as exc:
+        if backend == "parquet":
+            raise
+        logger.warning("%s -> fallback to the OData backend (slower)", exc)
+        return "odata", None
+    logger.info("Using the daily metadata parquet files of %s", parquet_dir)
+    return "parquet", parquet_dir
 
 
 def _match_with_odata(
@@ -697,9 +729,10 @@ of the configuration file (localconfig.yml, or the file given with --config).
     parser.add_argument(
         "--backend",
         choices=VALID_BACKENDS,
-        default="parquet",
+        default="auto",
         help="Source of the candidate products: local daily metadata parquet "
-        "files (fast, default) or CDSE OData queries.",
+        "files (fast), CDSE OData queries, or auto (default): parquet if "
+        "'s1_daily_metadata_parquet_dir' is configured and exists, else odata.",
     )
     parser.add_argument(
         "--config",
